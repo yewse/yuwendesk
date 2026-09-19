@@ -8,7 +8,10 @@ import type { OperationName } from '../shared/ipc';
 export type FieldSchema =
   | { type: 'string'; maxLength?: number; minLength?: number }
   | { type: 'integer'; min?: number; nonNegative?: boolean }
-  | { type: 'boolean' };
+  | { type: 'boolean' }
+  // 浅校验数组：仅检查是否数组与条目上限；条目结构由处理函数进一步校验。
+  | { type: 'array'; maxItems?: number }
+  | { type: 'number'; min?: number; max?: number };
 
 export interface ObjectSchema {
   type: 'object';
@@ -101,6 +104,45 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     properties: { versionId: { type: 'string', minLength: 1, maxLength: 64 } },
     required: ['versionId'],
     additionalProperties: false
+  },
+  'model.providers': null,
+  'model.getConfig': null,
+  'model.probe': null,
+  'model.configure': {
+    type: 'object',
+    properties: {
+      provider: { type: 'string', minLength: 1, maxLength: 32 },
+      model: { type: 'string', maxLength: 64 },
+      temperature: { type: 'number', min: 0, max: 2 },
+      maxTokens: { type: 'integer', min: 1 },
+      budgetCapCents: { type: 'integer', nonNegative: true },
+      allowRealNetwork: { type: 'boolean' },
+      apiKey: { type: 'string', maxLength: 400 }
+    },
+    required: ['provider'],
+    additionalProperties: false
+  },
+  'model.run': {
+    type: 'object',
+    properties: {
+      task: { type: 'string', minLength: 1, maxLength: 64 },
+      instructionExtra: { type: 'string', maxLength: 2000 },
+      fragments: { type: 'array', maxItems: 50 }
+    },
+    required: ['task'],
+    additionalProperties: false
+  },
+  'model.cancel': {
+    type: 'object',
+    properties: { jobId: { type: 'string', minLength: 1, maxLength: 64 } },
+    required: ['jobId'],
+    additionalProperties: false
+  },
+  'model.listJobs': {
+    type: 'object',
+    properties: { limit: { type: 'integer', min: 1 } },
+    required: [],
+    additionalProperties: false
   }
 };
 
@@ -125,6 +167,19 @@ function validateField(name: string, schema: FieldSchema, value: unknown, errors
     if (schema.min !== undefined && value < schema.min) errors.push(`字段 ${name} 小于下限`);
   } else if (schema.type === 'boolean') {
     if (typeof value !== 'boolean') errors.push(`字段 ${name} 应为布尔值`);
+  } else if (schema.type === 'number') {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      errors.push(`字段 ${name} 应为数值`);
+      return;
+    }
+    if (schema.min !== undefined && value < schema.min) errors.push(`字段 ${name} 小于下限`);
+    if (schema.max !== undefined && value > schema.max) errors.push(`字段 ${name} 大于上限`);
+  } else if (schema.type === 'array') {
+    if (!Array.isArray(value)) {
+      errors.push(`字段 ${name} 应为数组`);
+      return;
+    }
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`字段 ${name} 条目过多`);
   }
 }
 

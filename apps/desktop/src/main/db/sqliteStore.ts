@@ -7,6 +7,8 @@ import type {
   DraftCommitOp,
   DraftCommitResult,
   DraftState,
+  ModelConfig,
+  ModelJobRecord,
   SaveExpectResult,
   SourceClassification,
   SourceImportInput,
@@ -237,6 +239,41 @@ const MIGRATIONS: Migration[] = [
         CREATE VIRTUAL TABLE IF NOT EXISTS source_seg_fts USING fts5(text, segment_id UNINDEXED, version_id UNINDEXED, tokenize='trigram');
       `);
     }
+  },
+  {
+    version: 6,
+    up: (db) => {
+      // G04 模型配置与作业持久化（可配置服务商+实际模型 ID；记录模型/提示/参数/材料版本）。
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS model_config (
+          id                INTEGER PRIMARY KEY CHECK (id = 1),
+          provider          TEXT NOT NULL,
+          model             TEXT NOT NULL,
+          temperature       REAL NOT NULL,
+          max_tokens        INTEGER NOT NULL,
+          budget_cap_cents  INTEGER NOT NULL,
+          allow_real_network INTEGER NOT NULL DEFAULT 0,
+          updated_at        TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS model_job (
+          id                    TEXT PRIMARY KEY,
+          task                  TEXT NOT NULL,
+          cache_key             TEXT NOT NULL,
+          provider              TEXT NOT NULL,
+          model                 TEXT NOT NULL,
+          params_json           TEXT NOT NULL,
+          prompt_version        TEXT NOT NULL,
+          material_versions_json TEXT NOT NULL,
+          status                TEXT NOT NULL,
+          result_json           TEXT,
+          cost_cents            INTEGER NOT NULL DEFAULT 0,
+          error_code            TEXT,
+          created_at            TEXT NOT NULL,
+          updated_at            TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_job_cache ON model_job(cache_key);
+      `);
+    }
   }
 ];
 
@@ -303,6 +340,10 @@ export class SqliteStore {
         return;
       }
       await this.migrateLegacyJsonIfNeeded();
+      // 重启不确定态：上次未完成（running）的模型作业无法确定远端是否已执行 → 标记 uncertain，如实呈现。
+      this.db
+        .prepare("UPDATE model_job SET status='uncertain', updated_at=? WHERE status='running'")
+        .run(new Date().toISOString());
     } catch (e) {
       this.enterProtected(`open_failed:${(e as Error).message}`);
     }
@@ -1001,6 +1042,29 @@ export class SqliteStore {
     return { base64: Buffer.from(row.blob).toString('base64'), originalHash: row.originalHash, byteSize: row.byteSize, mime: row.mime ?? 'application/octet-stream' };
   }
 
+  getVersionMeta(versionId: string): import('../store').SourceVersionMeta | null {
+    if (!this.db) return null;
+    const r = this.db
+      .prepare(
+        `SELECT sv.document_id documentId, sd.title title, sv.version version, sd.classification classification, sd.status status,
+                sd.current_version_id currentVersionId, COALESCE(sv.text_hash, sv.content_hash) textHash
+         FROM source_version sv JOIN source_document sd ON sd.id=sv.document_id WHERE sv.id=?`
+      )
+      .get(versionId) as
+      | { documentId: string; title: string; version: number; classification: SourceClassification; status: string; currentVersionId: string | null; textHash: string }
+      | undefined;
+    if (!r) return null;
+    return {
+      documentId: r.documentId,
+      title: r.title,
+      version: r.version,
+      classification: r.classification,
+      status: r.status,
+      isCurrent: r.currentVersionId === versionId,
+      textHash: r.textHash
+    };
+  }
+
   getSourceVersions(documentId: string): SourceVersionItem[] {
     if (!this.db) return [];
     const cur = (this.db.prepare('SELECT current_version_id v FROM source_document WHERE id=?').get(documentId) as { v: string | null } | undefined)?.v ?? null;
@@ -1014,6 +1078,84 @@ export class SqliteStore {
         )
         .all(documentId) as (Omit<SourceVersionItem, 'isCurrent' | 'scanned' | 'reliableText'> & { scanned: number; reliableText: number })[]
     ).map((v) => ({ ...v, scanned: v.scanned === 1, reliableText: v.reliableText === 1, isCurrent: v.versionId === cur }));
+  }
+
+  // ===== G04 模型配置/作业持久化 =====
+  getModelConfig(): ModelConfig | null {
+    if (!this.db) return null;
+    const r = this.db.prepare('SELECT provider, model, temperature, max_tokens maxTokens, budget_cap_cents budgetCapCents, allow_real_network allowRealNetwork, updated_at updatedAt FROM model_config WHERE id=1').get() as
+      | (Omit<ModelConfig, 'allowRealNetwork'> & { allowRealNetwork: number })
+      | undefined;
+    return r ? { ...r, allowRealNetwork: r.allowRealNetwork === 1 } : null;
+  }
+  setModelConfig(cfg: ModelConfig): void {
+    this.assertWritable();
+    this.requireDb()
+      .prepare(
+        `INSERT INTO model_config(id,provider,model,temperature,max_tokens,budget_cap_cents,allow_real_network,updated_at)
+         VALUES(1,?,?,?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,model=excluded.model,temperature=excluded.temperature,
+           max_tokens=excluded.max_tokens,budget_cap_cents=excluded.budget_cap_cents,allow_real_network=excluded.allow_real_network,updated_at=excluded.updated_at`
+      )
+      .run(cfg.provider, cfg.model, cfg.temperature, cfg.maxTokens, cfg.budgetCapCents, cfg.allowRealNetwork ? 1 : 0, cfg.updatedAt);
+  }
+  budgetSpentCents(): number {
+    if (!this.db) return 0;
+    return (this.db.prepare("SELECT COALESCE(SUM(cost_cents),0) c FROM model_job WHERE status='succeeded'").get() as { c: number }).c;
+  }
+  private mapJob(r: Record<string, unknown>): ModelJobRecord {
+    return {
+      id: String(r.id),
+      task: String(r.task),
+      cacheKey: String(r.cacheKey),
+      provider: String(r.provider),
+      model: String(r.model),
+      paramsJson: String(r.paramsJson),
+      promptVersion: String(r.promptVersion),
+      materialVersionsJson: String(r.materialVersionsJson),
+      status: r.status as ModelJobRecord['status'],
+      resultJson: (r.resultJson as string | null) ?? null,
+      costCents: Number(r.costCents),
+      errorCode: (r.errorCode as string | null) ?? null,
+      createdAt: String(r.createdAt),
+      updatedAt: String(r.updatedAt)
+    };
+  }
+  private readonly jobCols =
+    'id, task, cache_key cacheKey, provider, model, params_json paramsJson, prompt_version promptVersion, material_versions_json materialVersionsJson, status, result_json resultJson, cost_cents costCents, error_code errorCode, created_at createdAt, updated_at updatedAt';
+  findCachedJob(cacheKey: string): ModelJobRecord | null {
+    if (!this.db) return null;
+    const r = this.db.prepare(`SELECT ${this.jobCols} FROM model_job WHERE cache_key=? AND status='succeeded' ORDER BY created_at DESC LIMIT 1`).get(cacheKey) as
+      | Record<string, unknown>
+      | undefined;
+    return r ? this.mapJob(r) : null;
+  }
+  insertModelJob(job: ModelJobRecord): void {
+    this.assertWritable();
+    this.requireDb()
+      .prepare(
+        `INSERT INTO model_job(id,task,cache_key,provider,model,params_json,prompt_version,material_versions_json,status,result_json,cost_cents,error_code,created_at,updated_at)
+         VALUES(@id,@task,@cacheKey,@provider,@model,@paramsJson,@promptVersion,@materialVersionsJson,@status,@resultJson,@costCents,@errorCode,@createdAt,@updatedAt)`
+      )
+      .run(job);
+  }
+  updateModelJob(id: string, patch: Partial<ModelJobRecord>): void {
+    this.assertWritable();
+    const cur = this.getModelJob(id);
+    if (!cur) return;
+    const next = { ...cur, ...patch, updatedAt: new Date().toISOString() };
+    this.requireDb()
+      .prepare('UPDATE model_job SET status=?, result_json=?, cost_cents=?, error_code=?, updated_at=? WHERE id=?')
+      .run(next.status, next.resultJson, next.costCents, next.errorCode, next.updatedAt, id);
+  }
+  getModelJob(id: string): ModelJobRecord | null {
+    if (!this.db) return null;
+    const r = this.db.prepare(`SELECT ${this.jobCols} FROM model_job WHERE id=?`).get(id) as Record<string, unknown> | undefined;
+    return r ? this.mapJob(r) : null;
+  }
+  listModelJobs(limit: number): ModelJobRecord[] {
+    if (!this.db) return [];
+    return (this.db.prepare(`SELECT ${this.jobCols} FROM model_job ORDER BY created_at DESC LIMIT ?`).all(limit) as Record<string, unknown>[]).map((r) => this.mapJob(r));
   }
 
   listSources(): SourceListItem[] {

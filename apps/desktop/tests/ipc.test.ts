@@ -190,7 +190,14 @@ describe('白名单与目录一致性', () => {
       'sources.read',
       'sources.retire',
       'sources.versions',
-      'sources.readOriginal'
+      'sources.readOriginal',
+      'model.providers',
+      'model.getConfig',
+      'model.configure',
+      'model.probe',
+      'model.run',
+      'model.cancel',
+      'model.listJobs'
     ];
     expect([...IMPLEMENTED_OPERATIONS].sort()).toEqual([...expected].sort());
     expect(new Set(IMPLEMENTED_OPERATIONS).size).toBe(IMPLEMENTED_OPERATIONS.length);

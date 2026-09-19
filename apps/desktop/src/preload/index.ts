@@ -95,6 +95,16 @@ const api = {
   sourceVersions: (documentId: string) => call<{ versions: SourceVersionDTO[] }>('sources.versions', { payload: { documentId } }),
   readOriginal: (versionId: string) =>
     call<{ base64: string; originalHash: string; byteSize: number; mime: string }>('sources.readOriginal', { payload: { versionId } }),
+  // G04 模型（教师不写提示词；此处仅配置/探测/运行/查看）。
+  modelProviders: () => call<{ providers: { id: string; defaultModel: string; requiresKey: boolean }[] }>('model.providers'),
+  modelGetConfig: () => call<{ config: unknown }>('model.getConfig'),
+  modelConfigure: (payload: { provider: string; model?: string; temperature?: number; maxTokens?: number; budgetCapCents?: number; allowRealNetwork?: boolean; apiKey?: string }) =>
+    call<{ config: unknown; keyStored: boolean }>('model.configure', { payload }),
+  modelProbe: () => call<{ ok: boolean; note: string; provider?: string; model?: string; isTestDouble?: boolean }>('model.probe'),
+  modelRun: (payload: { task: string; instructionExtra?: string; fragments?: { versionId: string; charStart: number; charEnd: number; approved: boolean }[] }) =>
+    call<{ status: string; jobId?: string; result?: unknown; costCents?: number; fromCache?: boolean }>('model.run', { payload }),
+  modelCancel: (jobId: string) => call<{ cancelled: boolean }>('model.cancel', { payload: { jobId } }),
+  modelListJobs: (limit?: number) => call<{ jobs: unknown[] }>('model.listJobs', { payload: limit ? { limit } : {} }),
   // 关闭前刷新握手：主进程在窗口关闭前通知渲染层落盘（带唯一 requestId）；渲染层完成后回执。
   // 仅暴露固定通道，不暴露任意 send/on。返回取消订阅函数，供组件卸载时释放监听。
   onBeforeClose: (handler: (requestId: string) => void | Promise<void>): (() => void) => {

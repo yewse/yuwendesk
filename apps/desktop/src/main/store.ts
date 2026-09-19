@@ -156,12 +156,60 @@ export interface SourceStore {
   getSourceVersions(documentId: string): SourceVersionItem[];
   // 原件核对途径：返回原件字节（base64）与原件哈希，供外部重算/核对（提取成功≠原文已核验）。
   readOriginal(versionId: string): SourceOriginalResult | null;
+  // 版本/权限边界检查所需：由 versionId 反查文档元信息。
+  getVersionMeta(versionId: string): SourceVersionMeta | null;
+}
+export interface SourceVersionMeta {
+  documentId: string;
+  title: string;
+  version: number;
+  classification: SourceClassification;
+  status: string;
+  isCurrent: boolean;
+  textHash: string;
 }
 export interface SourceOriginalResult {
   base64: string;
   originalHash: string;
   byteSize: number;
   mime: string;
+}
+
+// ===== G04 模型配置与作业持久化 =====
+export interface ModelConfig {
+  provider: string;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  budgetCapCents: number;
+  allowRealNetwork: boolean;
+  updatedAt: string;
+}
+export interface ModelJobRecord {
+  id: string;
+  task: string;
+  cacheKey: string;
+  provider: string;
+  model: string;
+  paramsJson: string;
+  promptVersion: string;
+  materialVersionsJson: string;
+  status: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'uncertain';
+  resultJson: string | null;
+  costCents: number;
+  errorCode: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ModelStore {
+  getModelConfig(): ModelConfig | null;
+  setModelConfig(cfg: ModelConfig): void;
+  budgetSpentCents(): number;
+  findCachedJob(cacheKey: string): ModelJobRecord | null;
+  insertModelJob(job: ModelJobRecord): void;
+  updateModelJob(id: string, patch: Partial<ModelJobRecord>): void;
+  listModelJobs(limit: number): ModelJobRecord[];
+  getModelJob(id: string): ModelJobRecord | null;
 }
 
 // 草稿存储接口：LocalStore（JSON，G01）与 SqliteStore（G02）均实现，供主进程/IPC 无缝切换。

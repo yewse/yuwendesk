@@ -46,7 +46,14 @@ export const IMPLEMENTED_OPERATIONS = [
   'sources.read',
   'sources.retire',
   'sources.versions',
-  'sources.readOriginal'
+  'sources.readOriginal',
+  'model.providers',
+  'model.getConfig',
+  'model.configure',
+  'model.probe',
+  'model.run',
+  'model.cancel',
+  'model.listJobs'
 ] as const;
 
 export type OperationName = (typeof IMPLEMENTED_OPERATIONS)[number];

@@ -9,6 +9,7 @@ import { IpcService } from './ipc';
 import { CloseController } from './lifecycle';
 import { evaluatePlatform } from './platform';
 import { createWorkerParser } from './sources/parseHost';
+import { ModelService } from './model/service';
 import { attachCsp, isAllowedExternalUrl, isTrustedRendererUrl, lockdownSession } from './security';
 import { SqliteStore } from './db/sqliteStore';
 
@@ -208,9 +209,11 @@ async function bootstrap(): Promise<void> {
   });
   await store.load();
 
+  const modelService = new ModelService(store);
   ipcService = new IpcService({
     store,
     sourceStore: store,
+    modelService,
     appVersion: app.getVersion(),
     appNameZh: APP_NAME_ZH,
     platformSupported: platform.supported,

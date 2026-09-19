@@ -39,6 +39,19 @@ export interface IpcServiceContext {
   platformIdentity: string;
   // G03 资料能力（由 SqliteStore 提供）；缺省时资料操作返回未实现。
   sourceStore?: SourceStore;
+  // G04 模型服务；缺省时模型操作返回未实现。
+  modelService?: ModelServiceLike;
+}
+
+// 仅声明 IPC 需要的模型服务形状（避免主进程强耦合）。
+export interface ModelServiceLike {
+  providerCatalog(): { id: string; defaultModel: string; requiresKey: boolean }[];
+  getConfig(): unknown;
+  configure(input: { provider: string; model?: string; params?: { temperature?: number; maxTokens?: number }; budgetCapCents?: number; allowRealNetwork?: boolean; apiKey?: string }): { ok: boolean; code?: string; note?: string; config?: unknown; keyStored?: boolean };
+  probe(): Promise<{ ok: boolean; note: string; code?: string; provider?: string; model?: string; isTestDouble?: boolean }>;
+  run(input: { task: string; instructionExtra?: string; fragments?: { versionId: string; charStart: number; charEnd: number; approved: boolean }[] }): Promise<{ status: string; jobId?: string; result?: unknown; costCents?: number; fromCache?: boolean; code?: string; note?: string }>;
+  cancel(jobId: string): boolean;
+  listJobs(limit?: number): unknown[];
 }
 
 export function isImplementedOperation(op: string): op is OperationName {
@@ -117,6 +130,24 @@ export class IpcService {
         return this.sourcesVersions(request);
       case 'sources.readOriginal':
         return this.sourcesReadOriginal(request);
+      case 'model.providers':
+        return this.ctx.modelService ? { ok: true, data: { providers: this.ctx.modelService.providerCatalog() } } : { ok: true, data: { providers: [] } };
+      case 'model.getConfig':
+        return this.ctx.modelService ? { ok: true, data: { config: this.ctx.modelService.getConfig() } } : { ok: true, data: { config: null } };
+      case 'model.configure':
+        return this.modelConfigure(request);
+      case 'model.probe':
+        return this.modelProbe();
+      case 'model.run':
+        return this.modelRun(request);
+      case 'model.cancel':
+        return this.ctx.modelService
+          ? { ok: true, data: { cancelled: this.ctx.modelService.cancel((request.payload as { jobId: string }).jobId) } }
+          : { ok: true, data: { cancelled: false } };
+      case 'model.listJobs':
+        return this.ctx.modelService
+          ? { ok: true, data: { jobs: this.ctx.modelService.listJobs((request.payload as { limit?: number } | undefined)?.limit ?? 50) } }
+          : { ok: true, data: { jobs: [] } };
       default:
         return errorResponse('INPUT_INVALID', '未知操作。', '请重试当前操作。');
     }
@@ -216,6 +247,56 @@ export class IpcService {
     if (!src) return { ok: true, data: { versions: [] } };
     const p = req.payload as { documentId: string };
     return { ok: true, data: { versions: src.getSourceVersions(p.documentId) } };
+  }
+
+  private modelConfigure(req: IpcRequest): IpcResponse {
+    const m = this.ctx.modelService;
+    if (!m) return errorResponse('INPUT_INVALID', '模型功能不可用。', '请重启应用。');
+    const p = req.payload as { provider: string; model?: string; temperature?: number; maxTokens?: number; budgetCapCents?: number; allowRealNetwork?: boolean; apiKey?: string };
+    const r = m.configure({
+      provider: p.provider,
+      model: p.model,
+      params: { temperature: p.temperature, maxTokens: p.maxTokens },
+      budgetCapCents: p.budgetCapCents,
+      allowRealNetwork: p.allowRealNetwork,
+      apiKey: p.apiKey
+    });
+    if (!r.ok) {
+      const code = r.code === 'KEY_UNAVAILABLE' ? 'KEY_UNAVAILABLE' : 'INPUT_INVALID';
+      return errorResponse(code, r.note ?? '配置失败。', '请检查服务商与密钥后重试。');
+    }
+    return { ok: true, data: { config: r.config, keyStored: r.keyStored } };
+  }
+
+  private async modelProbe(): Promise<IpcResponse> {
+    const m = this.ctx.modelService;
+    if (!m) return errorResponse('INPUT_INVALID', '模型功能不可用。', '请重启应用。');
+    const r = await m.probe();
+    if (!r.ok) {
+      const code = (r.code as ErrorCode) ?? 'MODEL_NOT_AVAILABLE';
+      const known = ['MODEL_NOT_AVAILABLE', 'AUTH_FAILED', 'NETWORK_UNAVAILABLE', 'KEY_UNAVAILABLE'].includes(code) ? code : 'MODEL_NOT_AVAILABLE';
+      return errorResponse(known as ErrorCode, r.note, '真实调用需授权账户与联网；当前保持未验证。');
+    }
+    return { ok: true, data: r };
+  }
+
+  private async modelRun(req: IpcRequest): Promise<IpcResponse> {
+    const m = this.ctx.modelService;
+    if (!m) return errorResponse('INPUT_INVALID', '模型功能不可用。', '请重启应用。');
+    const p = req.payload as { task: string; instructionExtra?: string; fragments?: { versionId: string; charStart: number; charEnd: number; approved: boolean }[] };
+    const r = await m.run({ task: p.task, instructionExtra: p.instructionExtra, fragments: p.fragments });
+    if (r.status === 'succeeded' || r.status === 'cached') {
+      return { ok: true, data: { status: r.status, jobId: r.jobId, result: r.result, costCents: r.costCents, fromCache: r.fromCache } };
+    }
+    if (r.status === 'cancelled') return { ok: true, data: { status: 'cancelled', jobId: r.jobId } };
+    // blocked / failed → 明确错误码
+    const code = (r.code as ErrorCode) ?? 'MODEL_NOT_AVAILABLE';
+    const known: ErrorCode = (['PRIVACY_BLOCKED', 'SOURCE_MISSING', 'SOURCE_CONFLICT', 'BUDGET_EXCEEDED', 'INPUT_INVALID', 'MODEL_NOT_AVAILABLE', 'REQUEST_UNCERTAIN'] as string[]).includes(
+      code
+    )
+      ? (code as ErrorCode)
+      : 'MODEL_NOT_AVAILABLE';
+    return errorResponse(known, r.note ?? '调用未成功。', '请检查片段授权、预算与服务商状态。');
   }
 
   private sourcesReadOriginal(req: IpcRequest): IpcResponse {
