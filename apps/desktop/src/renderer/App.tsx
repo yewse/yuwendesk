@@ -402,24 +402,25 @@ function ResourcesPage(): JSX.Element {
     if (r.ok) setReader({ ...r.data, hitContextQuery: query.trim() });
   }
 
-  // 用正文命中片段作为“获准依据”进行结构化分析（上下文边界：仅该获准非敏感片段进入模型）。
-  async function analyze(hit: SourceHitDTO): Promise<void> {
+  // 用正文命中片段作为“获准依据”做结构化分析或生成课时计划（上下文边界：仅该获准非敏感片段进入模型）。
+  async function analyze(hit: SourceHitDTO, task: 'analyze_text' | 'lesson_outline'): Promise<void> {
     setAiMsg(null);
     if (hit.matchKind !== 'body' || !hit.anchor) {
       setAiMsg('请选择正文命中的片段作为依据（标题命中不作为原文依据）。');
       return;
     }
     const r = await window.yuwen.modelRun({
-      task: 'analyze_text',
+      task,
       fragments: [{ versionId: hit.versionId, charStart: hit.anchor.char_start, charEnd: hit.anchor.char_end, approved: true }]
     });
     if (!r.ok) {
-      setAiMsg(`分析未成功：${r.error.message_zh}`);
+      setAiMsg(`${task === 'lesson_outline' ? '课时计划' : '分析'}未成功：${r.error.message_zh}`);
       return;
     }
     const d = r.data;
     const res = (d.result ?? {}) as { text?: string; isTestDouble?: boolean };
-    setAnalysis({ title: hit.title, text: res.text ?? '', isTestDouble: !!res.isTestDouble, fromCache: d.status === 'cached' || !!d.fromCache });
+    const label = task === 'lesson_outline' ? '课时计划' : '结构化分析';
+    setAnalysis({ title: `${hit.title} · ${label}`, text: res.text ?? '', isTestDouble: !!res.isTestDouble, fromCache: d.status === 'cached' || !!d.fromCache });
   }
 
   async function retire(documentId: string): Promise<void> {
@@ -534,9 +535,14 @@ function ResourcesPage(): JSX.Element {
                 {h.matchKind === 'title' ? '查看文档' : `查看原文（${h.locatorLabel}）`}
               </button>
               {h.matchKind === 'body' && h.anchor && (
-                <button className="btn small" onClick={() => void analyze(h)}>
-                  用作依据·分析
-                </button>
+                <>
+                  <button className="btn small" onClick={() => void analyze(h, 'analyze_text')}>
+                    用作依据·分析
+                  </button>
+                  <button className="btn small" onClick={() => void analyze(h, 'lesson_outline')}>
+                    生成课时计划
+                  </button>
+                </>
               )}
             </li>
           ))}
@@ -591,7 +597,7 @@ function ResourcesPage(): JSX.Element {
         <div className="reader-mask" onClick={() => setAnalysis(null)}>
           <div className="reader" onClick={(e) => e.stopPropagation()}>
             <div className="reader-head">
-              <b>{analysis.title} · 结构化分析</b>
+              <b>{analysis.title}</b>
               {analysis.isTestDouble && <span className="pill pill-off">测试替身（非真实模型）</span>}
               {analysis.fromCache && <span className="tag">缓存复用</span>}
               <button className="btn small" onClick={() => setAnalysis(null)}>
@@ -648,6 +654,7 @@ function ModelPanel(): JSX.Element {
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [budget, setBudget] = useState('0');
+  const [allowNet, setAllowNet] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [probeNote, setProbeNote] = useState<string | null>(null);
 
@@ -657,10 +664,11 @@ function ModelPanel(): JSX.Element {
       if (p.ok) setProviders(p.data.providers);
       const c = await window.yuwen.modelGetConfig();
       if (c.ok && c.data.config) {
-        const cfg = c.data.config as { provider: string; model: string; budgetCapCents: number };
+        const cfg = c.data.config as { provider: string; model: string; budgetCapCents: number; allowRealNetwork: boolean };
         setProvider(cfg.provider);
         setModel(cfg.model);
         setBudget(String(cfg.budgetCapCents));
+        setAllowNet(!!cfg.allowRealNetwork);
       }
     })();
   }, []);
@@ -671,6 +679,7 @@ function ModelPanel(): JSX.Element {
       provider,
       model: model.trim() || undefined,
       budgetCapCents: Number(budget) || 0,
+      allowRealNetwork: allowNet,
       apiKey: apiKey.trim() || undefined
     });
     setMsg(r.ok ? '已保存配置。' : `配置失败：${r.error.message_zh}`);
@@ -712,10 +721,17 @@ function ModelPanel(): JSX.Element {
         <input className="search-input" value={budget} onChange={(e) => setBudget(e.target.value)} />
       </div>
       {current?.requiresKey && (
-        <div className="row">
-          <label className="muted small">API 密钥</label>
-          <input className="search-input" type="password" value={apiKey} placeholder="仅经系统加密保存，无安全后端将拒绝" onChange={(e) => setApiKey(e.target.value)} />
-        </div>
+        <>
+          <div className="row">
+            <label className="muted small">API 密钥</label>
+            <input className="search-input" type="password" value={apiKey} placeholder="仅经系统加密保存，无安全后端将拒绝" onChange={(e) => setApiKey(e.target.value)} />
+          </div>
+          <div className="row">
+            <label className="muted small">
+              <input type="checkbox" checked={allowNet} onChange={(e) => setAllowNet(e.target.checked)} /> 允许真实联网（需授权账户；未勾选保持 BLOCKED）
+            </label>
+          </div>
+        </>
       )}
       <div className="confirm-actions">
         <button className="btn small" onClick={() => void save()}>

@@ -125,6 +125,18 @@
 - **实测**：Node 单测 **194 项**（新增 model 12、ipc-model 5）；真实 Electron e2e：测试替身配置+探测可用、DeepSeek 探测/运行 BLOCKED(不伪造)、获准片段结构化分析(明标测试替身)、未获准 INPUT_INVALID、缓存复用、重启后配置/作业持久。证据 `/opt/cursor/artifacts/g04-walkthrough.mp4`、`g04-*.png`、`g04-transcript.json`。
 - **未验证/阻塞**：真实云 API（DeepSeek 等）需授权账户与联网 → 保持 BLOCKED/未验证；真实能力/参数/费用以接入时验证为准。数据/检索/业务本地，无远程向量数据库。
 
+### G04 真实协议适配 + 保护收尾（第五批）
+
+- **DeepSeek 真实协议**：`createDeepseekProvider(transport)` 实现 `/chat/completions` 请求构造(Bearer/messages/temperature/max_tokens/stream)、非流式与 **SSE 流式解析**、**错误映射**(401/403→AUTH_FAILED、429→RATE_LIMITED、5xx/传输异常→NETWORK_UNAVAILABLE、非JSON→MODEL_NOT_AVAILABLE)、用量与成本。传输**可注入**以离线测试，**禁止测试实网**；生产默认真实 fetch。真实账户联网烟测保持 BLOCKED/未验证。
+- **输出合同真实校验**：`validateContract` 对模型正文做 schema + 引用区间校验；**非法JSON/缺字段/截断/越界引用**一律判不合格(EXPORT_INVALID)，**不进入可用成功缓存**；测试替身遵守同一合同。
+- **上下文边界**：`readExactRange` 按批准版本与区间**精确读取**（不复用带未授权前后文的展示预览）；超单片段上限/越界→INPUT_INVALID(不静默截断冒称完整)。
+- **保护收尾**：派发前**联网授权**(allowRealNetwork+受保护密钥，否则不发起)；**预算预留(running 计入)与结算**(succeeded 实际/uncertain 保留/明确未发生才置0，不因“失败”直接认定未计费)；**相同任务在途去重**；**取消后迟到结果不提交为成功**(cancelled 不缓存)；**超时→uncertain(REQUEST_UNCERTAIN)** 费用不确定；**探测遵守授权与预算**。
+- **实测**：Node 单测 **211 项**（新增 model-deepseek 8 离线协议、model-protect 9 边界/去重/取消/超时/预算/探测；含既有 G04 定向检查转正式回归）；真实 Electron e2e：DeepSeek 真实协议经 App IPC **离线注入传输跑通**(provider=deepseek、isTestDouble=false、结算成本)，真实实网仍未验证。证据 `/opt/cursor/artifacts/g04b-walkthrough.mp4`、`g04b-*.png`、`g04b-transcript.json`。
+
+### G05 课时计划接入（依赖满足部分）
+
+- 任务/方法示例/**课时计划合同** `lesson_outline.v1`（objectives/steps[stage,minutes,activity,citations]/notes），受同一输出合同校验；资料页“生成课时计划”按获准片段生成，**模拟结果明确标注“测试替身（非真实模型）”**，不冒充真实备课；教师不写提示词。无授权不调用真实 API。
+
 ## G05–G11 — NOT_STARTED
 
 教学业务 M01–M12、材料交付（含 CR-001 三类五文件，落 G05–G07）、审查与修改、反馈与纠正、备份恢复、升级性能、发布验收，均未开始。界面相应页面标注"后续版本开放"。
