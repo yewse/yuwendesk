@@ -11,6 +11,19 @@ export interface SafeStorageLike {
   isEncryptionAvailable(): boolean;
   encryptString(plainText: string): Buffer;
   decryptString(encrypted: Buffer): string;
+  // 仅 Linux 提供；'basic_text'/'unknown' 属不安全降级后端，必须拒绝。
+  getSelectedStorageBackend?(): string;
+}
+
+const INSECURE_BACKENDS = new Set(['basic_text', 'unknown']);
+
+// 判定 safeStorage 是否为安全后端：加密可用且未回退到不安全的明文级后端。
+export function isSecureSafeStorage(safe: SafeStorageLike): boolean {
+  if (!safe.isEncryptionAvailable()) return false;
+  if (typeof safe.getSelectedStorageBackend === 'function') {
+    if (INSECURE_BACKENDS.has(safe.getSelectedStorageBackend())) return false;
+  }
+  return true;
 }
 
 export type ProtectResult = { ok: true; ciphertext: Buffer; last4: string } | { ok: false; reason: 'encryption_unavailable' };
@@ -20,12 +33,12 @@ export class CredentialProtector {
   constructor(private readonly safeStorage: SafeStorageLike) {}
 
   available(): boolean {
-    return this.safeStorage.isEncryptionAvailable();
+    return isSecureSafeStorage(this.safeStorage);
   }
 
-  // 加密凭据；不可用则拒绝（不返回、不持久化明文）。
+  // 加密凭据；不可用或不安全降级后端则拒绝（不返回、不持久化明文）。
   protect(plaintext: string): ProtectResult {
-    if (!this.safeStorage.isEncryptionAvailable()) return { ok: false, reason: 'encryption_unavailable' };
+    if (!isSecureSafeStorage(this.safeStorage)) return { ok: false, reason: 'encryption_unavailable' };
     const ciphertext = this.safeStorage.encryptString(plaintext);
     const last4 = plaintext.slice(-4);
     return { ok: true, ciphertext, last4 };
@@ -79,11 +92,11 @@ export class DataKeyManager {
   constructor(private readonly safeStorage: SafeStorageLike) {}
 
   available(): boolean {
-    return this.safeStorage.isEncryptionAvailable();
+    return isSecureSafeStorage(this.safeStorage);
   }
 
   wrap(dataKey: Buffer): { ok: true; wrapped: Buffer } | { ok: false; reason: 'encryption_unavailable' } {
-    if (!this.safeStorage.isEncryptionAvailable()) return { ok: false, reason: 'encryption_unavailable' };
+    if (!isSecureSafeStorage(this.safeStorage)) return { ok: false, reason: 'encryption_unavailable' };
     return { ok: true, wrapped: this.safeStorage.encryptString(dataKey.toString('base64')) };
   }
 

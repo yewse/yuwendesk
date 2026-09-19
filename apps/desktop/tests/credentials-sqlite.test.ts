@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { SqliteStore } from '../src/main/db/sqliteStore';
 import type { SafeStorageLike } from '../src/main/crypto/secrets';
 
-// 伪 safeStorage：base64 包裹（可逆，但密文不含明文子串）。
-function fakeSafe(available = true): SafeStorageLike {
+// 伪 safeStorage：base64 包裹（可逆，但密文不含明文子串）。backend 用于模拟不安全降级后端。
+function fakeSafe(available = true, backend?: string): SafeStorageLike {
   return {
     isEncryptionAvailable: () => available,
     encryptString: (s) => Buffer.from('ENC1:' + Buffer.from(s, 'utf8').toString('base64'), 'utf8'),
@@ -14,7 +14,8 @@ function fakeSafe(available = true): SafeStorageLike {
       const s = b.toString('utf8');
       if (!s.startsWith('ENC1:')) throw new Error('bad');
       return Buffer.from(s.slice(5), 'base64').toString('utf8');
-    }
+    },
+    ...(backend !== undefined ? { getSelectedStorageBackend: () => backend } : {})
   };
 }
 const open = new Set<SqliteStore>();
@@ -68,6 +69,13 @@ describe('凭据保护（SqliteStore + safeStorage，T03）', () => {
     expect(s.setCredential('k', 'v').ok).toBe(false);
   });
 
+  it('不安全降级后端(basic_text) 明确拒绝：不可用、拒绝存储', async () => {
+    const s = await store(tmp(), fakeSafe(true, 'basic_text'));
+    expect(s.credentialEncryptionAvailable()).toBe(false);
+    expect(s.setCredential('grok_api_key', 'sk-x').ok).toBe(false);
+    expect(s.putSensitive('obs', 'x', 'aad').ok).toBe(false);
+  });
+
   it('解密失败：返回 decrypt_failed，且不覆盖已存密文', async () => {
     const s = await store(tmp(), fakeSafe(true));
     s.setCredential('grok_api_key', 'sk-KEEP-1234');
@@ -115,5 +123,30 @@ describe('敏感 payload 保护（AES-256-GCM，T03）', () => {
     const s = await store(tmp(), fakeSafe(false));
     const put = s.putSensitive('obs1', 'x', 'aad');
     expect(put.ok).toBe(false);
+  });
+
+  it('敏感读取不自动创建/替换数据密钥（无密钥→not_found，且不生成 secure_key）', async () => {
+    const s = await store(tmp(), fakeSafe(true));
+    const got = s.getSensitive('never-written', 'aad');
+    expect(got.ok).toBe(false);
+    if (!got.ok) expect(got.reason).toBe('not_found');
+    const cnt = s.withTransaction((db) => db.prepare('SELECT COUNT(*) c FROM secure_key').get()) as { c: number };
+    expect(cnt.c).toBe(0); // 读取未创建密钥
+  });
+
+  it('敏感读取/凭据读取不穿过存储保护态', async () => {
+    const dir = tmp();
+    const seed = await store(dir, fakeSafe(true));
+    seed.putSensitive('obs', '内容', 'aad');
+    seed.setCredential('grok_api_key', 'sk-KEEP');
+    seed.withTransaction((db) => db.pragma('user_version = 99')); // 制造高版本 → 重开进入保护态
+    seed.close();
+    open.delete(seed);
+    const s = new SqliteStore(dir, { safeStorage: fakeSafe(true) });
+    open.add(s);
+    await s.load();
+    expect(s.isProtected()).toBe(true);
+    expect(s.getSensitive('obs', 'aad').ok).toBe(false);
+    expect(s.readCredential('grok_api_key').ok).toBe(false);
   });
 });

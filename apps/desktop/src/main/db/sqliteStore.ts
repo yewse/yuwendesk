@@ -10,8 +10,16 @@ import {
   decryptSensitive,
   encryptSensitive,
   generateDataKey,
+  isSecureSafeStorage,
   type SafeStorageLike
 } from '../crypto/secrets';
+
+// 仅供测试的事务中途故障注入点（验证 outbox/幂等写入失败时整体回滚）。
+export interface CommitFaultHooks {
+  afterDraftUpdate?: () => void;
+  afterOutbox?: () => void;
+  beforeIdempotency?: () => void;
+}
 
 export interface SqliteStoreOptions {
   // 旧 JSON 读取/隔离的可注入 IO（供确定性测试读取失败/隔离失败）。
@@ -20,6 +28,8 @@ export interface SqliteStoreOptions {
   archiveRename?: (from: string, to: string) => Promise<void>;
   // 凭据/敏感 payload 保护后端（生产注入 electron.safeStorage；测试注入伪实现）。
   safeStorage?: SafeStorageLike;
+  // 测试用事务中途故障注入。
+  commitFaults?: CommitFaultHooks;
 }
 
 export type CredentialSetResult = { ok: true; last4: string } | { ok: false; reason: 'encryption_unavailable' };
@@ -140,6 +150,7 @@ export class SqliteStore {
   private readonly legacyIo?: StoreIo;
   private readonly archiveRename: (from: string, to: string) => Promise<void>;
   private readonly safeStorage?: SafeStorageLike;
+  private readonly commitFaults?: CommitFaultHooks;
 
   constructor(userDataDir: string, opts: SqliteStoreOptions = {}) {
     this.dir = userDataDir;
@@ -148,6 +159,7 @@ export class SqliteStore {
     this.legacyIo = opts.legacyIo;
     this.archiveRename = opts.archiveRename ?? ((from, to) => fs.rename(from, to));
     this.safeStorage = opts.safeStorage;
+    this.commitFaults = opts.commitFaults;
   }
 
   async load(): Promise<void> {
@@ -426,12 +438,15 @@ export class SqliteStore {
       }
       const info = db.prepare('UPDATE draft SET content=?, revision=revision+1, updated_at=? WHERE id=1').run(o.content, now);
       if (info.changes !== 1) throw new Error('draft_update_zero_rows'); // 零行不得返回成功 → 抛出触发回滚
+      this.commitFaults?.afterDraftUpdate?.(); // 测试：草稿已更新后中途失败 → 应整体回滚
       const d = this.readDraft();
       db.prepare('INSERT INTO outbox(event_type,payload,created_at) VALUES(?,?,?)').run(
         'draft.saved',
         JSON.stringify({ revision: d.revision }),
         now
       );
+      this.commitFaults?.afterOutbox?.(); // 测试：outbox 写入后中途失败 → 应整体回滚
+      this.commitFaults?.beforeIdempotency?.(); // 测试：幂等结果写入前失败 → 应整体回滚
       db.prepare(
         'INSERT INTO idempotency(key,fingerprint,status,draft_content,draft_revision,draft_updated_at,created_at) VALUES(?,?,?,?,?,?,?)'
       ).run(o.idempotencyKey, o.fingerprint, 'applied', d.content, d.revision, d.updated_at, now);
@@ -457,7 +472,7 @@ export class SqliteStore {
   // ===== T03 凭据与敏感 payload 保护 =====
 
   credentialEncryptionAvailable(): boolean {
-    return !!this.safeStorage && this.safeStorage.isEncryptionAvailable();
+    return !!this.safeStorage && isSecureSafeStorage(this.safeStorage);
   }
 
   // 存凭据：加密不可用则拒绝，绝不落明文；界面只用 last4 显示。
@@ -480,9 +495,10 @@ export class SqliteStore {
     return row ? row.last4 : null;
   }
 
-  // 读凭据：解密失败返回错误，且不改动已存密文（未写库）。
+  // 读凭据：不穿过存储保护态；解密失败返回错误，且不改动已存密文（未写库）。
   readCredential(name: string): CredentialReadResult {
-    if (!this.safeStorage) return { ok: false, reason: 'unavailable' };
+    if (this.protectedState) return { ok: false, reason: 'unavailable' };
+    if (!this.safeStorage || !isSecureSafeStorage(this.safeStorage)) return { ok: false, reason: 'unavailable' };
     const db = this.requireDb();
     const row = db.prepare('SELECT ciphertext FROM credential WHERE name=?').get(name) as { ciphertext: Buffer } | undefined;
     if (!row) return { ok: false, reason: 'not_found' };
@@ -491,18 +507,25 @@ export class SqliteStore {
     return { ok: true, plaintext: u.plaintext };
   }
 
-  // 确保工作区数据密钥存在（safeStorage 封装存储）；不可用则拒绝，绝不落明文密钥。
-  private ensureDataKey(): { ok: true; key: Buffer } | { ok: false; reason: 'unavailable' | 'decrypt_failed' } {
-    if (!this.safeStorage || !this.safeStorage.isEncryptionAvailable()) return { ok: false, reason: 'unavailable' };
-    const mgr = new DataKeyManager(this.safeStorage);
+  // 读取现有数据密钥（只读，绝不创建/替换）；无密钥返回 not_found。
+  private readDataKey(): { ok: true; key: Buffer } | { ok: false; reason: 'unavailable' | 'decrypt_failed' | 'not_found' } {
+    if (!this.safeStorage || !isSecureSafeStorage(this.safeStorage)) return { ok: false, reason: 'unavailable' };
     const db = this.requireDb();
     const row = db.prepare('SELECT wrapped FROM secure_key WHERE id=1').get() as { wrapped: Buffer } | undefined;
-    if (row) {
-      const u = mgr.unwrap(row.wrapped);
-      return u.ok ? { ok: true, key: u.dataKey } : { ok: false, reason: 'decrypt_failed' };
-    }
+    if (!row) return { ok: false, reason: 'not_found' };
+    const u = new DataKeyManager(this.safeStorage).unwrap(row.wrapped);
+    return u.ok ? { ok: true, key: u.dataKey } : { ok: false, reason: 'decrypt_failed' };
+  }
+
+  // 确保数据密钥存在（仅写路径使用；不存在才创建，绝不替换已有密钥）。
+  private ensureDataKey(): { ok: true; key: Buffer } | { ok: false; reason: 'unavailable' | 'decrypt_failed' } {
+    if (!this.safeStorage || !isSecureSafeStorage(this.safeStorage)) return { ok: false, reason: 'unavailable' };
+    const existing = this.readDataKey();
+    if (existing.ok) return existing;
+    if (existing.reason === 'decrypt_failed') return { ok: false, reason: 'decrypt_failed' }; // 有密钥但解不开：不替换
+    const db = this.requireDb();
     const key = generateDataKey();
-    const w = mgr.wrap(key);
+    const w = new DataKeyManager(this.safeStorage).wrap(key);
     if (!w.ok) return { ok: false, reason: 'unavailable' };
     db.prepare('INSERT INTO secure_key(id,wrapped,created_at) VALUES(1,?,?)').run(w.wrapped, new Date().toISOString());
     return { ok: true, key };
@@ -520,9 +543,11 @@ export class SqliteStore {
     return { ok: true, value: null };
   }
 
+  // 读敏感数据：不穿过保护态；只读数据密钥（不自动创建/替换）；解密失败不覆盖原密文。
   getSensitive(name: string, aad: string): SensitiveResult<string> {
-    const dk = this.ensureDataKey();
-    if (!dk.ok) return { ok: false, reason: dk.reason };
+    if (this.protectedState) return { ok: false, reason: 'unavailable' };
+    const dk = this.readDataKey();
+    if (!dk.ok) return { ok: false, reason: dk.reason === 'decrypt_failed' ? 'decrypt_failed' : dk.reason === 'not_found' ? 'not_found' : 'unavailable' };
     const db = this.requireDb();
     const row = db.prepare('SELECT blob FROM sensitive WHERE name=?').get(name) as { blob: Buffer } | undefined;
     if (!row) return { ok: false, reason: 'not_found' };

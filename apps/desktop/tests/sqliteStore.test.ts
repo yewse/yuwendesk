@@ -307,6 +307,40 @@ describe('SqliteStore T04 持久幂等 + outbox 单事务', () => {
     await expect(s.commitDraftSave(op('k1', 'x', 0))).rejects.toThrow(/draft_row_missing|zero_rows/);
     expect(s.outboxCount()).toBe(0); // 回滚，无事件
   });
+
+  it('中途故障：outbox 写入后失败 → 草稿/事件/幂等一起回滚', async () => {
+    const dir = tmp();
+    const s = new SqliteStore(dir, { commitFaults: { afterOutbox: () => { throw new Error('outbox_commit_fault'); } } });
+    open.add(s);
+    await s.load();
+    await expect(s.commitDraftSave(op('k1', '内容', 0))).rejects.toThrow('outbox_commit_fault');
+    expect(s.getDraft()).toMatchObject({ content: '', revision: 0 }); // 草稿未变
+    expect(s.outboxCount()).toBe(0); // 事件回滚
+    const idem = s.withTransaction((db) => db.prepare('SELECT COUNT(*) c FROM idempotency').get()) as { c: number };
+    expect(idem.c).toBe(0); // 幂等结果回滚
+  });
+
+  it('中途故障：幂等结果写入前失败 → 草稿与 outbox 一起回滚', async () => {
+    const dir = tmp();
+    const s = new SqliteStore(dir, { commitFaults: { beforeIdempotency: () => { throw new Error('idem_commit_fault'); } } });
+    open.add(s);
+    await s.load();
+    await expect(s.commitDraftSave(op('k1', '内容', 0))).rejects.toThrow('idem_commit_fault');
+    expect(s.getDraft().revision).toBe(0);
+    expect(s.outboxCount()).toBe(0);
+    const idem = s.withTransaction((db) => db.prepare('SELECT COUNT(*) c FROM idempotency').get()) as { c: number };
+    expect(idem.c).toBe(0);
+  });
+
+  it('中途故障：草稿更新后失败 → 全部回滚，可再次正常提交', async () => {
+    const dir = tmp();
+    const s = new SqliteStore(dir, { commitFaults: { afterDraftUpdate: () => { throw new Error('draft_commit_fault'); } } });
+    open.add(s);
+    await s.load();
+    await expect(s.commitDraftSave(op('k1', '内容', 0))).rejects.toThrow('draft_commit_fault');
+    expect(s.getDraft().revision).toBe(0);
+    expect(s.outboxCount()).toBe(0);
+  });
 });
 
 describe('SqliteStore 保护态', () => {
