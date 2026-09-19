@@ -1,0 +1,16 @@
+{
+  "commit": "dc41e65971889f14a7424ae68c33cdc93a9da35b",
+  "files": [
+    {
+      "path": "main/store.ts",
+      "git_blob_sha1": "223b8271adedb4861098147ff2272471668bc3b3",
+      "sha256": "cc7c6c0c6664039176ee2d38ca493e24b729e73dc1825049bae3c8fc116a26b1"
+    },
+    {
+      "path": "main/ipc.ts",
+      "git_blob_sha1": "b6027cf2c533f99da599de60a086d33eb76c99a6",
+      "sha256": "7b9cf46054fe02aceed868bebb050768033f10ae563ae7678d6d092f1c132964"
+    }
+  ],
+  "shared_module": "reproduction-only constant stub; types erased"
+}

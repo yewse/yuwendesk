@@ -1,0 +1,218 @@
+{
+  "commit": "dc41e65971889f14a7424ae68c33cdc93a9da35b",
+  "scope": "Exact source LocalStore/IpcService targeted logic/filesystem tests, not original suite or Electron/Windows",
+  "node": "v22.16.0",
+  "platform": "linux",
+  "transpiler": "TypeScript 5.8.3 (not project typecheck)",
+  "sourceVerification": "SOURCE_VERIFICATION.json",
+  "counts": {
+    "total": 11,
+    "pass": 3,
+    "fail": 8
+  },
+  "results": [
+    {
+      "id": "T01",
+      "name": "control: new LocalStore instance reloads committed draft",
+      "status": "PASS",
+      "observed": {
+        "content": "已保存",
+        "revision": 1,
+        "updated_at": "2026-09-19T10:49:27.450Z"
+      }
+    },
+    {
+      "id": "T02",
+      "name": "control: sequential same-key same-request replay",
+      "status": "PASS",
+      "observed": {
+        "a": {
+          "ok": true,
+          "data": {
+            "content": "甲",
+            "revision": 1,
+            "updated_at": "2026-09-19T10:49:27.454Z"
+          }
+        },
+        "b": {
+          "ok": true,
+          "data": {
+            "content": "甲",
+            "revision": 1,
+            "updated_at": "2026-09-19T10:49:27.454Z"
+          }
+        },
+        "revision": 1
+      }
+    },
+    {
+      "id": "T03",
+      "name": "control: concurrent draft/window flushes no rename collision",
+      "status": "PASS",
+      "observed": {
+        "draft": {
+          "content": "内容24",
+          "revision": 25,
+          "updated_at": "2026-09-19T10:49:27.455Z"
+        },
+        "window": {
+          "width": 1024,
+          "height": 724
+        }
+      }
+    },
+    {
+      "id": "T04",
+      "name": "missing expected_revision must be INPUT_INVALID",
+      "status": "FAIL",
+      "observed": {
+        "ok": true,
+        "data": {
+          "content": "should reject",
+          "revision": 1,
+          "updated_at": "2026-09-19T10:49:27.469Z"
+        }
+      },
+      "message": "Expected values to be strictly equal:\n\ntrue !== false\n"
+    },
+    {
+      "id": "T05",
+      "name": "string expected_revision must be INPUT_INVALID",
+      "status": "FAIL",
+      "observed": {
+        "ok": true,
+        "data": {
+          "content": "should reject",
+          "revision": 1,
+          "updated_at": "2026-09-19T10:49:27.470Z"
+        }
+      },
+      "message": "Expected values to be strictly equal:\n\ntrue !== false\n"
+    },
+    {
+      "id": "T06",
+      "name": "same key with different payload must not return success for old payload",
+      "status": "FAIL",
+      "observed": {
+        "response": {
+          "ok": true,
+          "data": {
+            "content": "A",
+            "revision": 1,
+            "updated_at": "2026-09-19T10:49:27.471Z"
+          }
+        },
+        "disk": {
+          "content": "A",
+          "revision": 1,
+          "updated_at": "2026-09-19T10:49:27.471Z"
+        }
+      },
+      "message": "expected rejection, not cached success carrying A for requested B\n\ntrue !== false\n"
+    },
+    {
+      "id": "T07",
+      "name": "concurrent identical requests must both resolve to original success",
+      "status": "FAIL",
+      "observed": {
+        "a": {
+          "ok": true,
+          "data": {
+            "content": "A",
+            "revision": 1,
+            "updated_at": "2026-09-19T10:49:27.472Z"
+          }
+        },
+        "b": {
+          "ok": false,
+          "error": {
+            "code": "VERSION_CONFLICT",
+            "message_zh": "本地草稿已在别处更新，为避免覆盖已停止保存。",
+            "retryable": false,
+            "next_action": "请刷新查看最新草稿后重试。"
+          }
+        },
+        "revision": 1
+      },
+      "message": "Expected values to be strictly equal:\n\nfalse !== true\n"
+    },
+    {
+      "id": "T08",
+      "name": "write failure must not publish uncommitted in-memory draft/revision",
+      "status": "FAIL",
+      "observed": {
+        "error": "ENOSPC",
+        "before": {
+          "content": "committed-A",
+          "revision": 1,
+          "updated_at": "2026-09-19T10:49:27.473Z"
+        },
+        "memory": {
+          "content": "uncommitted-B",
+          "revision": 2,
+          "updated_at": "2026-09-19T10:49:27.473Z"
+        },
+        "disk": {
+          "content": "committed-A",
+          "revision": 1,
+          "updated_at": "2026-09-19T10:49:27.473Z"
+        }
+      },
+      "message": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n+   content: 'uncommitted-B',\n+   revision: 2,\n-   content: 'committed-A',\n-   revision: 1,\n    updated_at: '2026-09-19T10:49:27.473Z'\n  }\n"
+    },
+    {
+      "id": "T09",
+      "name": "corrupt source must survive load plus geometry save or be quarantined",
+      "status": "FAIL",
+      "observed": {
+        "files": [
+          "yuwendesk-local-state.json"
+        ],
+        "after": "{\n  \"draft\": {\n    \"content\": \"\",\n    \"revision\": 0,\n    \"updated_at\": null\n  },\n  \"window\": {\n    \"width\": 900,\n    \"height\": 700\n  }\n}",
+        "originalPreserved": false
+      },
+      "message": "corrupt original was neither retained nor quarantined\n\nfalse !== true\n"
+    },
+    {
+      "id": "T10",
+      "name": "valid JSON with invalid field types must not enter live state",
+      "status": "FAIL",
+      "observed": {
+        "rejected": false,
+        "draft": {
+          "content": 123,
+          "revision": "bad",
+          "updated_at": null
+        },
+        "window": {
+          "width": "bad",
+          "height": 700
+        }
+      },
+      "message": "invalid fields were accepted into runtime state\n\nfalse !== true\n"
+    },
+    {
+      "id": "T11",
+      "name": "saveDraft response must correspond to its own commit, not later state",
+      "status": "FAIL",
+      "observed": {
+        "a": {
+          "content": "B",
+          "revision": 2,
+          "updated_at": "2026-09-19T10:49:27.477Z"
+        },
+        "b": {
+          "content": "B",
+          "revision": 2,
+          "updated_at": "2026-09-19T10:49:27.477Z"
+        },
+        "disk": {
+          "content": "B",
+          "revision": 2,
+          "updated_at": "2026-09-19T10:49:27.477Z"
+        }
+      },
+      "message": "Expected values to be strictly equal:\n\n'B' !== 'A'\n"
+    }
+  ]
+}
