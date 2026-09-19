@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { evaluatePlatform, isSupportedPlatform } from '../src/main/platform';
 
 describe('平台判定（F07：区分可运行/正式目标/开发放行）', () => {
-  it('Windows 11 x64（build≥22000）为正式目标平台', () => {
-    const r = evaluatePlatform('win32', 'x64', {}, { osRelease: '10.0.22631' });
+  it('Windows 11 工作站（ProductType=1 且 build≥22000）为正式目标平台', () => {
+    const r = evaluatePlatform('win32', 'x64', {}, { osRelease: '10.0.22631', productType: 1 });
     expect(r.supported).toBe(true);
     expect(r.targetSupported).toBe(true);
     expect(r.isDevOverride).toBe(false);
   });
 
-  it('Windows 10 x64（build<22000）可运行但非正式目标平台', () => {
-    const r = evaluatePlatform('win32', 'x64', {}, { osRelease: '10.0.19045' });
+  it('Windows 10 工作站（build<22000）可运行但非正式目标平台', () => {
+    const r = evaluatePlatform('win32', 'x64', {}, { osRelease: '10.0.19045', productType: 1 });
     expect(r.supported).toBe(true);
     expect(r.targetSupported).toBe(false);
   });

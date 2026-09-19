@@ -18,7 +18,9 @@ function makeService(): { svc: IpcService; store: LocalStore; file: string } {
     online: false,
     buildMode: 'production',
     sandboxEnabled: true,
-    platformDevOverride: false
+    platformDevOverride: false,
+    platformTargetSupported: true,
+    platformIdentity: 'win11'
   });
   return { svc, store, file: join(dir, 'yuwendesk-local-state.json') };
 }
