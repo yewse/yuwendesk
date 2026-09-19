@@ -1,0 +1,63 @@
+name: Windows 未签名工程测试包
+
+# 目的：在原生 Windows x64 runner 上以锁文件驱动（npm ci）可重复地构建未签名 NSIS 安装包，
+# 并作为工作流工件上传（含 SHA256）。这是"工程验证，非正式教学发布"。
+# 不注入真实签名私钥或 Grok 密钥；正式签名发布是独立门（见 reports/WINDOWS_BUILD.md）。
+# 触发：手动 workflow_dispatch，或推送到 cursor/* 分支。
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - 'cursor/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned-win:
+    runs-on: windows-latest
+    env:
+      # 无证书：跳过证书自动发现，产出未签名工程测试包。
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node 22（含 npm 缓存）
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: 安装依赖（锁文件驱动，可重复）
+        run: npm ci
+
+      - name: 类型检查 / Lint / 单元测试
+        run: |
+          npm run -w @yuwendesk/desktop typecheck
+          npm run -w @yuwendesk/desktop lint
+          npm run -w @yuwendesk/desktop test:unit
+
+      - name: 构建未签名 NSIS 安装包（原生 Windows，无需 wine）
+        run: npm run -w @yuwendesk/desktop build:win
+
+      - name: 计算 SHA256
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem apps/desktop/release/*-x64.exe | Select-Object -First 1
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $($exe.Name)" | Out-File -Encoding ascii apps/desktop/release/SHA256SUMS.txt
+          Get-Content apps/desktop/release/SHA256SUMS.txt
+          "runner_os=${env:RUNNER_OS} arch=${env:PROCESSOR_ARCHITECTURE}" | Out-File -Encoding ascii apps/desktop/release/BUILD_ENV.txt
+          "commit=${env:GITHUB_SHA}" | Out-File -Append -Encoding ascii apps/desktop/release/BUILD_ENV.txt
+
+      - name: 上传未签名安装包工件（含哈希与构建环境）
+        uses: actions/upload-artifact@v4
+        with:
+          name: YuwenDesk-Setup-unsigned-x64
+          path: |
+            apps/desktop/release/*-x64.exe
+            apps/desktop/release/SHA256SUMS.txt
+            apps/desktop/release/BUILD_ENV.txt
+          retention-days: 30
+          if-no-files-found: error

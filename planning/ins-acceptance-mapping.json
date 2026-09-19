@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0.0",
+  "note": "INS 父项与子项验收映射（ADR-0004）。保留 acceptance/cases.json 冻结用例不删除、不降低标准；此处仅澄清 G01 可先验证的子项与依赖后续模块的子项，父项在所有子项通过前不得整体 PASS。",
+  "items": [
+    {
+      "parent": "INS-001",
+      "title": "中文原生窗口可操作、无浏览器/终端/运行时下载",
+      "sub_items": [
+        { "id": "INS-001a", "scope": "G01", "desc": "中文原生窗口、导航与基础草稿可靠保存", "status": "PARTIAL_ENGINEERING_VERIFIED_LINUX" },
+        { "id": "INS-001b", "scope": "G01-实机", "desc": "干净 Win11 x64 标准账户双击图标启动、无终端/网址/运行时下载", "status": "BLOCKED_EXTERNAL" }
+      ],
+      "parent_status": "PARTIAL"
+    },
+    {
+      "parent": "INS-002",
+      "title": "不请求提权/不装服务/不改 PATH/不自启",
+      "sub_items": [
+        { "id": "INS-002a", "scope": "G01", "desc": "NSIS 配置：oneClick/perMachine=false/allowElevation=false/无服务", "status": "CONFIG_VERIFIED" },
+        { "id": "INS-002b", "scope": "G01-实机", "desc": "干净 Win11 标准账户实测不提权、不改系统", "status": "BLOCKED_EXTERNAL" }
+      ],
+      "parent_status": "PARTIAL"
+    },
+    {
+      "parent": "INS-003",
+      "title": "唤醒同一实例、编辑不丢失",
+      "sub_items": [
+        { "id": "INS-003a", "scope": "G01", "desc": "单实例锁 + 关闭前刷新保存（含立即关闭/保存进行中/失败/超时不静默丢弃）", "status": "ENGINEERING_VERIFIED_LINUX" },
+        { "id": "INS-003b", "scope": "G01-实机", "desc": "Win11 实机再次双击唤醒同一实例、无第二写入进程", "status": "BLOCKED_EXTERNAL" }
+      ],
+      "parent_status": "PARTIAL"
+    },
+    {
+      "parent": "INS-004",
+      "title": "中文/空格路径正确（含导入导出重启）",
+      "sub_items": [
+        { "id": "INS-004a", "scope": "G01", "desc": "userData 路径处理、无硬编码英文路径、基础数据留存", "status": "PARTIAL_ENGINEERING_VERIFIED_LINUX" },
+        { "id": "INS-004b", "scope": "G03/G06", "desc": "真实资料导入/材料导出的完整路径（依赖后续模块实现后回归）", "status": "NOT_RUN_DEPENDS_LATER" },
+        { "id": "INS-004c", "scope": "G01-实机", "desc": "含中文与空格的 Windows 用户名/目录实机安装、启动、导入导出并重启", "status": "BLOCKED_EXTERNAL" }
+      ],
+      "parent_status": "PARTIAL"
+    },
+    {
+      "parent": "INS-005",
+      "title": "卸载默认保留用户数据；删除需独立明确选择",
+      "sub_items": [
+        { "id": "INS-005a", "scope": "G01", "desc": "deleteAppDataOnUninstall=false（配置）+ 固定 appId", "status": "CONFIG_VERIFIED" },
+        { "id": "INS-005b", "scope": "G03+", "desc": "真实课程/来源留存（依赖资料与课程模块实现后回归）", "status": "NOT_RUN_DEPENDS_LATER" },
+        { "id": "INS-005c", "scope": "G01-实机", "desc": "Win11 卸载后重装同 appId 版本默认保留数据", "status": "BLOCKED_EXTERNAL" }
+      ],
+      "parent_status": "PARTIAL"
+    },
+    {
+      "parent": "INS-006",
+      "title": "不支持系统给中文说明并安全退出",
+      "sub_items": [
+        { "id": "INS-006a", "scope": "G01", "desc": "平台判定 + 不支持系统对话框后安全退出；打包版本禁用开发放行", "status": "ENGINEERING_VERIFIED_LINUX" },
+        { "id": "INS-006b", "scope": "G01-实机", "desc": "在不受支持的真实 OS/架构上安装器与应用一致拒绝", "status": "BLOCKED_EXTERNAL" }
+      ],
+      "parent_status": "PARTIAL"
+    },
+    {
+      "parent": "INS-008",
+      "title": "生产无 HTTP/WebSocket 监听",
+      "sub_items": [
+        { "id": "INS-008a", "scope": "G01", "desc": "设计保证：应用不启动本地服务；开发外的生产不加载开发服务器", "status": "DESIGN_GUARANTEED" },
+        { "id": "INS-008b", "scope": "G01+", "desc": "系统级证据：进程树 + 无监听套接字（Linux 工程验证已采集）", "status": "ENGINEERING_VERIFIED_LINUX" },
+        { "id": "INS-008c", "scope": "G01-实机", "desc": "Win11 生产构建下监视进程与监听套接字", "status": "BLOCKED_EXTERNAL" }
+      ],
+      "parent_status": "PARTIAL"
+    },
+    {
+      "parent": "INS-007",
+      "title": "分辨率/缩放/中文输入主操作不被遮挡",
+      "sub_items": [
+        { "id": "INS-007a", "scope": "G10", "desc": "1366x768/1920x1080 与 100/125/150% 缩放、中文输入、大字模式", "status": "NOT_RUN_DEPENDS_LATER" }
+      ],
+      "parent_status": "NOT_RUN"
+    }
+  ]
+}
