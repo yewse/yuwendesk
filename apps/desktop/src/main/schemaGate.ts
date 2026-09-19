@@ -33,6 +33,40 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     properties: { content: { type: 'string', maxLength: DRAFT_CONTENT_MAX } },
     required: ['content'],
     additionalProperties: false
+  },
+  'sources.import': {
+    type: 'object',
+    properties: {
+      title: { type: 'string', minLength: 1, maxLength: 500 },
+      format: { type: 'string', maxLength: 16 },
+      content: { type: 'string', maxLength: 6_000_000 },
+      classification: { type: 'string', maxLength: 32 }
+    },
+    required: ['title', 'format', 'content'],
+    additionalProperties: false
+  },
+  'sources.list': null,
+  'sources.search': {
+    type: 'object',
+    properties: { query: { type: 'string', maxLength: 500 } },
+    required: ['query'],
+    additionalProperties: false
+  },
+  'sources.read': {
+    type: 'object',
+    properties: {
+      versionId: { type: 'string', minLength: 1, maxLength: 64 },
+      charStart: { type: 'integer', nonNegative: true },
+      charEnd: { type: 'integer', nonNegative: true }
+    },
+    required: ['versionId'],
+    additionalProperties: false
+  },
+  'sources.retire': {
+    type: 'object',
+    properties: { documentId: { type: 'string', minLength: 1, maxLength: 64 } },
+    required: ['documentId'],
+    additionalProperties: false
   }
 };
 

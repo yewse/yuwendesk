@@ -7,6 +7,10 @@ import type {
   IpcResponse,
   OperationName,
   SaveDraftPayload,
+  SourceHitDTO,
+  SourceImportPayload,
+  SourceListItemDTO,
+  SourceReadDTO,
   StatusData
 } from '../shared/ipc';
 
@@ -49,6 +53,20 @@ const api = {
       idempotency_key: idempotencyKey,
       payload: { content } satisfies SaveDraftPayload
     }),
+  // G03 资料：导入/列表/搜索/查看/停用（内容在渲染层通过原生文件选择或拖拽读取后传入）。
+  importSource: (payload: SourceImportPayload) =>
+    call<{ status: string; documentId?: string; versionId?: string; version?: number; contentHash?: string; versionConflict?: boolean }>(
+      'sources.import',
+      { payload }
+    ),
+  listSources: () => call<{ sources: SourceListItemDTO[] }>('sources.list'),
+  searchSources: (query: string) => call<{ hits: SourceHitDTO[] }>('sources.search', { payload: { query } }),
+  readSource: (versionId: string, charStart?: number, charEnd?: number) =>
+    call<SourceReadDTO>('sources.read', {
+      payload:
+        typeof charStart === 'number' && typeof charEnd === 'number' ? { versionId, charStart, charEnd } : { versionId }
+    }),
+  retireSource: (documentId: string) => call<{ documentId: string; status: string }>('sources.retire', { payload: { documentId } }),
   // 关闭前刷新握手：主进程在窗口关闭前通知渲染层落盘（带唯一 requestId）；渲染层完成后回执。
   // 仅暴露固定通道，不暴露任意 send/on。返回取消订阅函数，供组件卸载时释放监听。
   onBeforeClose: (handler: (requestId: string) => void | Promise<void>): (() => void) => {

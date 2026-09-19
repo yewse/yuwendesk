@@ -1,8 +1,23 @@
 import Database from 'better-sqlite3';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { LocalStore } from '../store';
-import type { DraftCommitOp, DraftCommitResult, DraftState, SaveExpectResult, StoreIo, WindowState } from '../store';
+import type {
+  DraftCommitOp,
+  DraftCommitResult,
+  DraftState,
+  SaveExpectResult,
+  SourceAnchor,
+  SourceClassification,
+  SourceImportInput,
+  SourceImportResult,
+  SourceListItem,
+  SourceReadResult,
+  SourceSearchHit,
+  StoreIo,
+  WindowState
+} from '../store';
 import { StoreProtectedError } from '../store';
 import {
   CredentialProtector,
@@ -37,6 +52,22 @@ export type CredentialReadResult =
   | { ok: true; plaintext: string }
   | { ok: false; reason: 'not_found' | 'decrypt_failed' | 'unavailable' };
 export type SensitiveResult<T> = { ok: true; value: T } | { ok: false; reason: 'unavailable' | 'decrypt_failed' | 'not_found' };
+
+const SOURCE_MAX_BYTES = 5_000_000; // 文本类导入上限（G03 核心走文本；更大/二进制格式后续）
+const SOURCE_PREVIEW_MAX = 8000;
+const SEARCH_LIMIT = 30;
+
+function likeEscape(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+function locateAnchor(text: string, query: string): { anchor: SourceAnchor; context: string } | null {
+  const idx = text.indexOf(query);
+  if (idx < 0) return null;
+  const line = text.slice(0, idx).split('\n').length;
+  const ctxStart = Math.max(0, idx - 40);
+  const ctxEnd = Math.min(text.length, idx + query.length + 40);
+  return { anchor: { char_start: idx, char_end: idx + query.length, line }, context: text.slice(ctxStart, ctxEnd) };
+}
 
 // G02-T02：真实文件型 SQLite 存储（单写入者 + 版本迁移 + WAL/外键 + 原子条件保存 + 失败回滚）。
 // 本轮加固：高版本/未知结构拒写；旧 JSON 读取或隔离失败进入迁入保护；必需记录缺失/UPDATE 零行不返回成功；
@@ -121,6 +152,37 @@ const MIGRATIONS: Migration[] = [
           aad        TEXT NOT NULL,
           created_at TEXT NOT NULL
         );
+      `);
+    }
+  },
+  {
+    version: 4,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS source_document (
+          id                 TEXT PRIMARY KEY,
+          title              TEXT NOT NULL,
+          classification     TEXT NOT NULL,          -- public_reference | licensed_reference | teacher_private | student_sensitive
+          status             TEXT NOT NULL,          -- active | retired
+          current_version_id TEXT,
+          created_at         TEXT NOT NULL,
+          updated_at         TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS source_version (
+          id           TEXT PRIMARY KEY,
+          document_id  TEXT NOT NULL REFERENCES source_document(id),
+          version      INTEGER NOT NULL,
+          content_hash TEXT NOT NULL,
+          byte_size    INTEGER NOT NULL,
+          format       TEXT NOT NULL,
+          created_at   TEXT NOT NULL,
+          UNIQUE(document_id, version)
+        );
+        CREATE TABLE IF NOT EXISTS source_text (
+          version_id TEXT PRIMARY KEY REFERENCES source_version(id),
+          full_text  TEXT NOT NULL
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS source_fts USING fts5(text, version_id UNINDEXED, tokenize='trigram');
       `);
     }
   }
@@ -556,6 +618,161 @@ export class SqliteStore {
     } catch {
       return { ok: false, reason: 'decrypt_failed' }; // 认证失败：不覆盖原密文
     }
+  }
+
+  // ===== G03 资料导入 / 搜索 / 原文定位 =====
+
+  // 导入文本类资料：计算 SHA-256、按标题去重/新增版本、抽取入库并建 FTS 索引。
+  // 敏感分类需安全加密后端，否则阻塞（普通非敏感资料不受影响）。
+  importSource(input: SourceImportInput): SourceImportResult {
+    this.assertWritable();
+    const classification = input.classification ?? 'public_reference';
+    if (input.content.length === 0) return { status: 'rejected', reason: 'empty' };
+    if (Buffer.byteLength(input.content, 'utf8') > SOURCE_MAX_BYTES) return { status: 'rejected', reason: 'too_large' };
+    if (classification === 'student_sensitive' && !this.credentialEncryptionAvailable()) {
+      return { status: 'blocked_sensitive', reason: 'encryption_unavailable' };
+    }
+    const db = this.requireDb();
+    const now = new Date().toISOString();
+    const hash = createHash('sha256').update(input.content, 'utf8').digest('hex');
+    const byteSize = Buffer.byteLength(input.content, 'utf8');
+
+    const tx = db.transaction((): SourceImportResult => {
+      const doc = db.prepare('SELECT id, current_version_id FROM source_document WHERE title=?').get(input.title) as
+        | { id: string; current_version_id: string | null }
+        | undefined;
+      if (doc && doc.current_version_id) {
+        const cur = db.prepare('SELECT content_hash, version FROM source_version WHERE id=?').get(doc.current_version_id) as
+          | { content_hash: string; version: number }
+          | undefined;
+        if (cur && cur.content_hash === hash) {
+          return { status: 'duplicate', documentId: doc.id, versionId: doc.current_version_id, version: cur.version, contentHash: hash };
+        }
+      }
+      const documentId = doc ? doc.id : randomUUID();
+      if (!doc) {
+        db.prepare(
+          'INSERT INTO source_document(id,title,classification,status,current_version_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?)'
+        ).run(documentId, input.title, classification, 'active', null, now, now);
+      }
+      const maxV = (db.prepare('SELECT COALESCE(MAX(version),0) m FROM source_version WHERE document_id=?').get(documentId) as { m: number }).m;
+      const version = maxV + 1;
+      const versionId = randomUUID();
+      db.prepare('INSERT INTO source_version(id,document_id,version,content_hash,byte_size,format,created_at) VALUES(?,?,?,?,?,?,?)').run(
+        versionId,
+        documentId,
+        version,
+        hash,
+        byteSize,
+        input.format,
+        now
+      );
+      db.prepare('INSERT INTO source_text(version_id,full_text) VALUES(?,?)').run(versionId, input.content);
+      db.prepare('INSERT INTO source_fts(text,version_id) VALUES(?,?)').run(input.content, versionId);
+      db.prepare('UPDATE source_document SET current_version_id=?, status=?, updated_at=? WHERE id=?').run(versionId, 'active', now, documentId);
+      return { status: doc ? 'new_version' : 'imported', documentId, versionId, version, contentHash: hash, versionConflict: !!doc };
+    });
+    return tx.immediate();
+  }
+
+  // 中文检索：≥3 字用 FTS5 trigram；1–2 字短词回退 LIKE（含标题）；结果带精确原文锚点与上下文。
+  searchSources(query: string): SourceSearchHit[] {
+    if (!this.db || this.protectedState) return [];
+    const db = this.db;
+    const cps = [...query];
+    if (cps.length === 0) return [];
+    const activeCurrent = new Set(
+      (db.prepare("SELECT current_version_id v FROM source_document WHERE status='active' AND current_version_id IS NOT NULL").all() as {
+        v: string;
+      }[]).map((r) => r.v)
+    );
+    const candidateIds: string[] = [];
+    if (cps.length >= 3) {
+      const rows = db.prepare('SELECT version_id FROM source_fts WHERE source_fts MATCH ?').all(`"${query.replace(/"/g, '""')}"`) as {
+        version_id: string;
+      }[];
+      for (const r of rows) candidateIds.push(r.version_id);
+    } else {
+      const like = `%${likeEscape(query)}%`;
+      for (const r of db.prepare("SELECT version_id v FROM source_text WHERE full_text LIKE ? ESCAPE '\\'").all(like) as { v: string }[])
+        candidateIds.push(r.v);
+      for (const r of db
+        .prepare("SELECT current_version_id v FROM source_document WHERE status='active' AND current_version_id IS NOT NULL AND title LIKE ? ESCAPE '\\'")
+        .all(like) as { v: string }[])
+        candidateIds.push(r.v);
+    }
+    const seen = new Set<string>();
+    const hits: SourceSearchHit[] = [];
+    for (const vid of candidateIds) {
+      if (!activeCurrent.has(vid) || seen.has(vid)) continue;
+      seen.add(vid);
+      const meta = db
+        .prepare(
+          'SELECT sv.version version, sv.document_id documentId, sd.title title, sd.classification classification FROM source_version sv JOIN source_document sd ON sd.id=sv.document_id WHERE sv.id=?'
+        )
+        .get(vid) as { version: number; documentId: string; title: string; classification: SourceClassification } | undefined;
+      if (!meta) continue;
+      const text = (db.prepare('SELECT full_text FROM source_text WHERE version_id=?').get(vid) as { full_text: string }).full_text;
+      const loc = locateAnchor(text, query);
+      hits.push({
+        documentId: meta.documentId,
+        title: meta.title,
+        version: meta.version,
+        versionId: vid,
+        classification: meta.classification,
+        anchor: loc ? loc.anchor : null,
+        context: loc ? loc.context : ''
+      });
+      if (hits.length >= SEARCH_LIMIT) break;
+    }
+    return hits;
+  }
+
+  // 原文查看：给定跨度返回定位文本；否则返回受限预览。
+  readSource(versionId: string, charStart?: number, charEnd?: number): SourceReadResult | null {
+    if (!this.db) return null;
+    const db = this.db;
+    const meta = db
+      .prepare(
+        'SELECT sv.version version, sd.title title FROM source_version sv JOIN source_document sd ON sd.id=sv.document_id WHERE sv.id=?'
+      )
+      .get(versionId) as { version: number; title: string } | undefined;
+    if (!meta) return null;
+    const textRow = db.prepare('SELECT full_text FROM source_text WHERE version_id=?').get(versionId) as { full_text: string } | undefined;
+    if (!textRow) return null;
+    const full = textRow.full_text;
+    if (typeof charStart === 'number' && typeof charEnd === 'number' && charStart >= 0 && charEnd >= charStart) {
+      const s = Math.max(0, charStart - 40);
+      const e = Math.min(full.length, charEnd + 40);
+      return { title: meta.title, version: meta.version, text: full.slice(s, e), char_start: charStart, char_end: charEnd, truncated: false };
+    }
+    return {
+      title: meta.title,
+      version: meta.version,
+      text: full.slice(0, SOURCE_PREVIEW_MAX),
+      char_start: null,
+      char_end: null,
+      truncated: full.length > SOURCE_PREVIEW_MAX
+    };
+  }
+
+  retireSource(documentId: string): boolean {
+    this.assertWritable();
+    const db = this.requireDb();
+    const info = db.prepare("UPDATE source_document SET status='retired', updated_at=? WHERE id=?").run(new Date().toISOString(), documentId);
+    return info.changes === 1;
+  }
+
+  listSources(): SourceListItem[] {
+    if (!this.db) return [];
+    return this.db
+      .prepare(
+        `SELECT sd.id documentId, sd.title title, sd.classification classification, sd.status status,
+                sv.version version, sv.content_hash contentHash
+         FROM source_document sd LEFT JOIN source_version sv ON sv.id=sd.current_version_id
+         ORDER BY sd.updated_at DESC`
+      )
+      .all() as SourceListItem[];
   }
 
   // 通用事务原语（供业务事件事务复用）：抛出即回滚，不改动已提交状态。

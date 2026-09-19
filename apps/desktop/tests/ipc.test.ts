@@ -175,7 +175,20 @@ describe('ui.saveDraft 版本冲突：不覆盖、确定性', () => {
 });
 
 describe('白名单与目录一致性', () => {
-  it('预加载暴露的操作数与实现数一致', () => {
-    expect(IMPLEMENTED_OPERATIONS.length).toBe(5);
+  it('实现操作白名单包含 G01 基础与 G03 资料操作，且无重复', () => {
+    const expected = [
+      'app.bootstrap',
+      'app.health',
+      'app.getStatus',
+      'ui.loadDraft',
+      'ui.saveDraft',
+      'sources.import',
+      'sources.list',
+      'sources.search',
+      'sources.read',
+      'sources.retire'
+    ];
+    expect([...IMPLEMENTED_OPERATIONS].sort()).toEqual([...expected].sort());
+    expect(new Set(IMPLEMENTED_OPERATIONS).size).toBe(IMPLEMENTED_OPERATIONS.length);
   });
 });

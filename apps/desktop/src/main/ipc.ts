@@ -10,7 +10,7 @@ import type {
 } from '../shared/ipc';
 import { IMPLEMENTED_OPERATIONS, IPC_SCHEMA_VERSION } from '../shared/ipc';
 import type { ErrorCode } from '../shared/ipc';
-import type { DraftStore } from './store';
+import type { DraftStore, SourceStore } from './store';
 import { StoreProtectedError } from './store';
 import { checkPayload } from './schemaGate';
 
@@ -37,6 +37,8 @@ export interface IpcServiceContext {
   platformDevOverride: boolean;
   platformTargetSupported: boolean;
   platformIdentity: string;
+  // G03 资料能力（由 SqliteStore 提供）；缺省时资料操作返回未实现。
+  sourceStore?: SourceStore;
 }
 
 export function isImplementedOperation(op: string): op is OperationName {
@@ -97,8 +99,80 @@ export class IpcService {
         return this.loadDraft();
       case 'ui.saveDraft':
         return this.saveDraft(request as IpcRequest<SaveDraftPayload>);
+      case 'sources.import':
+        return this.sourcesImport(request);
+      case 'sources.list':
+        return this.sourcesList();
+      case 'sources.search':
+        return this.sourcesSearch(request);
+      case 'sources.read':
+        return this.sourcesRead(request);
+      case 'sources.retire':
+        return this.sourcesRetire(request);
       default:
         return errorResponse('INPUT_INVALID', '未知操作。', '请重试当前操作。');
+    }
+  }
+
+  private sourcesImport(req: IpcRequest): IpcResponse {
+    const src = this.ctx.sourceStore;
+    if (!src) return errorResponse('INPUT_INVALID', '资料功能不可用。', '请重启应用。');
+    const p = req.payload as { title: string; format: string; content: string; classification?: string };
+    try {
+      const r = src.importSource({
+        title: p.title,
+        format: p.format,
+        content: p.content,
+        classification: p.classification as never
+      });
+      if (r.status === 'blocked_sensitive') {
+        return errorResponse('KEY_UNAVAILABLE', '敏感资料需要可用的加密后端，已阻止导入以防明文落盘。', '请在受支持系统上配置加密后再导入敏感材料。');
+      }
+      if (r.status === 'rejected') {
+        return errorResponse('INPUT_INVALID', r.reason === 'too_large' ? '文件过大。' : '内容为空。', '请检查文件后重试。');
+      }
+      return { ok: true, data: r };
+    } catch (e) {
+      if (e instanceof StoreProtectedError) {
+        return errorResponse('DATABASE_LOCKED', '本地数据暂停写入以防覆盖。', '请先完成数据恢复。');
+      }
+      return errorResponse('DISK_FULL', '导入失败，本地写入异常。', '请检查磁盘后重试。', true);
+    }
+  }
+
+  private sourcesList(): IpcResponse {
+    const src = this.ctx.sourceStore;
+    if (!src) return { ok: true, data: { sources: [] } };
+    return { ok: true, data: { sources: src.listSources() } };
+  }
+
+  private sourcesSearch(req: IpcRequest): IpcResponse {
+    const src = this.ctx.sourceStore;
+    if (!src) return { ok: true, data: { hits: [] } };
+    const q = (req.payload as { query: string }).query;
+    return { ok: true, data: { hits: src.searchSources(q) } };
+  }
+
+  private sourcesRead(req: IpcRequest): IpcResponse {
+    const src = this.ctx.sourceStore;
+    if (!src) return errorResponse('SOURCE_MISSING', '资料不存在。', '请刷新资料列表。');
+    const p = req.payload as { versionId: string; charStart?: number; charEnd?: number };
+    const r = src.readSource(p.versionId, p.charStart, p.charEnd);
+    if (!r) return errorResponse('SOURCE_MISSING', '资料不存在或已移除。', '请刷新资料列表。');
+    return { ok: true, data: r };
+  }
+
+  private sourcesRetire(req: IpcRequest): IpcResponse {
+    const src = this.ctx.sourceStore;
+    if (!src) return errorResponse('SOURCE_MISSING', '资料不存在。', '请刷新资料列表。');
+    const p = req.payload as { documentId: string };
+    try {
+      const ok = src.retireSource(p.documentId);
+      if (!ok) return errorResponse('SOURCE_MISSING', '资料不存在。', '请刷新资料列表。');
+      return { ok: true, data: { documentId: p.documentId, status: 'retired' } };
+    } catch (e) {
+      if (e instanceof StoreProtectedError) return errorResponse('DATABASE_LOCKED', '本地数据暂停写入。', '请先完成数据恢复。');
+      return errorResponse('DISK_FULL', '操作失败。', '请重试。', true);
     }
   }
 

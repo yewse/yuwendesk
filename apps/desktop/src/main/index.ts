@@ -205,6 +205,7 @@ async function bootstrap(): Promise<void> {
 
   ipcService = new IpcService({
     store,
+    sourceStore: store,
     appVersion: app.getVersion(),
     appNameZh: APP_NAME_ZH,
     platformSupported: platform.supported,

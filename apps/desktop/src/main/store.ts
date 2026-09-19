@@ -42,6 +42,61 @@ export type DraftCommitResult =
   | { status: 'conflict'; current: DraftState }
   | { status: 'key_reuse' }; // 同键异请求：拒绝
 
+// ===== G03 资料/来源类型与能力接口（由 SqliteStore 实现） =====
+export type SourceClassification =
+  | 'public_reference'
+  | 'licensed_reference'
+  | 'teacher_private'
+  | 'student_sensitive';
+export interface SourceAnchor {
+  char_start: number;
+  char_end: number;
+  line: number;
+}
+export interface SourceImportInput {
+  title: string;
+  format: string;
+  content: string;
+  classification?: SourceClassification;
+}
+export type SourceImportResult =
+  | { status: 'imported' | 'new_version'; documentId: string; versionId: string; version: number; contentHash: string; versionConflict: boolean }
+  | { status: 'duplicate'; documentId: string; versionId: string; version: number; contentHash: string }
+  | { status: 'blocked_sensitive'; reason: 'encryption_unavailable' }
+  | { status: 'rejected'; reason: 'too_large' | 'empty' };
+export interface SourceSearchHit {
+  documentId: string;
+  title: string;
+  version: number;
+  versionId: string;
+  classification: SourceClassification;
+  anchor: SourceAnchor | null;
+  context: string;
+}
+export interface SourceListItem {
+  documentId: string;
+  title: string;
+  classification: SourceClassification;
+  status: string;
+  version: number;
+  contentHash: string;
+}
+export interface SourceReadResult {
+  title: string;
+  version: number;
+  text: string;
+  char_start: number | null;
+  char_end: number | null;
+  truncated: boolean;
+}
+export interface SourceStore {
+  importSource(input: SourceImportInput): SourceImportResult;
+  searchSources(query: string): SourceSearchHit[];
+  readSource(versionId: string, charStart?: number, charEnd?: number): SourceReadResult | null;
+  retireSource(documentId: string): boolean;
+  listSources(): SourceListItem[];
+}
+
 // 草稿存储接口：LocalStore（JSON，G01）与 SqliteStore（G02）均实现，供主进程/IPC 无缝切换。
 export interface DraftStore {
   load(): Promise<void>;

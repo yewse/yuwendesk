@@ -37,7 +37,12 @@ export const IMPLEMENTED_OPERATIONS = [
   'app.health',
   'app.getStatus',
   'ui.loadDraft',
-  'ui.saveDraft'
+  'ui.saveDraft',
+  'sources.import',
+  'sources.list',
+  'sources.search',
+  'sources.read',
+  'sources.retire'
 ] as const;
 
 export type OperationName = (typeof IMPLEMENTED_OPERATIONS)[number];
@@ -115,4 +120,42 @@ export interface DraftData {
 
 export interface SaveDraftPayload {
   content: string;
+}
+
+// ---- G03 资料/来源（渲染层类型） ----
+export interface SourceAnchorDTO {
+  char_start: number;
+  char_end: number;
+  line: number;
+}
+export interface SourceHitDTO {
+  documentId: string;
+  title: string;
+  version: number;
+  versionId: string;
+  classification: string;
+  anchor: SourceAnchorDTO | null;
+  context: string;
+}
+export interface SourceListItemDTO {
+  documentId: string;
+  title: string;
+  classification: string;
+  status: string;
+  version: number;
+  contentHash: string;
+}
+export interface SourceReadDTO {
+  title: string;
+  version: number;
+  text: string;
+  char_start: number | null;
+  char_end: number | null;
+  truncated: boolean;
+}
+export interface SourceImportPayload {
+  title: string;
+  format: string;
+  content: string;
+  classification?: string;
 }
