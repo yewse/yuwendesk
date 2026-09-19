@@ -183,6 +183,7 @@ describe('白名单与目录一致性', () => {
       'ui.loadDraft',
       'ui.saveDraft',
       'sources.import',
+      'sources.importFile',
       'sources.list',
       'sources.search',
       'sources.read',

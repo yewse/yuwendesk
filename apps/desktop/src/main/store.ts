@@ -86,6 +86,10 @@ export type SourceImportResult =
   | { status: 'needs_confirmation'; contentHash: string; existing: SourceExistingSummary }
   | { status: 'blocked_sensitive'; reason: 'not_implemented' | 'encryption_unavailable' }
   | { status: 'rejected'; reason: 'too_large' | 'empty' | 'bad_classification' };
+export interface SourceLocator {
+  kind: string; // text_line | csv_row | pdf_page | docx_paragraph | docx_table_cell | xlsx_cell | pptx_slide
+  [k: string]: number | string;
+}
 export interface SourceSearchHit {
   documentId: string;
   title: string;
@@ -94,6 +98,9 @@ export interface SourceSearchHit {
   classification: SourceClassification;
   anchor: SourceAnchor | null;
   context: string;
+  locator: SourceLocator | null; // 结构化定位（页/段落/表格单元格/行列/幻灯片）
+  reliable: boolean; // 是否可靠文字命中（扫描件无文字不参与）
+  locatorLabel: string; // 面向教师的可读定位标签
 }
 export interface SourceListItem {
   documentId: string;
@@ -115,12 +122,26 @@ export interface SourceVersionItem {
   versionId: string;
   version: number;
   contentHash: string;
+  originalHash: string;
+  textHash: string;
   format: string;
+  scanned: boolean;
+  reliableText: boolean;
   createdAt: string;
   isCurrent: boolean;
 }
+// 真实原始文件导入（PDF/DOCX/…）：字节以 base64 传入（渲染层 ArrayBuffer→base64）。
+export interface SourceFileImportInput {
+  title: string;
+  format: string;
+  base64: string;
+  classification?: SourceClassification | string;
+  relation?: 'new_version' | 'separate';
+  targetDocumentId?: string;
+}
 export interface SourceStore {
   importSource(input: SourceImportInput): SourceImportResult;
+  importFile(input: SourceFileImportInput): Promise<SourceImportResult>;
   searchSources(query: string): SourceSearchHit[];
   readSource(versionId: string, charStart?: number, charEnd?: number): SourceReadResult | null;
   retireSource(documentId: string): boolean;

@@ -101,6 +101,8 @@ export class IpcService {
         return this.saveDraft(request as IpcRequest<SaveDraftPayload>);
       case 'sources.import':
         return this.sourcesImport(request);
+      case 'sources.importFile':
+        return this.sourcesImportFile(request);
       case 'sources.list':
         return this.sourcesList();
       case 'sources.search':
@@ -134,26 +136,64 @@ export class IpcService {
         relation: p.relation,
         targetDocumentId: p.targetDocumentId
       });
-      if (r.status === 'blocked_sensitive') {
-        return errorResponse(
-          'PRIVACY_BLOCKED',
-          '敏感资料（学生材料）导入已被阻止：完整加密资料路径尚未实现，不会将正文写入普通存储。',
-          '普通非敏感资料可正常导入；敏感材料待加密业务落点实现后再启用。'
-        );
-      }
-      if (r.status === 'rejected') {
-        const msg =
-          r.reason === 'too_large' ? '文件过大。' : r.reason === 'bad_classification' ? '资料分类取值非法。' : '内容为空。';
-        return errorResponse('INPUT_INVALID', msg, '请检查文件与分类后重试。');
-      }
-      // needs_confirmation / imported / new_version / duplicate 均为正常数据返回。
-      return { ok: true, data: r };
+      return this.mapImportResult(r);
     } catch (e) {
-      if (e instanceof StoreProtectedError) {
-        return errorResponse('DATABASE_LOCKED', '本地数据暂停写入以防覆盖。', '请先完成数据恢复。');
-      }
-      return errorResponse('DISK_FULL', '导入失败，本地写入异常。', '请检查磁盘后重试。', true);
+      return this.mapImportError(e);
     }
+  }
+
+  private async sourcesImportFile(req: IpcRequest): Promise<IpcResponse> {
+    const src = this.ctx.sourceStore;
+    if (!src) return errorResponse('INPUT_INVALID', '资料功能不可用。', '请重启应用。');
+    const p = req.payload as {
+      title: string;
+      format: string;
+      base64: string;
+      classification?: string;
+      relation?: 'new_version' | 'separate';
+      targetDocumentId?: string;
+    };
+    try {
+      const r = await src.importFile({
+        title: p.title,
+        format: p.format,
+        base64: p.base64,
+        classification: p.classification,
+        relation: p.relation,
+        targetDocumentId: p.targetDocumentId
+      });
+      return this.mapImportResult(r);
+    } catch (e) {
+      return this.mapImportError(e);
+    }
+  }
+
+  private mapImportResult(r: import('./store').SourceImportResult): IpcResponse {
+    if (r.status === 'blocked_sensitive') {
+      return errorResponse(
+        'PRIVACY_BLOCKED',
+        '敏感资料（学生材料）导入已被阻止：完整加密资料路径尚未实现，不会将正文写入普通存储。',
+        '普通非敏感资料可正常导入；敏感材料待加密业务落点实现后再启用。'
+      );
+    }
+    if (r.status === 'rejected') {
+      const msg =
+        r.reason === 'too_large'
+          ? '文件过大。'
+          : r.reason === 'bad_classification'
+            ? '资料分类取值非法。'
+            : '内容为空或无法解析。';
+      return errorResponse('INPUT_INVALID', msg, '请检查文件与分类后重试。');
+    }
+    // needs_confirmation / imported / new_version / duplicate 均为正常数据返回。
+    return { ok: true, data: r };
+  }
+
+  private mapImportError(e: unknown): IpcResponse {
+    if (e instanceof StoreProtectedError) {
+      return errorResponse('DATABASE_LOCKED', '本地数据暂停写入以防覆盖。', '请先完成数据恢复。');
+    }
+    return errorResponse('DISK_FULL', '导入失败，本地写入异常。', '请检查磁盘后重试。', true);
   }
 
   private sourcesList(): IpcResponse {

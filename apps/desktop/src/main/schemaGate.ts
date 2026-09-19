@@ -47,6 +47,19 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     required: ['title', 'format', 'content'],
     additionalProperties: false
   },
+  'sources.importFile': {
+    type: 'object',
+    properties: {
+      title: { type: 'string', minLength: 1, maxLength: 500 },
+      format: { type: 'string', maxLength: 16 },
+      base64: { type: 'string', maxLength: 60_000_000 },
+      classification: { type: 'string', maxLength: 32 },
+      relation: { type: 'string', maxLength: 16 },
+      targetDocumentId: { type: 'string', maxLength: 64 }
+    },
+    required: ['title', 'format', 'base64'],
+    additionalProperties: false
+  },
   'sources.list': null,
   'sources.search': {
     type: 'object',

@@ -8,11 +8,12 @@ import type {
   DraftCommitResult,
   DraftState,
   SaveExpectResult,
-  SourceAnchor,
   SourceClassification,
   SourceImportInput,
   SourceImportResult,
   SourceListItem,
+  SourceFileImportInput,
+  SourceLocator,
   SourceReadResult,
   SourceSearchHit,
   SourceVersionItem,
@@ -20,6 +21,7 @@ import type {
   WindowState
 } from '../store';
 import { DEFAULT_CLASSIFICATION, SOURCE_CLASSIFICATIONS, StoreProtectedError } from '../store';
+import { extractBuffer, extractText, type ExtractResult } from '../sources/extract';
 import {
   CredentialProtector,
   DataKeyManager,
@@ -54,20 +56,33 @@ export type CredentialReadResult =
   | { ok: false; reason: 'not_found' | 'decrypt_failed' | 'unavailable' };
 export type SensitiveResult<T> = { ok: true; value: T } | { ok: false; reason: 'unavailable' | 'decrypt_failed' | 'not_found' };
 
-const SOURCE_MAX_BYTES = 5_000_000; // 文本类导入上限（G03 核心走文本；更大/二进制格式后续）
+const SOURCE_MAX_BYTES = 5_000_000; // 文本类导入上限
+const SOURCE_FILE_MAX_BYTES = 40_000_000; // 原始文件（PDF/DOCX）导入上限
+
+// 面向教师的可读定位标签。
+function locatorLabel(loc: SourceLocator): string {
+  switch (loc.kind) {
+    case 'pdf_page':
+      return `第 ${loc.page} 页`;
+    case 'docx_paragraph':
+      return `第 ${loc.paragraph} 段`;
+    case 'docx_table_cell':
+      return `表格${loc.table} 第${loc.row}行第${loc.col}列`;
+    case 'xlsx_cell':
+      return `${loc.sheet} R${loc.row}C${loc.col}`;
+    case 'pptx_slide':
+      return `第 ${loc.slide} 张幻灯片`;
+    case 'csv_row':
+      return `第 ${loc.row} 行`;
+    default:
+      return `第 ${loc.line} 行`;
+  }
+}
 const SOURCE_PREVIEW_MAX = 8000;
 const SEARCH_LIMIT = 30;
 
 function likeEscape(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
-function locateAnchor(text: string, query: string): { anchor: SourceAnchor; context: string } | null {
-  const idx = text.indexOf(query);
-  if (idx < 0) return null;
-  const line = text.slice(0, idx).split('\n').length;
-  const ctxStart = Math.max(0, idx - 40);
-  const ctxEnd = Math.min(text.length, idx + query.length + 40);
-  return { anchor: { char_start: idx, char_end: idx + query.length, line }, context: text.slice(ctxStart, ctxEnd) };
 }
 
 // G02-T02：真实文件型 SQLite 存储（单写入者 + 版本迁移 + WAL/外键 + 原子条件保存 + 失败回滚）。
@@ -184,6 +199,40 @@ const MIGRATIONS: Migration[] = [
           full_text  TEXT NOT NULL
         );
         CREATE VIRTUAL TABLE IF NOT EXISTS source_fts USING fts5(text, version_id UNINDEXED, tokenize='trigram');
+      `);
+    }
+  },
+  {
+    version: 5,
+    up: (db) => {
+      // 原件哈希与文本哈希分开；结构化段与段级 FTS 支持按页/段落/表格单元格等精确定位。
+      db.exec(`
+        ALTER TABLE source_version ADD COLUMN original_hash TEXT;
+        ALTER TABLE source_version ADD COLUMN text_hash TEXT;
+        ALTER TABLE source_version ADD COLUMN mime TEXT;
+        ALTER TABLE source_version ADD COLUMN scanned INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE source_version ADD COLUMN reliable_text INTEGER NOT NULL DEFAULT 1;
+        CREATE TABLE IF NOT EXISTS source_file (
+          version_id    TEXT PRIMARY KEY REFERENCES source_version(id),
+          original_blob BLOB,
+          original_hash TEXT NOT NULL,
+          byte_size     INTEGER NOT NULL,
+          mime          TEXT,
+          created_at    TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS source_segment (
+          id           TEXT PRIMARY KEY,
+          version_id   TEXT NOT NULL REFERENCES source_version(id),
+          ordinal      INTEGER NOT NULL,
+          locator_kind TEXT NOT NULL,
+          locator      TEXT NOT NULL,
+          text         TEXT NOT NULL,
+          char_start   INTEGER NOT NULL,
+          char_end     INTEGER NOT NULL,
+          reliable     INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_segment_version ON source_segment(version_id);
+        CREATE VIRTUAL TABLE IF NOT EXISTS source_seg_fts USING fts5(text, segment_id UNINDEXED, version_id UNINDEXED, tokenize='trigram');
       `);
     }
   }
@@ -623,98 +672,163 @@ export class SqliteStore {
 
   // ===== G03 资料导入 / 搜索 / 原文定位 =====
 
-  // 导入文本类资料：SHA-256 文本哈希、严格分类、去重、版本关系需明确确认（不自动切换当前版本）。
-  // 敏感分类（student_sensitive）在完整加密资料路径实现前一律阻塞；普通非敏感资料照常。
+  // 导入文本类资料（txt/md/csv）：抽取为行/行段，走统一提交路径。
   importSource(input: SourceImportInput): SourceImportResult {
+    if (input.content.length === 0) return { status: 'rejected', reason: 'empty' };
+    if (Buffer.byteLength(input.content, 'utf8') > SOURCE_MAX_BYTES) return { status: 'rejected', reason: 'too_large' };
+    const extracted = extractText(input.content, input.format);
+    const originalBytes = Buffer.from(input.content, 'utf8');
+    return this.commitParsedImport({
+      title: input.title,
+      format: input.format,
+      classification: input.classification,
+      relation: input.relation,
+      targetDocumentId: input.targetDocumentId,
+      extracted,
+      originalBytes,
+      mime: 'text/plain'
+    });
+  }
+
+  // 导入真实原始文件（PDF/DOCX/…）：保存原件字节、原件哈希与文本哈希分开、结构化段落定位。
+  async importFile(input: SourceFileImportInput): Promise<SourceImportResult> {
+    let buf: Buffer;
+    try {
+      buf = Buffer.from(input.base64, 'base64');
+    } catch {
+      return { status: 'rejected', reason: 'empty' };
+    }
+    if (buf.length === 0) return { status: 'rejected', reason: 'empty' };
+    if (buf.length > SOURCE_FILE_MAX_BYTES) return { status: 'rejected', reason: 'too_large' };
+    let extracted: ExtractResult;
+    try {
+      extracted = await extractBuffer(buf, input.format);
+    } catch {
+      return { status: 'rejected', reason: 'empty' }; // 无法解析的格式：不落库
+    }
+    const mime =
+      input.format.toLowerCase() === 'pdf'
+        ? 'application/pdf'
+        : input.format.toLowerCase() === 'docx'
+          ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          : 'application/octet-stream';
+    return this.commitParsedImport({
+      title: input.title,
+      format: extracted.format,
+      classification: input.classification,
+      relation: input.relation,
+      targetDocumentId: input.targetDocumentId,
+      extracted,
+      originalBytes: buf,
+      mime
+    });
+  }
+
+  // 统一提交路径：严格分类、无条件阻止敏感、去重（按原件哈希）、版本关系需明确确认（不自动切换当前版本）。
+  private commitParsedImport(p: {
+    title: string;
+    format: string;
+    classification?: SourceClassification | string;
+    relation?: 'new_version' | 'separate';
+    targetDocumentId?: string;
+    extracted: ExtractResult;
+    originalBytes: Buffer;
+    mime: string;
+  }): SourceImportResult {
     this.assertWritable();
-    // 严格分类枚举：未知值拒绝；缺省→安全默认（本地私有，不外发），绝不默认公开。
     const classification: SourceClassification =
-      input.classification === undefined
-        ? DEFAULT_CLASSIFICATION
-        : (input.classification as SourceClassification);
-    if (input.classification !== undefined && !SOURCE_CLASSIFICATIONS.includes(classification)) {
+      p.classification === undefined ? DEFAULT_CLASSIFICATION : (p.classification as SourceClassification);
+    if (p.classification !== undefined && !SOURCE_CLASSIFICATIONS.includes(classification)) {
       return { status: 'rejected', reason: 'bad_classification' };
     }
-    // 敏感资料：加密业务落点未实现前无条件阻止（不得把正文写入普通 source_text/source_fts）。
     if (classification === 'student_sensitive') {
       return { status: 'blocked_sensitive', reason: 'not_implemented' };
     }
-    if (input.content.length === 0) return { status: 'rejected', reason: 'empty' };
-    if (Buffer.byteLength(input.content, 'utf8') > SOURCE_MAX_BYTES) return { status: 'rejected', reason: 'too_large' };
-
     const db = this.requireDb();
     const now = new Date().toISOString();
-    const hash = createHash('sha256').update(input.content, 'utf8').digest('hex');
-    const byteSize = Buffer.byteLength(input.content, 'utf8');
+    const originalHash = createHash('sha256').update(p.originalBytes).digest('hex');
+    const textHash = createHash('sha256').update(p.extracted.fullText, 'utf8').digest('hex');
+    const byteSize = p.originalBytes.length;
+    const scanned = p.extracted.scanned ? 1 : 0;
+    const reliableText = p.extracted.reliableText ? 1 : 0;
 
     const addVersion = (documentId: string, makeCurrent: boolean, versionConflict: boolean): SourceImportResult => {
       const maxV = (db.prepare('SELECT COALESCE(MAX(version),0) m FROM source_version WHERE document_id=?').get(documentId) as { m: number }).m;
       const version = maxV + 1;
       const versionId = randomUUID();
-      db.prepare('INSERT INTO source_version(id,document_id,version,content_hash,byte_size,format,created_at) VALUES(?,?,?,?,?,?,?)').run(
+      db.prepare(
+        'INSERT INTO source_version(id,document_id,version,content_hash,byte_size,format,created_at,original_hash,text_hash,mime,scanned,reliable_text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)'
+      ).run(versionId, documentId, version, textHash, byteSize, p.format, now, originalHash, textHash, p.mime, scanned, reliableText);
+      db.prepare('INSERT INTO source_text(version_id,full_text) VALUES(?,?)').run(versionId, p.extracted.fullText);
+      db.prepare('INSERT INTO source_file(version_id,original_blob,original_hash,byte_size,mime,created_at) VALUES(?,?,?,?,?,?)').run(
         versionId,
-        documentId,
-        version,
-        hash,
+        p.originalBytes,
+        originalHash,
         byteSize,
-        input.format,
+        p.mime,
         now
       );
-      db.prepare('INSERT INTO source_text(version_id,full_text) VALUES(?,?)').run(versionId, input.content);
-      db.prepare('INSERT INTO source_fts(text,version_id) VALUES(?,?)').run(input.content, versionId);
+      const insSeg = db.prepare(
+        'INSERT INTO source_segment(id,version_id,ordinal,locator_kind,locator,text,char_start,char_end,reliable) VALUES(?,?,?,?,?,?,?,?,?)'
+      );
+      const insFts = db.prepare('INSERT INTO source_seg_fts(text,segment_id,version_id) VALUES(?,?,?)');
+      for (const seg of p.extracted.segments) {
+        const segId = randomUUID();
+        insSeg.run(segId, versionId, seg.ordinal, seg.locatorKind, JSON.stringify(seg.locator), seg.text, seg.char_start, seg.char_end, seg.reliable ? 1 : 0);
+        // 仅把可靠且非空文字入检索索引；扫描件空文本不参与（不伪造可靠文字）。
+        if (seg.reliable && seg.text.trim().length > 0) insFts.run(seg.text, segId, versionId);
+      }
       if (makeCurrent) {
         db.prepare('UPDATE source_document SET current_version_id=?, status=?, updated_at=? WHERE id=?').run(versionId, 'active', now, documentId);
       } else {
         db.prepare('UPDATE source_document SET updated_at=? WHERE id=?').run(now, documentId);
       }
-      return { status: maxV === 0 ? 'imported' : 'new_version', documentId, versionId, version, contentHash: hash, versionConflict };
+      return { status: maxV === 0 ? 'imported' : 'new_version', documentId, versionId, version, contentHash: textHash, versionConflict };
     };
     const createDoc = (): string => {
       const documentId = randomUUID();
       db.prepare(
         'INSERT INTO source_document(id,title,classification,status,current_version_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?)'
-      ).run(documentId, input.title, classification, 'active', null, now, now);
+      ).run(documentId, p.title, classification, 'active', null, now, now);
       return documentId;
     };
-    const hashInDoc = (documentId: string): { versionId: string; version: number } | undefined =>
-      db.prepare('SELECT id versionId, version FROM source_version WHERE document_id=? AND content_hash=? ORDER BY version LIMIT 1').get(documentId, hash) as
+    // 去重按原件哈希：同一原始文件重复导入 → duplicate。
+    const dupInDoc = (documentId: string): { versionId: string; version: number } | undefined =>
+      db.prepare('SELECT id versionId, version FROM source_version WHERE document_id=? AND original_hash=? ORDER BY version LIMIT 1').get(documentId, originalHash) as
         | { versionId: string; version: number }
         | undefined;
 
     const tx = db.transaction((): SourceImportResult => {
-      // 明确确认为已有文档的新版本（显式关系 → 允许切换当前版本）。
-      if (input.relation === 'new_version' && input.targetDocumentId) {
-        const doc = db.prepare('SELECT id FROM source_document WHERE id=?').get(input.targetDocumentId) as { id: string } | undefined;
-        if (!doc) return { status: 'rejected', reason: 'empty' }; // 目标不存在（调用方应先刷新）
-        const dup = hashInDoc(doc.id);
-        if (dup) return { status: 'duplicate', documentId: doc.id, versionId: dup.versionId, version: dup.version, contentHash: hash };
+      if (p.relation === 'new_version' && p.targetDocumentId) {
+        const doc = db.prepare('SELECT id FROM source_document WHERE id=?').get(p.targetDocumentId) as { id: string } | undefined;
+        if (!doc) return { status: 'rejected', reason: 'empty' };
+        const dup = dupInDoc(doc.id);
+        if (dup) return { status: 'duplicate', documentId: doc.id, versionId: dup.versionId, version: dup.version, contentHash: textHash };
         return addVersion(doc.id, true, true);
       }
-      // 明确确认为独立新文档（即使同名）。
-      if (input.relation === 'separate') {
+      if (p.relation === 'separate') {
         return addVersion(createDoc(), true, false);
       }
-      // 自动路径：同标题仅“疑似关联”，需确认。
-      const doc = db.prepare('SELECT id, current_version_id FROM source_document WHERE title=? ORDER BY created_at LIMIT 1').get(input.title) as
+      const doc = db.prepare('SELECT id, current_version_id FROM source_document WHERE title=? ORDER BY created_at LIMIT 1').get(p.title) as
         | { id: string; current_version_id: string | null }
         | undefined;
-      if (!doc) return addVersion(createDoc(), true, false); // 新文档 v1
-      const dup = hashInDoc(doc.id);
-      if (dup) return { status: 'duplicate', documentId: doc.id, versionId: dup.versionId, version: dup.version, contentHash: hash };
-      // 同名不同内容：不自动新增版本/切换当前版本，返回需确认。
+      if (!doc) return addVersion(createDoc(), true, false);
+      const dup = dupInDoc(doc.id);
+      if (dup) return { status: 'duplicate', documentId: doc.id, versionId: dup.versionId, version: dup.version, contentHash: textHash };
       const cur = doc.current_version_id
-        ? (db.prepare('SELECT version, content_hash FROM source_version WHERE id=?').get(doc.current_version_id) as { version: number; content_hash: string } | undefined)
+        ? (db.prepare('SELECT version, original_hash FROM source_version WHERE id=?').get(doc.current_version_id) as { version: number; original_hash: string } | undefined)
         : undefined;
       return {
         status: 'needs_confirmation',
-        contentHash: hash,
-        existing: { documentId: doc.id, title: input.title, currentVersion: cur?.version ?? 0, currentHash: cur?.content_hash ?? '' }
+        contentHash: textHash,
+        existing: { documentId: doc.id, title: p.title, currentVersion: cur?.version ?? 0, currentHash: cur?.original_hash ?? '' }
       };
     });
     return tx.immediate();
   }
 
-  // 中文检索：≥3 字用 FTS5 trigram；1–2 字短词回退 LIKE（含标题）；结果带精确原文锚点与上下文。
+  // 中文检索：≥3 字用 FTS5 trigram；1–2 字短词回退 LIKE（含标题）；命中定位到具体段（页/段落/表格单元格等），
+  // 返回结构化 locator + 段内精确锚点/上下文。仅可靠文字段参与（扫描件无文字不命中）。
   searchSources(query: string): SourceSearchHit[] {
     if (!this.db || this.protectedState) return [];
     const db = this.db;
@@ -725,42 +839,61 @@ export class SqliteStore {
         v: string;
       }[]).map((r) => r.v)
     );
-    const candidateIds: string[] = [];
+    const candidateSegIds: string[] = [];
     if (cps.length >= 3) {
-      const rows = db.prepare('SELECT version_id FROM source_fts WHERE source_fts MATCH ?').all(`"${query.replace(/"/g, '""')}"`) as {
-        version_id: string;
+      const rows = db.prepare('SELECT segment_id FROM source_seg_fts WHERE source_seg_fts MATCH ?').all(`"${query.replace(/"/g, '""')}"`) as {
+        segment_id: string;
       }[];
-      for (const r of rows) candidateIds.push(r.version_id);
+      for (const r of rows) candidateSegIds.push(r.segment_id);
     } else {
       const like = `%${likeEscape(query)}%`;
-      for (const r of db.prepare("SELECT version_id v FROM source_text WHERE full_text LIKE ? ESCAPE '\\'").all(like) as { v: string }[])
-        candidateIds.push(r.v);
+      for (const r of db.prepare("SELECT id FROM source_segment WHERE reliable=1 AND text LIKE ? ESCAPE '\\'").all(like) as { id: string }[])
+        candidateSegIds.push(r.id);
+      // 标题短词：回退到该文档当前版本的首个可靠段。
       for (const r of db
-        .prepare("SELECT current_version_id v FROM source_document WHERE status='active' AND current_version_id IS NOT NULL AND title LIKE ? ESCAPE '\\'")
-        .all(like) as { v: string }[])
-        candidateIds.push(r.v);
+        .prepare(
+          `SELECT (SELECT id FROM source_segment WHERE version_id=sd.current_version_id AND reliable=1 ORDER BY ordinal LIMIT 1) id
+           FROM source_document sd WHERE sd.status='active' AND sd.current_version_id IS NOT NULL AND sd.title LIKE ? ESCAPE '\\'`
+        )
+        .all(like) as { id: string | null }[])
+        if (r.id) candidateSegIds.push(r.id);
     }
     const seen = new Set<string>();
     const hits: SourceSearchHit[] = [];
-    for (const vid of candidateIds) {
-      if (!activeCurrent.has(vid) || seen.has(vid)) continue;
-      seen.add(vid);
+    for (const segId of candidateSegIds) {
+      if (seen.has(segId)) continue;
+      seen.add(segId);
+      const seg = db
+        .prepare(
+          'SELECT version_id versionId, locator_kind locatorKind, locator, text, char_start charStart, reliable FROM source_segment WHERE id=?'
+        )
+        .get(segId) as
+        | { versionId: string; locatorKind: string; locator: string; text: string; charStart: number; reliable: number }
+        | undefined;
+      if (!seg || !activeCurrent.has(seg.versionId)) continue;
       const meta = db
         .prepare(
           'SELECT sv.version version, sv.document_id documentId, sd.title title, sd.classification classification FROM source_version sv JOIN source_document sd ON sd.id=sv.document_id WHERE sv.id=?'
         )
-        .get(vid) as { version: number; documentId: string; title: string; classification: SourceClassification } | undefined;
+        .get(seg.versionId) as { version: number; documentId: string; title: string; classification: SourceClassification } | undefined;
       if (!meta) continue;
-      const text = (db.prepare('SELECT full_text FROM source_text WHERE version_id=?').get(vid) as { full_text: string }).full_text;
-      const loc = locateAnchor(text, query);
+      const idxInSeg = seg.text.indexOf(query);
+      const parsedLocator = { kind: seg.locatorKind, ...(JSON.parse(seg.locator) as Record<string, number | string>) } as SourceLocator;
+      const line = typeof parsedLocator.line === 'number' ? parsedLocator.line : 0;
+      const absStart = seg.charStart + (idxInSeg >= 0 ? idxInSeg : 0);
+      const ctxS = Math.max(0, (idxInSeg >= 0 ? idxInSeg : 0) - 30);
+      const ctxE = Math.min(seg.text.length, (idxInSeg >= 0 ? idxInSeg : 0) + query.length + 30);
       hits.push({
         documentId: meta.documentId,
         title: meta.title,
         version: meta.version,
-        versionId: vid,
+        versionId: seg.versionId,
         classification: meta.classification,
-        anchor: loc ? loc.anchor : null,
-        context: loc ? loc.context : ''
+        anchor: { char_start: absStart, char_end: absStart + query.length, line },
+        context: seg.text.slice(ctxS, ctxE),
+        locator: parsedLocator,
+        reliable: seg.reliable === 1,
+        locatorLabel: locatorLabel(parsedLocator)
       });
       if (hits.length >= SEARCH_LIMIT) break;
     }
@@ -807,9 +940,14 @@ export class SqliteStore {
     const cur = (this.db.prepare('SELECT current_version_id v FROM source_document WHERE id=?').get(documentId) as { v: string | null } | undefined)?.v ?? null;
     return (
       this.db
-        .prepare('SELECT id versionId, version, content_hash contentHash, format, created_at createdAt FROM source_version WHERE document_id=? ORDER BY version')
-        .all(documentId) as Omit<SourceVersionItem, 'isCurrent'>[]
-    ).map((v) => ({ ...v, isCurrent: v.versionId === cur }));
+        .prepare(
+          `SELECT id versionId, version, content_hash contentHash, COALESCE(original_hash,content_hash) originalHash,
+                  COALESCE(text_hash,content_hash) textHash, format,
+                  COALESCE(scanned,0) scanned, COALESCE(reliable_text,1) reliableText, created_at createdAt
+           FROM source_version WHERE document_id=? ORDER BY version`
+        )
+        .all(documentId) as (Omit<SourceVersionItem, 'isCurrent' | 'scanned' | 'reliableText'> & { scanned: number; reliableText: number })[]
+    ).map((v) => ({ ...v, scanned: v.scanned === 1, reliableText: v.reliableText === 1, isCurrent: v.versionId === cur }));
   }
 
   listSources(): SourceListItem[] {
