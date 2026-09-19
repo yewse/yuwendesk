@@ -4,13 +4,29 @@ import { dirname, join } from 'node:path';
 import { LocalStore } from '../store';
 import type { DraftCommitOp, DraftCommitResult, DraftState, SaveExpectResult, StoreIo, WindowState } from '../store';
 import { StoreProtectedError } from '../store';
+import {
+  CredentialProtector,
+  DataKeyManager,
+  decryptSensitive,
+  encryptSensitive,
+  generateDataKey,
+  type SafeStorageLike
+} from '../crypto/secrets';
 
 export interface SqliteStoreOptions {
   // 旧 JSON 读取/隔离的可注入 IO（供确定性测试读取失败/隔离失败）。
   legacyIo?: StoreIo;
   // 原件归档改名的可注入实现（供确定性测试归档失败）。默认 fs.rename。
   archiveRename?: (from: string, to: string) => Promise<void>;
+  // 凭据/敏感 payload 保护后端（生产注入 electron.safeStorage；测试注入伪实现）。
+  safeStorage?: SafeStorageLike;
 }
+
+export type CredentialSetResult = { ok: true; last4: string } | { ok: false; reason: 'encryption_unavailable' };
+export type CredentialReadResult =
+  | { ok: true; plaintext: string }
+  | { ok: false; reason: 'not_found' | 'decrypt_failed' | 'unavailable' };
+export type SensitiveResult<T> = { ok: true; value: T } | { ok: false; reason: 'unavailable' | 'decrypt_failed' | 'not_found' };
 
 // G02-T02：真实文件型 SQLite 存储（单写入者 + 版本迁移 + WAL/外键 + 原子条件保存 + 失败回滚）。
 // 本轮加固：高版本/未知结构拒写；旧 JSON 读取或隔离失败进入迁入保护；必需记录缺失/UPDATE 零行不返回成功；
@@ -73,10 +89,34 @@ const MIGRATIONS: Migration[] = [
         );
       `);
     }
+  },
+  {
+    version: 3,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS credential (
+          name       TEXT PRIMARY KEY,
+          ciphertext BLOB NOT NULL,
+          last4      TEXT,
+          created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS secure_key (
+          id         INTEGER PRIMARY KEY CHECK (id = 1),
+          wrapped    BLOB NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sensitive (
+          name       TEXT PRIMARY KEY,
+          blob       BLOB NOT NULL,
+          aad        TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+      `);
+    }
   }
 ];
 
-const SCHEMA_TARGET = MIGRATIONS[MIGRATIONS.length - 1].version;
+const SCHEMA_TARGET = Math.max(...MIGRATIONS.map((m) => m.version));
 
 export interface MigrationStatus {
   migratedFromJson: boolean; // 有效旧 JSON 已成功迁入
@@ -99,6 +139,7 @@ export class SqliteStore {
   private legacyArchiveError: string | null = null;
   private readonly legacyIo?: StoreIo;
   private readonly archiveRename: (from: string, to: string) => Promise<void>;
+  private readonly safeStorage?: SafeStorageLike;
 
   constructor(userDataDir: string, opts: SqliteStoreOptions = {}) {
     this.dir = userDataDir;
@@ -106,6 +147,7 @@ export class SqliteStore {
     this.legacyJsonPath = join(userDataDir, 'yuwendesk-local-state.json');
     this.legacyIo = opts.legacyIo;
     this.archiveRename = opts.archiveRename ?? ((from, to) => fs.rename(from, to));
+    this.safeStorage = opts.safeStorage;
   }
 
   async load(): Promise<void> {
@@ -139,7 +181,8 @@ export class SqliteStore {
 
   private runMigrations(current: number): void {
     const db = this.requireDb();
-    for (const m of MIGRATIONS) {
+    const ordered = [...MIGRATIONS].sort((a, b) => a.version - b.version);
+    for (const m of ordered) {
       if (m.version <= current) continue;
       const apply = db.transaction(() => {
         m.up(db);
@@ -409,6 +452,85 @@ export class SqliteStore {
       event_type: string;
       payload: string;
     }[];
+  }
+
+  // ===== T03 凭据与敏感 payload 保护 =====
+
+  credentialEncryptionAvailable(): boolean {
+    return !!this.safeStorage && this.safeStorage.isEncryptionAvailable();
+  }
+
+  // 存凭据：加密不可用则拒绝，绝不落明文；界面只用 last4 显示。
+  setCredential(name: string, plaintext: string): CredentialSetResult {
+    this.assertWritable();
+    if (!this.safeStorage) return { ok: false, reason: 'encryption_unavailable' };
+    const protector = new CredentialProtector(this.safeStorage);
+    const r = protector.protect(plaintext);
+    if (!r.ok) return { ok: false, reason: 'encryption_unavailable' };
+    const db = this.requireDb();
+    db.prepare(
+      'INSERT INTO credential(name,ciphertext,last4,created_at) VALUES(?,?,?,?) ON CONFLICT(name) DO UPDATE SET ciphertext=excluded.ciphertext,last4=excluded.last4'
+    ).run(name, r.ciphertext, r.last4, new Date().toISOString());
+    return { ok: true, last4: r.last4 };
+  }
+
+  getCredentialLast4(name: string): string | null {
+    if (!this.db) return null;
+    const row = this.db.prepare('SELECT last4 FROM credential WHERE name=?').get(name) as { last4: string | null } | undefined;
+    return row ? row.last4 : null;
+  }
+
+  // 读凭据：解密失败返回错误，且不改动已存密文（未写库）。
+  readCredential(name: string): CredentialReadResult {
+    if (!this.safeStorage) return { ok: false, reason: 'unavailable' };
+    const db = this.requireDb();
+    const row = db.prepare('SELECT ciphertext FROM credential WHERE name=?').get(name) as { ciphertext: Buffer } | undefined;
+    if (!row) return { ok: false, reason: 'not_found' };
+    const u = new CredentialProtector(this.safeStorage).unprotect(row.ciphertext);
+    if (!u.ok) return { ok: false, reason: 'decrypt_failed' };
+    return { ok: true, plaintext: u.plaintext };
+  }
+
+  // 确保工作区数据密钥存在（safeStorage 封装存储）；不可用则拒绝，绝不落明文密钥。
+  private ensureDataKey(): { ok: true; key: Buffer } | { ok: false; reason: 'unavailable' | 'decrypt_failed' } {
+    if (!this.safeStorage || !this.safeStorage.isEncryptionAvailable()) return { ok: false, reason: 'unavailable' };
+    const mgr = new DataKeyManager(this.safeStorage);
+    const db = this.requireDb();
+    const row = db.prepare('SELECT wrapped FROM secure_key WHERE id=1').get() as { wrapped: Buffer } | undefined;
+    if (row) {
+      const u = mgr.unwrap(row.wrapped);
+      return u.ok ? { ok: true, key: u.dataKey } : { ok: false, reason: 'decrypt_failed' };
+    }
+    const key = generateDataKey();
+    const w = mgr.wrap(key);
+    if (!w.ok) return { ok: false, reason: 'unavailable' };
+    db.prepare('INSERT INTO secure_key(id,wrapped,created_at) VALUES(1,?,?)').run(w.wrapped, new Date().toISOString());
+    return { ok: true, key };
+  }
+
+  putSensitive(name: string, plaintext: string, aad: string): SensitiveResult<null> {
+    this.assertWritable();
+    const dk = this.ensureDataKey();
+    if (!dk.ok) return { ok: false, reason: dk.reason };
+    const blob = encryptSensitive(dk.key, plaintext, aad);
+    const db = this.requireDb();
+    db.prepare(
+      'INSERT INTO sensitive(name,blob,aad,created_at) VALUES(?,?,?,?) ON CONFLICT(name) DO UPDATE SET blob=excluded.blob,aad=excluded.aad'
+    ).run(name, blob, aad, new Date().toISOString());
+    return { ok: true, value: null };
+  }
+
+  getSensitive(name: string, aad: string): SensitiveResult<string> {
+    const dk = this.ensureDataKey();
+    if (!dk.ok) return { ok: false, reason: dk.reason };
+    const db = this.requireDb();
+    const row = db.prepare('SELECT blob FROM sensitive WHERE name=?').get(name) as { blob: Buffer } | undefined;
+    if (!row) return { ok: false, reason: 'not_found' };
+    try {
+      return { ok: true, value: decryptSensitive(dk.key, row.blob, aad) };
+    } catch {
+      return { ok: false, reason: 'decrypt_failed' }; // 认证失败：不覆盖原密文
+    }
   }
 
   // 通用事务原语（供业务事件事务复用）：抛出即回滚，不改动已提交状态。

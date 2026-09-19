@@ -97,6 +97,8 @@ export interface HealthData {
   platform_identity: string;
   // 本地数据保护态：源文件未可靠读取或隔离失败时为 true，此时暂停写入以防覆盖。
   storage_protected: boolean;
+  // 凭据加密（safeStorage/DPAPI）可用性：不可用时拒绝持久化明文密钥（G02-T03）。
+  credential_encryption: 'available' | 'unavailable';
 }
 
 export interface StatusData {

@@ -161,6 +161,11 @@ function HealthPanel({ health }: { health: HealthData | null }): JSX.Element {
           label: '数据保护',
           ok: !health.storage_protected,
           text: health.storage_protected ? '已暂停写入（源文件待恢复）' : '正常'
+        },
+        {
+          label: '凭据加密',
+          ok: health.credential_encryption === 'available',
+          text: health.credential_encryption === 'available' ? '可用（safeStorage）' : '不可用（将拒绝落明文密钥）'
         }
       ]
     : [];

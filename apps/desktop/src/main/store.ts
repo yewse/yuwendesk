@@ -56,6 +56,7 @@ export interface DraftStore {
   isProtected(): boolean;
   recoveredFromCorruption(): boolean;
   corruptBackup(): string | null;
+  credentialEncryptionAvailable(): boolean;
 }
 
 // 存储保护错误：读取/隔离失败进入保护态后，任何可能覆盖源文件的写入都以此拒绝。
@@ -280,6 +281,11 @@ export class LocalStore {
     } catch {
       return false;
     }
+  }
+
+  // LocalStore（G01 JSON 骨架）不承载凭据加密；凭据保护由 G02 SqliteStore + safeStorage 提供。
+  credentialEncryptionAvailable(): boolean {
+    return false;
   }
 
   // 受控可写探针：真实写入并删除一个临时文件（F04：不以常量冒充运行检测）。

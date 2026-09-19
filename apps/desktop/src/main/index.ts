@@ -191,7 +191,7 @@ async function bootstrap(): Promise<void> {
   }
 
   // 生产安全边界：拒绝一切渲染进程权限请求、按模式拦截网络请求、注入 CSP 响应头。
-  const { session } = await import('electron');
+  const { session, safeStorage } = await import('electron');
   lockdownSession(session.defaultSession, isDev ? { devOrigin: DEV_SERVER_URL } : {});
   attachCsp(session.defaultSession);
 
@@ -199,7 +199,8 @@ async function bootstrap(): Promise<void> {
     console.warn('[YuwenDesk] 开发验证模式：OS 沙箱已禁用（--no-sandbox）。正式发布包不得以该方式运行。');
   }
 
-  store = new SqliteStore(app.getPath('userData'));
+  // 注入 Electron safeStorage 用于凭据/敏感 payload 保护（不可用时拒绝落明文，见 T03）。
+  store = new SqliteStore(app.getPath('userData'), { safeStorage });
   await store.load();
 
   ipcService = new IpcService({

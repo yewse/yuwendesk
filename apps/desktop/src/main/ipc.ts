@@ -137,7 +137,8 @@ export class IpcService {
         recovered_from_corruption: this.ctx.store.recoveredFromCorruption(),
         platform_target_supported: this.ctx.platformTargetSupported,
         platform_identity: this.ctx.platformIdentity,
-        storage_protected: this.ctx.store.isProtected()
+        storage_protected: this.ctx.store.isProtected(),
+        credential_encryption: this.ctx.store.credentialEncryptionAvailable() ? 'available' : 'unavailable'
       }
     };
   }
