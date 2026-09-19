@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron';
+import { execFileSync } from 'node:child_process';
 import { release } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -30,6 +31,23 @@ const sandboxDisabled =
 function rendererIndexPath(): string {
   // 生产环境从本地打包静态资源加载，不使用任何开发服务器或本地监听端口。
   return join(__dirname, '..', 'renderer', 'index.html');
+}
+
+// 受控读取 Windows 系统身份（Win32_OperatingSystem.ProductType：1=工作站/2=域控/3=服务器）。
+// 仅应用内部执行，不要求教师打开命令行；非 Windows 或探测失败返回 undefined（判为 unknown，不冒称 Win11）。
+function detectWindowsProductType(): number | undefined {
+  if (process.platform !== 'win32') return undefined;
+  try {
+    const out = execFileSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', '(Get-CimInstance Win32_OperatingSystem).ProductType'],
+      { timeout: 4000, windowsHide: true, encoding: 'utf-8' }
+    );
+    const n = Number(String(out).trim());
+    return Number.isInteger(n) ? n : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function isTrustedSender(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
@@ -90,7 +108,8 @@ function createWindow(): void {
   const persistBounds = (): void => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const b = mainWindow.getBounds();
-    void store.saveWindow({ width: b.width, height: b.height, x: b.x, y: b.y });
+    // 保护态或写盘失败时，窗口几何保存不得覆盖源文件、也不得因未捕获异常导致退出（R3-02/03）。
+    void store.saveWindow({ width: b.width, height: b.height, x: b.x, y: b.y }).catch(() => undefined);
   };
   mainWindow.on('resize', persistBounds);
   mainWindow.on('move', persistBounds);
@@ -161,7 +180,8 @@ async function bootstrap(): Promise<void> {
   // 平台判定：打包版本禁用开发放行（allowDevOverride=false）；用 os.release() 判定 Win11。
   const platform = evaluatePlatform(process.platform, process.arch, process.env, {
     allowDevOverride: !app.isPackaged,
-    osRelease: release()
+    osRelease: release(),
+    productType: detectWindowsProductType()
   });
   if (!platform.supported) {
     // 不支持的系统：给中文说明并安全退出，不做任何安装/更改（INS-006）。
@@ -191,7 +211,9 @@ async function bootstrap(): Promise<void> {
     online: false,
     buildMode: app.isPackaged ? 'production' : 'development',
     sandboxEnabled: !sandboxDisabled,
-    platformDevOverride: platform.isDevOverride
+    platformDevOverride: platform.isDevOverride,
+    platformTargetSupported: platform.targetSupported,
+    platformIdentity: platform.identity
   });
 
   registerIpc();

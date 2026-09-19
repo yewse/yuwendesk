@@ -92,6 +92,11 @@ export interface HealthData {
   sandbox_enabled: boolean; // 仅启动参数层面的指示，非全进程 OS 隔离实测
   platform_dev_override: boolean;
   recovered_from_corruption: boolean;
+  // 平台身份（F07）：可运行 ≠ 正式目标 ≠ 已验收；identity 信息不足时为 unknown。
+  platform_target_supported: boolean;
+  platform_identity: string;
+  // 本地数据保护态：源文件未可靠读取或隔离失败时为 true，此时暂停写入以防覆盖。
+  storage_protected: boolean;
 }
 
 export interface StatusData {

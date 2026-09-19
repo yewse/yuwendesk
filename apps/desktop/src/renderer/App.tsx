@@ -85,7 +85,20 @@ function DraftNote(): JSX.Element {
       </div>
       {snap.conflict && (
         <div className="notice warn small">
-          本地草稿已在别处更新。已保留你的本地内容、暂停自动覆盖；继续编辑后将以你的最新内容保存。
+          本地草稿与本机较新版本冲突。已保留你的本地内容，未自动覆盖；继续打字不会覆盖。请明确选择：
+          <div className="row" style={{ marginTop: 8, gap: 8, justifyContent: 'flex-start' }}>
+            <button className="btn" onClick={() => void controller.resolveKeepLocal()}>
+              保留我的内容并覆盖
+            </button>
+            <button className="btn" onClick={() => controller.resolveUseRemote()}>
+              采用较新版本
+            </button>
+          </div>
+          {snap.remoteContent !== null && (
+            <div className="muted small" style={{ marginTop: 6 }}>
+              较新版本预览：{snap.remoteContent.slice(0, 80)}
+            </div>
+          )}
         </div>
       )}
       {!snap.conflict && snap.lastError && (
@@ -93,6 +106,25 @@ function DraftNote(): JSX.Element {
       )}
     </div>
   );
+}
+
+function platformIdentityText(identity: string, targetSupported: boolean): string {
+  switch (identity) {
+    case 'win11':
+      return 'Windows 11 x64 工作站（正式目标）';
+    case 'windows-server':
+      return 'Windows Server（可运行，非正式目标）';
+    case 'windows-domain-controller':
+      return 'Windows 域控（非正式目标）';
+    case 'windows-other':
+      return '较旧 Windows 工作站（非正式目标）';
+    case 'windows-unknown':
+      return 'Windows 身份未确认（不冒称 Win11）';
+    case 'dev-override':
+      return '开发放行（非正式发布）';
+    default:
+      return targetSupported ? '正式目标平台' : '非正式目标平台';
+  }
 }
 
 function HealthPanel({ health }: { health: HealthData | null }): JSX.Element {
@@ -119,6 +151,16 @@ function HealthPanel({ health }: { health: HealthData | null }): JSX.Element {
           label: 'OS 沙箱',
           ok: health.sandbox_enabled,
           text: health.sandbox_enabled ? '启用（仅启动参数指示）' : '已禁用（仅开发验证）'
+        },
+        {
+          label: '平台身份',
+          ok: health.platform_target_supported,
+          text: platformIdentityText(health.platform_identity, health.platform_target_supported)
+        },
+        {
+          label: '数据保护',
+          ok: !health.storage_protected,
+          text: health.storage_protected ? '已暂停写入（源文件待恢复）' : '正常'
         }
       ]
     : [];

@@ -11,6 +11,7 @@ import type {
 import { IMPLEMENTED_OPERATIONS, IPC_SCHEMA_VERSION } from '../shared/ipc';
 import type { ErrorCode } from '../shared/ipc';
 import type { LocalStore } from './store';
+import { StoreProtectedError } from './store';
 
 function errorResponse(
   code: ErrorCode,
@@ -33,6 +34,8 @@ export interface IpcServiceContext {
   buildMode: 'development' | 'production';
   sandboxEnabled: boolean;
   platformDevOverride: boolean;
+  platformTargetSupported: boolean;
+  platformIdentity: string;
 }
 
 export function isImplementedOperation(op: string): op is OperationName {
@@ -148,7 +151,10 @@ export class IpcService {
         build_mode: this.ctx.buildMode,
         sandbox_enabled: this.ctx.sandboxEnabled,
         platform_dev_override: this.ctx.platformDevOverride,
-        recovered_from_corruption: this.ctx.store.recoveredFromCorruption()
+        recovered_from_corruption: this.ctx.store.recoveredFromCorruption(),
+        platform_target_supported: this.ctx.platformTargetSupported,
+        platform_identity: this.ctx.platformIdentity,
+        storage_protected: this.ctx.store.isProtected()
       }
     };
   }
@@ -226,20 +232,27 @@ export class IpcService {
     return res as IpcResponse<DraftData>;
   }
 
-  // 版本检查 + 写盘 + 内存提交处于同一有序边界（写盘成功后才由 store 公布提交）。
+  // 版本检查 + 写盘 + 内存提交在存储层同一原子边界内完成（修 R3-01：检查不再在写队列之外）。
   private async commitSaveDraft(content: string, expectedRevision: number): Promise<IpcResponse<DraftData>> {
-    const current = this.ctx.store.getDraft();
-    if (expectedRevision !== current.revision) {
+    try {
+      const r = await this.ctx.store.saveDraftExpecting(content, expectedRevision);
+      if (r.ok) {
+        return { ok: true, data: { content: r.draft.content, revision: r.draft.revision, updated_at: r.draft.updated_at } };
+      }
       return errorResponse(
         'VERSION_CONFLICT',
         '本地草稿已在别处更新，为避免覆盖已停止保存。',
         '请刷新查看最新草稿后重试。'
       );
-    }
-    try {
-      const saved = await this.ctx.store.saveDraft(content);
-      return { ok: true, data: { content: saved.content, revision: saved.revision, updated_at: saved.updated_at } };
-    } catch {
+    } catch (e) {
+      if (e instanceof StoreProtectedError) {
+        // 源文件未成功读取或损坏隔离失败：为避免覆盖，暂停保存，需先恢复。
+        return errorResponse(
+          'DATABASE_LOCKED',
+          '本地数据文件未能可靠读取或隔离，已暂停保存以防覆盖。',
+          '请在设置中查看数据恢复；恢复完成前不会写入。'
+        );
+      }
       // 写盘失败：返回可重试错误，且不缓存（store 保证内存版本未被提前改动，T08）。
       return errorResponse('DISK_FULL', '保存到本地失败，磁盘可能空间不足或暂不可写。', '请检查磁盘空间后重试。', true);
     }

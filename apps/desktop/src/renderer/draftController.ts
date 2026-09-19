@@ -86,12 +86,36 @@ export class DraftController {
     this.emit();
   }
 
+  // 普通编辑只更新本地待保存内容，绝不解除未解决冲突，也不默认覆盖较新版本（修 R3-04）。
+  // 冲突需通过明确的解决动作（resolveKeepLocal/resolveUseRemote）处理。
   setContent(text: string): void {
     this.content = text;
     this.dirty = true;
+    if (!this.conflict) {
+      this.key = newKey(); // 无冲突时内容变化即换幂等键
+    }
+    this.emit();
+  }
+
+  // 明确解决：以本地内容覆盖（用户明确同意）。提交前由存储层原子重查版本；若期间又变则重新冲突。
+  async resolveKeepLocal(): Promise<boolean> {
+    if (!this.conflict) return false;
     this.conflict = false;
     this.blocked = false;
-    this.key = newKey(); // 内容变化即换幂等键，保证与服务端请求指纹绑定
+    this.dirty = true;
+    this.key = newKey();
+    this.emit();
+    return this.save();
+  }
+
+  // 明确解决：采用远端版本，放弃本地改动。
+  resolveUseRemote(): void {
+    if (!this.conflict) return;
+    if (this.remoteContent !== null) this.content = this.remoteContent;
+    this.dirty = false;
+    this.blocked = false;
+    this.conflict = false;
+    this.key = null;
     this.emit();
   }
 
