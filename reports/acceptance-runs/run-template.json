@@ -1,0 +1,26 @@
+{
+  "_note": "执行记录模板，非真实运行。每次真实执行复制为 run-<YYYYMMDD>-<shortsha>-<seq>.json 并填写；不回写验收定义文件。",
+  "run_id": "run-YYYYMMDD-<shortsha>-01",
+  "executed_at": "<ISO8601>",
+  "source_commit": "<git-sha>",
+  "environment": "<runner/OS/arch 或 Win11 标准账户等真实执行环境>",
+  "plan": { "plan_id": null, "revision_id": null, "delivery_spec_version": null, "renderer_version": null },
+  "definition_sources": [
+    "acceptance/cases.json",
+    "acceptance/addenda/classroom-delivery.cases.json"
+  ],
+  "results": [
+    {
+      "case_id": "CLS-001",
+      "status": "NOT_RUN",
+      "evidence": [],
+      "artifact_hashes": [],
+      "notes": "示例占位；真实执行时填写 PASS/FAIL/BLOCKED 与证据。"
+    }
+  ],
+  "status_report": {
+    "software": "未执行",
+    "resource_coverage": "未执行",
+    "teaching_effect": "未知（工程验收通过不代表教学有效）"
+  }
+}

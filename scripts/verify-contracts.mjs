@@ -8,6 +8,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyCr001 } from './lib/cr001-verify.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 let failures = 0;
@@ -42,24 +43,35 @@ const missing = catalogCodes.filter((c) => !sharedTs.includes(`'${c}'`));
 log(missing.length === 0, `错误码一致：目录 ${catalogCodes.length} 项${missing.length ? '，缺失 ' + missing.join(',') : ''}`);
 log(catalogCodes.length === 21, `错误码数量为 21（实际 ${catalogCodes.length}）`);
 
-// 2b) CR-001 验收增补：addenda 可解析，CLS 案例全部 NOT_RUN，且不与冻结用例 ID 冲突。
+// 2b) CR-001 增补一致性（有限补强）：指定文件必存在、CLS 编号完整且唯一、跨引用有效、定义保持 NOT_RUN、与冻结用例无冲突。
 try {
+  const requiredFiles = [
+    'acceptance/addenda/classroom-delivery.cases.json',
+    'planning/changes/CR001/requirements.json',
+    'planning/changes/CR001/work-items.json',
+    'planning/changes/CR001/traceability.json',
+    'docs/changes/CR001_CLASSROOM_DELIVERABLES.md'
+  ].map((p) => ({ path: p, present: existsSync(join(root, p)) }));
+
+  const readIf = (p) => (existsSync(join(root, p)) ? readJson(join(root, p)) : null);
+  const casesDoc = readIf('acceptance/addenda/classroom-delivery.cases.json');
+  const reqDoc = readIf('planning/changes/CR001/requirements.json');
+  const wiDoc = readIf('planning/changes/CR001/work-items.json');
+
+  const cases = (casesDoc && casesDoc.cases) || [];
+  const requirements = (reqDoc && (reqDoc.requirements || reqDoc)) || [];
+  const workItems = (wiDoc && wiDoc.work_items) || [];
+
+  const { ok, failures } = verifyCr001({ requiredFiles, requirements, workItems, cases, expectedCount: 40 });
+  log(ok, `CR-001 增补一致性（文件存在/CLS完整唯一/引用有效/定义NOT_RUN）${ok ? '' : '：\n    - ' + failures.join('\n    - ')}`);
+
+  // 与冻结用例无 ID 冲突（独立于纯函数的仓库级检查）
   const frozen = readJson(join(root, 'acceptance', 'cases.json'));
   const frozenIds = new Set((frozen.cases ?? []).map((c) => c.id));
-  const addendaDir = join(root, 'acceptance', 'addenda');
-  if (existsSync(addendaDir)) {
-    for (const f of readdirSync(addendaDir)) {
-      if (!f.endsWith('.json')) continue;
-      const d = readJson(join(addendaDir, f));
-      const cases = d.cases ?? [];
-      const notRun = cases.every((c) => c.status === 'NOT_RUN');
-      log(notRun, `addenda/${f}：全部 NOT_RUN（${cases.length} 项）`);
-      const collide = cases.filter((c) => frozenIds.has(c.id));
-      log(collide.length === 0, `addenda/${f}：与冻结用例无 ID 冲突${collide.length ? '，冲突 ' + collide.map((c) => c.id).join(',') : ''}`);
-    }
-  }
+  const collide = cases.filter((c) => frozenIds.has(c.id));
+  log(collide.length === 0, `CR-001 与冻结用例无 ID 冲突${collide.length ? '，冲突 ' + collide.map((c) => c.id).join(',') : ''}`);
 } catch (e) {
-  log(false, `CR-001 addenda 校验失败：${e.message}`);
+  log(false, `CR-001 增补校验失败：${e.message}`);
 }
 
 // 3) 无效示例确实无效（结构层面）
