@@ -67,7 +67,9 @@
 ## G02 本地安全数据基础 — IN_PROGRESS（起步，无外部依赖）
 
 - [x] G02-T01 受限 IPC 及 **Schema 门**：声明式载荷 Schema 门 `src/main/schemaGate.ts`，`handle()` 分发前统一校验（类型/必填/多余字段 additionalProperties:false/超长；读操作拒绝夹带载荷）。修复字段白名单 `in` 继承属性误判（改 `hasOwnProperty`，拒绝 constructor/toString/__proto__）。测试 `schemaGate.test.ts`(11)。
-- [x] G02-T02 真实 SQLite 存储与单写入者：`src/main/db/sqliteStore.ts`（better-sqlite3 13.0.3，WAL/外键/busy_timeout、user_version 版本迁移、`saveDraftExpecting` IMMEDIATE 事务原子乐观并发、`withTransaction` 失败回滚、旧 JSON 安全迁入并备份/坏 JSON 隔离不覆盖、integrity_check 保护态）。主进程 `index.ts` 已切换为 `SqliteStore`（经 `DraftStore` 接口）。三级证据：**Node 测试 PASS（93 项，sqliteStore 11）/ Electron 真实加载 PASS（electron-rebuild + 真实主进程写读、新进程重启从 SQLite 恢复）/ Windows 目标包运行 BLOCKED_EXTERNAL**。详见 `reports/`（artifact `g02_sqlite_native_evidence.txt`、`g02_sqlite_restored.png`）。既有并发/保存保护未退化（G01 的 LocalStore 及其测试保留为迁入来源与回归）。
+- [~] G02-T02 真实 SQLite 存储与单写入者（**进行中，未标整体完成**）：`src/main/db/sqliteStore.ts`（better-sqlite3 13.0.3，WAL/外键/busy_timeout、user_version 版本迁移、`saveDraftExpecting` IMMEDIATE 事务原子乐观并发、`withTransaction` 失败回滚、旧 JSON 安全迁入并备份、integrity_check 保护态）。主进程 `index.ts` 已切换为 `SqliteStore`（经 `DraftStore` 接口）。
+  - 本轮加固：**高版本 DB/未知结构拒写**（user_version>目标→保护）；**旧 JSON 读取/隔离失败→迁入保护**（不以空库覆盖）；**必需记录缺失/UPDATE 零行→抛出不假成功**；迁入标记与数据同一事务提交（可恢复一致）；**原件归档失败如实记录**（legacyArchive=failed，不吞掉后宣称完成）；**正常迁入(migratedFromJson) 与损坏恢复(recoveredFromCorruption) 分开表达**。
+  - 实测：仓库单测 **104 项 PASS**（`sqliteStore.test.ts` 16 + 新增 `ipc-sqlite.test.ts` 6，经**真实 SqliteStore+IPC 路径**回归幂等/并发/冲突/失败保护，不依赖旧 LocalStore 说明不退化）；Electron 真实加载 PASS（加固版）；Windows 目标包运行 BLOCKED_EXTERNAL（未验证）。证据 artifact `g02_t02_hardening_evidence.txt`、`g02_sqlite_restored.png`。
 - [ ] G02-T03 凭据/敏感 payload 加密（safeStorage/DPAPI）、G02-T04 持久幂等与业务事件事务：待续；G02-T04 复用 `withTransaction`，不得让已有并发/保存保护退化。
 
 ## G03–G11 — NOT_STARTED

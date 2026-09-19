@@ -107,8 +107,8 @@ describe('SqliteStore 失败回滚', () => {
   });
 });
 
-describe('SqliteStore 旧 JSON 安全迁入', () => {
-  it('有效旧 JSON 首次运行迁入并备份原文件', async () => {
+describe('SqliteStore 旧 JSON 安全迁入（正常迁入 vs 损坏恢复 分开表达）', () => {
+  it('有效旧 JSON：正常迁入 migratedFromJson=true / recoveredFromCorruption=false / 归档 ok', async () => {
     const dir = tmp();
     writeFileSync(
       join(dir, 'yuwendesk-local-state.json'),
@@ -120,28 +120,84 @@ describe('SqliteStore 旧 JSON 安全迁入', () => {
     const s = makeStore(dir);
     await s.load();
     expect(s.getDraft()).toMatchObject({ content: '旧稿内容', revision: 3 });
-    expect(s.recoveredFromCorruption()).toBe(true);
-    // 原 JSON 已改名备份（保留证据），不再存于原路径
+    expect(s.migratedFromJson()).toBe(true);
+    expect(s.recoveredFromCorruption()).toBe(false); // 正常迁入不是损坏恢复
+    const st = s.migrationStatus();
+    expect(st.legacyArchive).toBe('ok');
     const files = readdirSync(dir);
     expect(files.some((f) => f.includes('yuwendesk-local-state.json.migrated.'))).toBe(true);
     expect(files.includes('yuwendesk-local-state.json')).toBe(false);
   });
 
-  it('坏 JSON 不迁入、不覆盖：坏内容被安全隔离保留', async () => {
+  it('坏 JSON（隔离成功）：损坏恢复 recoveredFromCorruption=true / migratedFromJson=false，坏内容被保留', async () => {
     const dir = tmp();
     const damaged = '{"draft":{"content":"坏片段"';
     writeFileSync(join(dir, 'yuwendesk-local-state.json'), damaged);
     const s = makeStore(dir);
     await s.load();
-    expect(s.getDraft()).toMatchObject({ content: '', revision: 0 }); // 未迁入
-    // 坏内容被保留（LocalStore 隔离为 .corrupt.*）
+    expect(s.getDraft()).toMatchObject({ content: '', revision: 0 });
+    expect(s.recoveredFromCorruption()).toBe(true);
+    expect(s.migratedFromJson()).toBe(false);
     const preserved = readdirSync(dir).some(
       (f) => statSync(join(dir, f)).isFile() && readFileSync(join(dir, f), 'utf8') === damaged
     );
     expect(preserved).toBe(true);
   });
 
-  it('已有 SQLite 数据时不被旧 JSON 覆盖', async () => {
+  it('旧 JSON 读取失败：进入迁入保护，不以空库继续写', async () => {
+    const dir = tmp();
+    writeFileSync(join(dir, 'yuwendesk-local-state.json'), '{"draft":{"content":"重要","revision":1,"updated_at":null},"window":{"width":900,"height":700}}');
+    const s = new SqliteStore(dir, {
+      legacyIo: {
+        readFile: async () => {
+          throw Object.assign(new Error('injected read'), { code: 'EIO' });
+        }
+      }
+    });
+    open.add(s);
+    await s.load();
+    expect(s.isProtected()).toBe(true);
+    expect(s.protectedReason()).toContain('read_failed');
+    await expect(s.saveDraft('x')).rejects.toBeInstanceOf(StoreProtectedError);
+  });
+
+  it('旧 JSON 隔离失败：进入迁入保护', async () => {
+    const dir = tmp();
+    writeFileSync(join(dir, 'yuwendesk-local-state.json'), '{"draft":{"content":"坏片段"');
+    const s = new SqliteStore(dir, {
+      legacyIo: {
+        rename: () => {
+          throw Object.assign(new Error('injected quarantine'), { code: 'EPERM' });
+        }
+      }
+    });
+    open.add(s);
+    await s.load();
+    expect(s.isProtected()).toBe(true);
+    expect(s.protectedReason()).toContain('quarantine_failed');
+  });
+
+  it('原件归档失败：如实记录 legacyArchive=failed，不冒充备份完成（数据已迁入）', async () => {
+    const dir = tmp();
+    writeFileSync(
+      join(dir, 'yuwendesk-local-state.json'),
+      JSON.stringify({ draft: { content: '要迁入', revision: 2, updated_at: null }, window: { width: 800, height: 600 } })
+    );
+    const s = new SqliteStore(dir, {
+      archiveRename: async () => {
+        throw Object.assign(new Error('injected archive'), { code: 'EPERM' });
+      }
+    });
+    open.add(s);
+    await s.load();
+    expect(s.getDraft()).toMatchObject({ content: '要迁入', revision: 2 }); // 数据已迁入
+    const st = s.migrationStatus();
+    expect(st.migratedFromJson).toBe(true);
+    expect(st.legacyArchive).toBe('failed'); // 归档失败如实记录
+    expect(st.legacyArchiveError).toBeTruthy();
+  });
+
+  it('已有 SQLite 数据时不被旧 JSON 覆盖（legacy_migrated 门控幂等）', async () => {
     const dir = tmp();
     const a = makeStore(dir);
     await a.load();
@@ -154,7 +210,32 @@ describe('SqliteStore 旧 JSON 安全迁入', () => {
     );
     const b = makeStore(dir);
     await b.load();
-    expect(b.getDraft()).toMatchObject({ content: 'SQLite 已有', revision: 1 }); // 未被旧 JSON 覆盖
+    expect(b.getDraft()).toMatchObject({ content: 'SQLite 已有', revision: 1 });
+  });
+});
+
+describe('SqliteStore 高版本/必需记录（拒写与不假成功）', () => {
+  it('数据库版本高于应用目标 → 进入保护、拒写', async () => {
+    const dir = tmp();
+    const a = makeStore(dir);
+    await a.load();
+    a.withTransaction((db) => db.pragma(`user_version = ${SQLITE_SCHEMA_TARGET + 5}`));
+    a.close();
+    open.delete(a);
+    const b = makeStore(dir);
+    await b.load();
+    expect(b.isProtected()).toBe(true);
+    expect(b.protectedReason()).toContain('schema_newer');
+    await expect(b.saveDraft('x')).rejects.toBeInstanceOf(StoreProtectedError);
+  });
+
+  it('必需草稿记录缺失 / UPDATE 零行 → 不返回成功（抛出）', async () => {
+    const dir = tmp();
+    const s = makeStore(dir);
+    await s.load();
+    s.withTransaction((db) => db.prepare('DELETE FROM draft WHERE id=1').run());
+    await expect(s.saveDraft('x')).rejects.toThrow(/draft_row_missing|zero_rows/);
+    await expect(s.saveDraftExpecting('x', 0)).rejects.toThrow(/draft_row_missing|zero_rows/);
   });
 });
 
