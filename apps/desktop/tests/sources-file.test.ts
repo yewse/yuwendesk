@@ -151,3 +151,60 @@ describe('G03 真实文件导入：DOCX', () => {
     expect(s.listSources().length).toBe(0);
   });
 });
+
+async function makeXlsx(): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file(
+    'xl/sharedStrings.xml',
+    '<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>单元</t></si><si><t>课时</t></si><si><t>第一单元</t></si><si><t>春 第一课时</t></si></sst>'
+  );
+  zip.file(
+    'xl/workbook.xml',
+    '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheets><sheet name="教学计划" sheetId="1" r:id="rId1"/></sheets></workbook>'
+  );
+  zip.file(
+    'xl/worksheets/sheet1.xml',
+    '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
+      '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>' +
+      '<row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2" t="s"><v>3</v></c></row>' +
+      '</sheetData></worksheet>'
+  );
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+async function makePptx(slides: string[]): Promise<Buffer> {
+  const zip = new JSZip();
+  slides.forEach((t, i) => {
+    zip.file(
+      `ppt/slides/slide${i + 1}.xml`,
+      `<?xml version="1.0"?><p:sld xmlns:p="x" xmlns:a="y"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${t}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`
+    );
+  });
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+describe('G03 真实文件导入：XLSX / PPTX', () => {
+  it('XLSX → 工作表/行/列(xlsx_cell)定位', async () => {
+    const s = await makeStore(tmp());
+    const xlsx = await makeXlsx();
+    const r = await s.importFile({ title: '计划.xlsx', format: 'xlsx', base64: xlsx.toString('base64') });
+    expect(r.status).toBe('imported');
+    const hit = s.searchSources('第一单元');
+    expect(hit.length).toBeGreaterThan(0);
+    expect(hit[0].locator?.kind).toBe('xlsx_cell');
+    expect(hit[0].locator?.sheet).toBe('教学计划');
+    expect(hit[0].locator?.row).toBe(2);
+    expect(hit[0].locator?.col).toBe(1);
+  });
+
+  it('PPTX → 幻灯片页(pptx_slide)定位', async () => {
+    const s = await makeStore(tmp());
+    const pptx = await makePptx(['第一张：课程导入', '第二张：春天的脚步近了']);
+    const r = await s.importFile({ title: '课件.pptx', format: 'pptx', base64: pptx.toString('base64') });
+    expect(r.status).toBe('imported');
+    const hit = s.searchSources('春天的脚步');
+    expect(hit.length).toBeGreaterThan(0);
+    expect(hit[0].locator?.kind).toBe('pptx_slide');
+    expect(hit[0].locator?.slide).toBe(2);
+    expect(hit[0].locatorLabel).toContain('幻灯片');
+  });
+});

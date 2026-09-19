@@ -706,12 +706,13 @@ export class SqliteStore {
     } catch {
       return { status: 'rejected', reason: 'empty' }; // 无法解析的格式：不落库
     }
-    const mime =
-      input.format.toLowerCase() === 'pdf'
-        ? 'application/pdf'
-        : input.format.toLowerCase() === 'docx'
-          ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-          : 'application/octet-stream';
+    const mimeByFormat: Record<string, string> = {
+      pdf: 'application/pdf',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    };
+    const mime = mimeByFormat[input.format.toLowerCase()] ?? 'application/octet-stream';
     return this.commitParsedImport({
       title: input.title,
       format: extracted.format,

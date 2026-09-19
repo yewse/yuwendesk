@@ -30,7 +30,7 @@ export interface ExtractResult {
   reliableText: boolean; // 是否含可靠文字（可用于检索/核对）
 }
 
-export const SUPPORTED_IMPORT_FORMATS = ['txt', 'md', 'csv', 'pdf', 'docx'] as const;
+export const SUPPORTED_IMPORT_FORMATS = ['txt', 'md', 'csv', 'pdf', 'docx', 'xlsx', 'pptx'] as const;
 export type SupportedFormat = (typeof SUPPORTED_IMPORT_FORMATS)[number];
 
 // 将“原始段落列表（含 locator 与是否可靠）”拼接为全文并计算字符偏移。
@@ -172,11 +172,116 @@ export async function extractDocx(buf: Buffer): Promise<ExtractResult> {
   return { format: 'docx', fullText, segments, scanned: false, reliableText: anyText };
 }
 
+// ---- XLSX：unzip 工作表，按单元格（工作表/行/列）抽取 ----
+function colToNum(ref: string): { col: number; row: number } {
+  const m = /^([A-Z]+)(\d+)$/.exec(ref);
+  if (!m) return { col: 0, row: 0 };
+  let col = 0;
+  for (const ch of m[1]) col = col * 26 + (ch.charCodeAt(0) - 64);
+  return { col, row: parseInt(m[2], 10) };
+}
+function siText(node: unknown): string {
+  if (node == null) return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  const o = node as Record<string, unknown>;
+  if (o.t !== undefined) return typeof o.t === 'object' ? String((o.t as Record<string, unknown>)['#text'] ?? '') : String(o.t);
+  if (o.r !== undefined) {
+    const runs = Array.isArray(o.r) ? o.r : [o.r];
+    return runs.map((r) => siText(r)).join('');
+  }
+  if (o['#text'] !== undefined) return String(o['#text']);
+  return '';
+}
+function trailingNum(name: string): number {
+  const m = /(\d+)\.xml$/.exec(name);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+export async function extractXlsx(buf: Buffer): Promise<ExtractResult> {
+  const zip = await JSZip.loadAsync(buf);
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
+  let shared: string[] = [];
+  const sstFile = zip.file('xl/sharedStrings.xml');
+  if (sstFile) {
+    const sx = parser.parse(await sstFile.async('string')) as { sst?: { si?: unknown } };
+    const si = sx.sst?.si;
+    const arr = Array.isArray(si) ? si : si ? [si] : [];
+    shared = arr.map((n) => siText(n));
+  }
+  let sheetNames: string[] = [];
+  const wbFile = zip.file('xl/workbook.xml');
+  if (wbFile) {
+    const wb = parser.parse(await wbFile.async('string')) as { workbook?: { sheets?: { sheet?: unknown } } };
+    let sh = wb.workbook?.sheets?.sheet as unknown;
+    const arr = Array.isArray(sh) ? sh : sh ? [sh] : [];
+    sheetNames = arr.map((s) => String((s as Record<string, unknown>)['@_name'] ?? ''));
+    sh = undefined;
+  }
+  const sheetFiles = Object.keys(zip.files)
+    .filter((f) => /^xl\/worksheets\/sheet\d+\.xml$/.test(f))
+    .sort((a, b) => trailingNum(a) - trailingNum(b));
+  const raw: { text: string; locatorKind: LocatorKind; locator: Record<string, number | string>; reliable: boolean }[] = [];
+  let sIdx = 0;
+  for (const f of sheetFiles) {
+    const name = sheetNames[sIdx] || `Sheet${sIdx + 1}`;
+    sIdx += 1;
+    const ws = parser.parse(await zip.file(f)!.async('string')) as { worksheet?: { sheetData?: { row?: unknown } } };
+    let rows = ws.worksheet?.sheetData?.row as unknown;
+    rows = Array.isArray(rows) ? rows : rows ? [rows] : [];
+    for (const row of rows as Record<string, unknown>[]) {
+      let cells = row.c as unknown;
+      cells = Array.isArray(cells) ? cells : cells ? [cells] : [];
+      for (const c of cells as Record<string, unknown>[]) {
+        const ref = String(c['@_r'] ?? '');
+        const { col, row: rn } = colToNum(ref);
+        let val = '';
+        if (c['@_t'] === 's') val = shared[parseInt(String(c.v ?? '0'), 10)] ?? '';
+        else if (c['@_t'] === 'inlineStr') val = siText(c.is);
+        else val = c.v !== undefined ? String(typeof c.v === 'object' ? siText(c.v) : c.v) : '';
+        val = val.trim();
+        if (val.length) raw.push({ text: val, locatorKind: 'xlsx_cell', locator: { sheet: name, row: rn, col }, reliable: true });
+      }
+    }
+  }
+  const { fullText, segments } = assemble(raw, '\n');
+  return { format: 'xlsx', fullText, segments, scanned: false, reliableText: raw.length > 0 };
+}
+
+// ---- PPTX：unzip 各幻灯片，按页抽取 a:t 文本 ----
+function decodeXml(s: string): string {
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+export async function extractPptx(buf: Buffer): Promise<ExtractResult> {
+  const zip = await JSZip.loadAsync(buf);
+  const slideFiles = Object.keys(zip.files)
+    .filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f))
+    .sort((a, b) => trailingNum(a) - trailingNum(b));
+  const raw: { text: string; locatorKind: LocatorKind; locator: Record<string, number | string>; reliable: boolean }[] = [];
+  let i = 0;
+  for (const f of slideFiles) {
+    i += 1;
+    const xml = await zip.file(f)!.async('string');
+    const text = [...xml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((m) => decodeXml(m[1])).join('').trim();
+    raw.push({ text, locatorKind: 'pptx_slide', locator: { slide: i }, reliable: text.length > 0 });
+  }
+  const { fullText, segments } = assemble(raw, '\n\n');
+  const anyText = raw.some((r) => r.text.length > 0);
+  return { format: 'pptx', fullText, segments, scanned: slideFiles.length > 0 && !anyText, reliableText: anyText };
+}
+
 // 按格式分派解析原始文件字节。
 export async function extractBuffer(buf: Buffer, format: string): Promise<ExtractResult> {
   const f = format.toLowerCase();
   if (f === 'pdf') return extractPdf(buf);
   if (f === 'docx') return extractDocx(buf);
+  if (f === 'xlsx') return extractXlsx(buf);
+  if (f === 'pptx') return extractPptx(buf);
   if (f === 'txt' || f === 'md' || f === 'markdown' || f === 'csv') return extractText(buf.toString('utf8'), f === 'markdown' ? 'md' : f);
   throw new Error('unsupported_format:' + format);
 }
