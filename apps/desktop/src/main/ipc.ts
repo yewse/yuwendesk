@@ -103,6 +103,8 @@ export class IpcService {
         return this.sourcesImport(request);
       case 'sources.importFile':
         return this.sourcesImportFile(request);
+      case 'sources.cancelImport':
+        return this.sourcesCancelImport(request);
       case 'sources.list':
         return this.sourcesList();
       case 'sources.search':
@@ -156,6 +158,7 @@ export class IpcService {
       classification?: string;
       relation?: 'new_version' | 'separate';
       targetDocumentId?: string;
+      jobId?: string;
     };
     try {
       const r = await src.importFile({
@@ -164,12 +167,20 @@ export class IpcService {
         base64: p.base64,
         classification: p.classification,
         relation: p.relation,
-        targetDocumentId: p.targetDocumentId
+        targetDocumentId: p.targetDocumentId,
+        jobId: p.jobId
       });
       return this.mapImportResult(r);
     } catch (e) {
       return this.mapImportError(e);
     }
+  }
+
+  private sourcesCancelImport(req: IpcRequest): IpcResponse {
+    const src = this.ctx.sourceStore;
+    if (!src) return { ok: true, data: { cancelled: false } };
+    const p = req.payload as { jobId: string };
+    return { ok: true, data: { cancelled: src.cancelImport(p.jobId) } };
   }
 
   private mapImportResult(r: import('./store').SourceImportResult): IpcResponse {

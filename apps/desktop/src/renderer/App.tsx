@@ -276,6 +276,8 @@ function ResourcesPage(): JSX.Element {
   const [verify, setVerify] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement | null>(null);
   const cancelRef = useRef(false);
+  const currentJobRef = useRef<string | null>(null);
+  const [currentJob, setCurrentJob] = useState<string | null>(null);
 
   async function reloadList(): Promise<void> {
     const r = await window.yuwen.listSources();
@@ -306,9 +308,17 @@ function ResourcesPage(): JSX.Element {
         continue;
       }
       try {
-        const r = textFormat
-          ? await window.yuwen.importSource({ title: file.name, format: textFormat, content: await file.text() })
-          : await window.yuwen.importFile({ title: file.name, format: binFormat, base64: await readAsBase64(file) });
+        let r;
+        if (textFormat) {
+          r = await window.yuwen.importSource({ title: file.name, format: textFormat, content: await file.text() });
+        } else {
+          const jobId = `job-${Date.now()}-${idx}`;
+          currentJobRef.current = jobId;
+          setCurrentJob(jobId);
+          r = await window.yuwen.importFile({ title: file.name, format: binFormat, base64: await readAsBase64(file), jobId });
+          currentJobRef.current = null;
+          setCurrentJob(null);
+        }
         if (!r.ok) {
           summary.push(`「${file.name}」未导入：${r.error.message_zh}`);
           continue;
@@ -317,6 +327,7 @@ function ResourcesPage(): JSX.Element {
         if (d.status === 'imported') summary.push(`「${file.name}」已导入（v${d.version}，hash ${d.contentHash?.slice(0, 8)}…）`);
         else if (d.status === 'new_version') summary.push(`「${file.name}」已作为新版本 v${d.version}`);
         else if (d.status === 'duplicate') summary.push(`「${file.name}」重复（同原件哈希，未新增版本）`);
+        else if (d.status === 'cancelled') summary.push(`「${file.name}」已取消（未入库）`);
         else if (d.status === 'needs_confirmation' && d.existing) {
           summary.push(`「${file.name}」检测到同名资料（当前 v${d.existing.currentVersion}），需确认关系`);
           const base: Omit<PendingItem, 'kind' | 'content' | 'base64'> = { title: file.name, format: textFormat ?? binFormat, existing: d.existing };
@@ -418,9 +429,21 @@ function ResourcesPage(): JSX.Element {
           选择文件导入
         </button>
         {busy && (
-          <button className="btn small" onClick={() => (cancelRef.current = true)}>
-            取消
-          </button>
+          <>
+            {currentJob && (
+              <button
+                className="btn small"
+                onClick={() => {
+                  if (currentJobRef.current) void window.yuwen.cancelImport(currentJobRef.current);
+                }}
+              >
+                取消当前文件
+              </button>
+            )}
+            <button className="btn small" onClick={() => (cancelRef.current = true)}>
+              停止后续
+            </button>
+          </>
         )}
         <input
           ref={fileRef}

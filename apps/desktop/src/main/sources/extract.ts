@@ -33,6 +33,47 @@ export interface ExtractResult {
 export const SUPPORTED_IMPORT_FORMATS = ['txt', 'md', 'csv', 'pdf', 'docx', 'xlsx', 'pptx'] as const;
 export type SupportedFormat = (typeof SUPPORTED_IMPORT_FORMATS)[number];
 
+// 处理边界：页数、zip 条目、抽取文本上限、处理时间上限。
+export interface ExtractLimits {
+  maxPages?: number;
+  maxZipEntries?: number;
+  maxTextChars?: number;
+  timeoutMs?: number;
+}
+export interface CancelSignal {
+  cancelled: boolean;
+}
+export interface ExtractOpts {
+  limits?: ExtractLimits;
+  signal?: CancelSignal;
+}
+export type ExtractErrorCode =
+  | 'too_many_pages'
+  | 'too_many_entries'
+  | 'too_large_text'
+  | 'timeout'
+  | 'cancelled'
+  | 'unsupported'
+  | 'parse_failed';
+export class ExtractError extends Error {
+  constructor(public code: ExtractErrorCode, msg?: string) {
+    super(msg ? `${code}:${msg}` : code);
+    this.name = 'ExtractError';
+  }
+}
+export const DEFAULT_LIMITS: Required<ExtractLimits> = {
+  maxPages: 800,
+  maxZipEntries: 5000,
+  maxTextChars: 8_000_000,
+  timeoutMs: 30_000
+};
+function mergeLimits(l?: ExtractLimits): Required<ExtractLimits> {
+  return { ...DEFAULT_LIMITS, ...(l ?? {}) };
+}
+function throwIfCancelled(signal?: CancelSignal): void {
+  if (signal?.cancelled) throw new ExtractError('cancelled');
+}
+
 // 将“原始段落列表（含 locator 与是否可靠）”拼接为全文并计算字符偏移。
 function assemble(
   raw: { text: string; locatorKind: LocatorKind; locator: Record<string, number | string>; reliable: boolean }[],
@@ -80,18 +121,24 @@ interface PdfDoc {
   getPage(n: number): Promise<{ getTextContent(): Promise<{ items: Array<{ str?: string }> }> }>;
 }
 
-export async function extractPdf(buf: Buffer): Promise<ExtractResult> {
+export async function extractPdf(buf: Buffer, opts: ExtractOpts = {}): Promise<ExtractResult> {
+  const limits = mergeLimits(opts.limits);
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
   const pdfjs = require('pdfjs-dist/legacy/build/pdf.js') as PdfjsLike;
   const pdf = await pdfjs.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise;
+  if (pdf.numPages > limits.maxPages) throw new ExtractError('too_many_pages', `${pdf.numPages}>${limits.maxPages}`);
   const raw: { text: string; locatorKind: LocatorKind; locator: Record<string, number>; reliable: boolean }[] = [];
+  let totalChars = 0;
   for (let i = 1; i <= pdf.numPages; i++) {
+    throwIfCancelled(opts.signal);
     const page = await pdf.getPage(i);
     const tc = await page.getTextContent();
     const text = tc.items
       .map((it) => it.str ?? '')
       .join('')
       .trim();
+    totalChars += text.length;
+    if (totalChars > limits.maxTextChars) throw new ExtractError('too_large_text', `${totalChars}`);
     raw.push({ text, locatorKind: 'pdf_page', locator: { page: i }, reliable: text.length > 0 });
   }
   const { fullText, segments } = assemble(raw, '\n\n');
@@ -131,8 +178,15 @@ function findFirst(nodes: OrderedNode[], tag: string): OrderedNode[] | null {
   return null;
 }
 
-export async function extractDocx(buf: Buffer): Promise<ExtractResult> {
+function guardZipEntries(zip: JSZip, limits: Required<ExtractLimits>): void {
+  if (Object.keys(zip.files).length > limits.maxZipEntries) throw new ExtractError('too_many_entries', `${Object.keys(zip.files).length}`);
+}
+
+export async function extractDocx(buf: Buffer, opts: ExtractOpts = {}): Promise<ExtractResult> {
+  const limits = mergeLimits(opts.limits);
   const zip = await JSZip.loadAsync(buf);
+  guardZipEntries(zip, limits);
+  throwIfCancelled(opts.signal);
   const docFile = zip.file('word/document.xml');
   if (!docFile) return { format: 'docx', fullText: '', segments: [], scanned: false, reliableText: false };
   const xml = await docFile.async('string');
@@ -214,8 +268,11 @@ async function parseRels(zip: JSZip, relsPath: string, baseDir: string): Promise
   return map;
 }
 
-export async function extractXlsx(buf: Buffer): Promise<ExtractResult> {
+export async function extractXlsx(buf: Buffer, opts: ExtractOpts = {}): Promise<ExtractResult> {
+  const limits = mergeLimits(opts.limits);
   const zip = await JSZip.loadAsync(buf);
+  guardZipEntries(zip, limits);
+  throwIfCancelled(opts.signal);
   const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
   let shared: string[] = [];
   const sstFile = zip.file('xl/sharedStrings.xml');
@@ -284,8 +341,11 @@ function decodeXml(s: string): string {
     .replace(/&apos;/g, "'")
     .replace(/&amp;/g, '&');
 }
-export async function extractPptx(buf: Buffer): Promise<ExtractResult> {
+export async function extractPptx(buf: Buffer, opts: ExtractOpts = {}): Promise<ExtractResult> {
+  const limits = mergeLimits(opts.limits);
   const zip = await JSZip.loadAsync(buf);
+  guardZipEntries(zip, limits);
+  throwIfCancelled(opts.signal);
   const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
   // 依据 presentation.xml 的 sldIdLst 显示顺序 + presentation.xml.rels 解析每张幻灯片的真实文件（不按文件名数字）。
   const rels = await parseRels(zip, 'ppt/_rels/presentation.xml.rels', 'ppt/');
@@ -322,13 +382,27 @@ export async function extractPptx(buf: Buffer): Promise<ExtractResult> {
   return { format: 'pptx', fullText, segments, scanned: slideFiles.length > 0 && !anyText, reliableText: anyText };
 }
 
-// 按格式分派解析原始文件字节。
-export async function extractBuffer(buf: Buffer, format: string): Promise<ExtractResult> {
+async function dispatch(buf: Buffer, format: string, opts: ExtractOpts): Promise<ExtractResult> {
   const f = format.toLowerCase();
-  if (f === 'pdf') return extractPdf(buf);
-  if (f === 'docx') return extractDocx(buf);
-  if (f === 'xlsx') return extractXlsx(buf);
-  if (f === 'pptx') return extractPptx(buf);
+  if (f === 'pdf') return extractPdf(buf, opts);
+  if (f === 'docx') return extractDocx(buf, opts);
+  if (f === 'xlsx') return extractXlsx(buf, opts);
+  if (f === 'pptx') return extractPptx(buf, opts);
   if (f === 'txt' || f === 'md' || f === 'markdown' || f === 'csv') return extractText(buf.toString('utf8'), f === 'markdown' ? 'md' : f);
-  throw new Error('unsupported_format:' + format);
+  throw new ExtractError('unsupported', format);
+}
+
+// 按格式分派解析原始文件字节，并施加处理时间上限（超时 → ExtractError('timeout')）。
+export async function extractBuffer(buf: Buffer, format: string, opts: ExtractOpts = {}): Promise<ExtractResult> {
+  const limits = mergeLimits(opts.limits);
+  throwIfCancelled(opts.signal);
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ExtractError('timeout', `${limits.timeoutMs}ms`)), limits.timeoutMs);
+  });
+  try {
+    return await Promise.race([dispatch(buf, format, { ...opts, limits }), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }

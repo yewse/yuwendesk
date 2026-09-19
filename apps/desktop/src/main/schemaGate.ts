@@ -55,9 +55,16 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
       base64: { type: 'string', maxLength: 60_000_000 },
       classification: { type: 'string', maxLength: 32 },
       relation: { type: 'string', maxLength: 16 },
-      targetDocumentId: { type: 'string', maxLength: 64 }
+      targetDocumentId: { type: 'string', maxLength: 64 },
+      jobId: { type: 'string', maxLength: 64 }
     },
     required: ['title', 'format', 'base64'],
+    additionalProperties: false
+  },
+  'sources.cancelImport': {
+    type: 'object',
+    properties: { jobId: { type: 'string', minLength: 1, maxLength: 64 } },
+    required: ['jobId'],
     additionalProperties: false
   },
   'sources.list': null,

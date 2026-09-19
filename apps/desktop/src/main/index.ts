@@ -8,6 +8,7 @@ import { IMPLEMENTED_OPERATIONS } from '../shared/ipc';
 import { IpcService } from './ipc';
 import { CloseController } from './lifecycle';
 import { evaluatePlatform } from './platform';
+import { createWorkerParser } from './sources/parseHost';
 import { attachCsp, isAllowedExternalUrl, isTrustedRendererUrl, lockdownSession } from './security';
 import { SqliteStore } from './db/sqliteStore';
 
@@ -200,7 +201,11 @@ async function bootstrap(): Promise<void> {
   }
 
   // 注入 Electron safeStorage 用于凭据/敏感 payload 保护（不可用时拒绝落明文，见 T03）。
-  store = new SqliteStore(app.getPath('userData'), { safeStorage });
+  store = new SqliteStore(app.getPath('userData'), {
+    safeStorage,
+    // 耗时原始文件解析放到 worker 线程，避免阻塞主进程。
+    parseFile: createWorkerParser(join(__dirname, 'sources', 'parseWorker.js'))
+  });
   await store.load();
 
   ipcService = new IpcService({

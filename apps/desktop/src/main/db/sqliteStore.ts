@@ -21,7 +21,7 @@ import type {
   WindowState
 } from '../store';
 import { DEFAULT_CLASSIFICATION, SOURCE_CLASSIFICATIONS, StoreProtectedError } from '../store';
-import { extractBuffer, extractText, type ExtractResult } from '../sources/extract';
+import { extractBuffer, ExtractError, extractText, type CancelSignal, type ExtractOpts, type ExtractResult } from '../sources/extract';
 import {
   CredentialProtector,
   DataKeyManager,
@@ -48,6 +48,8 @@ export interface SqliteStoreOptions {
   safeStorage?: SafeStorageLike;
   // 测试用事务中途故障注入。
   commitFaults?: CommitFaultHooks;
+  // 可注入的解析实现：生产可注入 worker 线程后端使耗时解析不阻塞主进程；缺省内联 extractBuffer。
+  parseFile?: (buf: Buffer, format: string, opts: ExtractOpts) => Promise<ExtractResult>;
 }
 
 export type CredentialSetResult = { ok: true; last4: string } | { ok: false; reason: 'encryption_unavailable' };
@@ -263,6 +265,8 @@ export class SqliteStore {
   private readonly archiveRename: (from: string, to: string) => Promise<void>;
   private readonly safeStorage?: SafeStorageLike;
   private readonly commitFaults?: CommitFaultHooks;
+  private readonly parseFile: (buf: Buffer, format: string, opts: ExtractOpts) => Promise<ExtractResult>;
+  private readonly cancelRegistry = new Map<string, CancelSignal>();
 
   constructor(userDataDir: string, opts: SqliteStoreOptions = {}) {
     this.dir = userDataDir;
@@ -272,6 +276,7 @@ export class SqliteStore {
     this.archiveRename = opts.archiveRename ?? ((from, to) => fs.rename(from, to));
     this.safeStorage = opts.safeStorage;
     this.commitFaults = opts.commitFaults;
+    this.parseFile = opts.parseFile ?? ((buf, format, o) => extractBuffer(buf, format, o));
   }
 
   async load(): Promise<void> {
@@ -690,8 +695,20 @@ export class SqliteStore {
     });
   }
 
+  cancelImport(jobId: string): boolean {
+    const sig = this.cancelRegistry.get(jobId);
+    if (!sig) return false;
+    sig.cancelled = true;
+    return true;
+  }
+
   // 导入真实原始文件（PDF/DOCX/…）：保存原件字节、原件哈希与文本哈希分开、结构化段落定位。
+  // 处理边界：完整读取前先做初步大小检查；解析施加限额/超时/取消；提交前复检取消，已取消任务不入库。
   async importFile(input: SourceFileImportInput): Promise<SourceImportResult> {
+    // 初步大小检查（在完整解码/解析前）：base64 长度约为字节数的 4/3。
+    const approxBytes = Math.floor((input.base64.length * 3) / 4);
+    if (approxBytes === 0) return { status: 'rejected', reason: 'empty' };
+    if (approxBytes > SOURCE_FILE_MAX_BYTES) return { status: 'rejected', reason: 'too_large' };
     let buf: Buffer;
     try {
       buf = Buffer.from(input.base64, 'base64');
@@ -700,12 +717,28 @@ export class SqliteStore {
     }
     if (buf.length === 0) return { status: 'rejected', reason: 'empty' };
     if (buf.length > SOURCE_FILE_MAX_BYTES) return { status: 'rejected', reason: 'too_large' };
+
+    const signal: CancelSignal = { cancelled: false };
+    if (input.jobId) this.cancelRegistry.set(input.jobId, signal);
     let extracted: ExtractResult;
     try {
-      extracted = await extractBuffer(buf, input.format);
-    } catch {
-      return { status: 'rejected', reason: 'empty' }; // 无法解析的格式：不落库
+      extracted = await this.parseFile(buf, input.format, { signal });
+    } catch (e) {
+      if (input.jobId) this.cancelRegistry.delete(input.jobId);
+      if (e instanceof ExtractError) {
+        if (e.code === 'cancelled') return { status: 'cancelled' };
+        if (e.code === 'too_many_pages' || e.code === 'too_many_entries' || e.code === 'too_large_text' || e.code === 'timeout')
+          return { status: 'rejected', reason: 'limit_exceeded' };
+        if (e.code === 'unsupported') return { status: 'rejected', reason: 'parse_failed' };
+      }
+      return { status: 'rejected', reason: 'parse_failed' }; // 无法解析：不落库
     }
+    // 提交前复检取消：取消传播到提交边界，已取消任务不得静默入库。
+    if (signal.cancelled) {
+      if (input.jobId) this.cancelRegistry.delete(input.jobId);
+      return { status: 'cancelled' };
+    }
+    if (input.jobId) this.cancelRegistry.delete(input.jobId);
     const mimeByFormat: Record<string, string> = {
       pdf: 'application/pdf',
       docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

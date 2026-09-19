@@ -85,7 +85,9 @@ export type SourceImportResult =
   // 同标题但内容不同：仅“疑似关联”，需教师明确关系后再落库，不自动新增版本/切换当前版本。
   | { status: 'needs_confirmation'; contentHash: string; existing: SourceExistingSummary }
   | { status: 'blocked_sensitive'; reason: 'not_implemented' | 'encryption_unavailable' }
-  | { status: 'rejected'; reason: 'too_large' | 'empty' | 'bad_classification' };
+  // 取消：解析或提交前被取消，已取消任务不得静默入库。
+  | { status: 'cancelled' }
+  | { status: 'rejected'; reason: 'too_large' | 'empty' | 'bad_classification' | 'parse_failed' | 'limit_exceeded' };
 export interface SourceLocator {
   kind: string; // text_line | csv_row | pdf_page | docx_paragraph | docx_table_cell | xlsx_cell | pptx_slide
   [k: string]: number | string;
@@ -139,10 +141,14 @@ export interface SourceFileImportInput {
   classification?: SourceClassification | string;
   relation?: 'new_version' | 'separate';
   targetDocumentId?: string;
+  // 取消作用域：注册此 jobId 后，cancelImport(jobId) 可取消当前文件的解析与提交（不影响其它文件）。
+  jobId?: string;
 }
 export interface SourceStore {
   importSource(input: SourceImportInput): SourceImportResult;
   importFile(input: SourceFileImportInput): Promise<SourceImportResult>;
+  // 取消当前文件（作用于其解析与提交边界）；返回是否命中在途任务。
+  cancelImport(jobId: string): boolean;
   searchSources(query: string): SourceSearchHit[];
   readSource(versionId: string, charStart?: number, charEnd?: number): SourceReadResult | null;
   retireSource(documentId: string): boolean;

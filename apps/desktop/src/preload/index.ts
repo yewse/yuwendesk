@@ -65,7 +65,15 @@ const api = {
       versionConflict?: boolean;
       existing?: { documentId: string; title: string; currentVersion: number; currentHash: string };
     }>('sources.import', { payload }),
-  importFile: (payload: { title: string; format: string; base64: string; classification?: string; relation?: 'new_version' | 'separate'; targetDocumentId?: string }) =>
+  importFile: (payload: {
+    title: string;
+    format: string;
+    base64: string;
+    classification?: string;
+    relation?: 'new_version' | 'separate';
+    targetDocumentId?: string;
+    jobId?: string;
+  }) =>
     call<{
       status: string;
       documentId?: string;
@@ -75,6 +83,7 @@ const api = {
       versionConflict?: boolean;
       existing?: { documentId: string; title: string; currentVersion: number; currentHash: string };
     }>('sources.importFile', { payload }),
+  cancelImport: (jobId: string) => call<{ cancelled: boolean }>('sources.cancelImport', { payload: { jobId } }),
   listSources: () => call<{ sources: SourceListItemDTO[] }>('sources.list'),
   searchSources: (query: string) => call<{ hits: SourceHitDTO[] }>('sources.search', { payload: { query } }),
   readSource: (versionId: string, charStart?: number, charEnd?: number) =>

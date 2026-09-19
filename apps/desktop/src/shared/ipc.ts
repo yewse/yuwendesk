@@ -40,6 +40,7 @@ export const IMPLEMENTED_OPERATIONS = [
   'ui.saveDraft',
   'sources.import',
   'sources.importFile',
+  'sources.cancelImport',
   'sources.list',
   'sources.search',
   'sources.read',
