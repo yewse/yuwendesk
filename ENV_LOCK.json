@@ -16,8 +16,8 @@
     "electron_runtime": "随应用打包，教师机无需另装 Node/Python/Docker/Office"
   },
   "locked_toolchain": [
-    { "name": "electron", "version": "31.7.7", "license": "MIT", "source": "https://www.npmjs.com/package/electron", "purpose": "桌面运行时（主/预加载/渲染进程）", "checked": "2026-09-19", "notes": "以 Electron 31.7.7 官方发布对应的 Chromium/Node/V8 为准；安全清单按该版本落实 [S05]" },
-    { "name": "electron-builder", "version": "24.13.3", "license": "MIT", "source": "https://www.npmjs.com/package/electron-builder", "purpose": "NSIS Windows x64 离线安装包打包 [S08]", "checked": "2026-09-19" },
+    { "name": "electron", "version": "44.4.3", "license": "MIT", "source": "https://www.npmjs.com/package/electron", "purpose": "桌面运行时（主/预加载/渲染进程）", "checked": "2026-09-19", "notes": "PR#1 复核：Electron 31 已 EOL（当前最新稳定 44.4.3，官方仅维护最近 3 个稳定大版本），升级到受支持的 44.x；安全清单按该版本落实 [S05]" },
+    { "name": "electron-builder", "version": "26.15.3", "license": "MIT", "source": "https://www.npmjs.com/package/electron-builder", "purpose": "NSIS Windows x64 离线安装包打包 [S08]", "checked": "2026-09-19", "notes": "随 Electron 44 一并升级到 26.x（dist-tag latest）" },
     { "name": "react", "version": "18.3.1", "license": "MIT", "source": "https://www.npmjs.com/package/react", "purpose": "渲染层界面（仅界面，不接触密钥或任意路径）", "checked": "2026-09-19" },
     { "name": "react-dom", "version": "18.3.1", "license": "MIT", "source": "https://www.npmjs.com/package/react-dom", "purpose": "渲染层 DOM", "checked": "2026-09-19" },
     { "name": "typescript", "version": "5.5.4", "license": "Apache-2.0", "source": "https://www.npmjs.com/package/typescript", "purpose": "主/预加载/渲染类型与编译", "checked": "2026-09-19" },
@@ -40,7 +40,8 @@
   },
   "blocked_gates": [
     { "gate": "G04 真实联网", "reason": "无 Grok API 账户与密钥（EXT03/EXT04）", "status": "BLOCKED_EXTERNAL" },
-    { "gate": "G01 干净 Windows 安装验收 (INS-001..006)", "reason": "无 Windows 11 x64 干净 VM 与桌面自动化（EXT02）", "status": "BLOCKED_EXTERNAL", "note": "本轮在 Linux 上完成工程验证级运行与 NSIS 配置，签名安装包与实机安装另测" },
+    { "gate": "Windows 自动构建（未签名工程测试包）", "reason": "已在 Linux+wine 授权构建环境产出 YuwenDesk-Setup-0.1.0-x64.exe", "status": "PASS", "note": "SHA256=98ff155e11d18e47a3fd0aa78b28ea95b718157114cc8f9ce2bdabbe6e20c20d；详见 reports/WINDOWS_BUILD.md" },
+    { "gate": "G01 干净 Win11 普通用户安装验收 (INS-001..006 实机)", "reason": "无 Windows 11 x64 干净 VM 与桌面自动化（EXT02）", "status": "BLOCKED_EXTERNAL", "note": "Linux+wine 构建 ≠ 实机安装/双击/退出重启/保留数据验收，四条证据线分别记录（ADR-0003）" },
     { "gate": "正式签名发布 (S13)", "reason": "无发布签名身份/凭据（EXT07）", "status": "BLOCKED_EXTERNAL" },
     { "gate": "在线更新发布", "reason": "无分发地址与可信更新公钥（EXT08）", "status": "BLOCKED_EXTERNAL" }
   ],

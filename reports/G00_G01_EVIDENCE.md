@@ -14,7 +14,9 @@
 | `npm run lint`（eslint） | PASS（无告警/错误） |
 | `npm run test:unit`（vitest） | PASS（2 文件 / 14 用例） |
 | `npm run build`（vite 渲染层 + tsc 主/预加载） | PASS（产物见 `apps/desktop/dist/`） |
-| `npm run build:win`（electron-builder NSIS x64） | NOT_RUN（需 Windows/wine 与签名，见下） |
+| `npm run build:win`（electron-builder NSIS x64，Linux+wine） | PASS（未签名工程测试包 `YuwenDesk-Setup-0.1.0-x64.exe`，SHA256 见 `reports/WINDOWS_BUILD.md`） |
+| 单元测试（PR#1 后） | PASS（4 文件 / 24 用例，含幂等/并发/状态证据/安全边界） |
+| 关闭前刷新保存（save-on-quit） | PASS（粘贴后立即关闭仍持久化，见 PR#1 修复） |
 
 ## G01 验收对照（INS-001..006, 008）
 

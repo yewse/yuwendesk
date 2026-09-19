@@ -132,13 +132,15 @@
       "deliverables": [
         "进程与监听记录"
       ],
+      "staging_note": "分期修正(ADR-0003)：INS-008(无本地HTTP/WebSocket监听,P0)属于生产安全不变量,自G01起即在每次构建验证,并保留在G09继续验收;不删除或降低G09/G10要求。INS-001..006的『干净Win11普通用户实机安装验收』需真实Windows环境,与Linux工程验证构建分别记录。",
       "acceptance_ids": [
         "INS-001",
         "INS-002",
         "INS-003",
         "INS-004",
         "INS-005",
-        "INS-006"
+        "INS-006",
+        "INS-008"
       ],
       "status": "NOT_STARTED",
       "rules": [

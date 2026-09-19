@@ -21,9 +21,13 @@ npm run verify:contracts                    # 轻量合同校验
 # 无头环境运行演示（开发/CI 用；教师不使用命令行）
 scripts/dev-run-xvfb.sh                      # 启动 Xvfb :99 + Electron（设 YUWENDESK_DEV_ALLOW_PLATFORM=1）
 
-# Windows 安装包（需 Windows 或配置 wine + 签名凭据）
-npm run -w @yuwendesk/desktop build:win      # electron-builder NSIS x64
+# Windows 安装包（Linux 上需 wine：sudo apt-get install -y wine wine64 wine32:i386）
+# 未签名工程测试包（无证书）：
+CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
+# 产物 apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe（见 reports/WINDOWS_BUILD.md 的 SHA256）
 ```
+
+> Windows 构建现状：Linux+wine 可产出**未签名**安装包（证据线①）。干净 Win11 普通用户**实机安装验收**（②）、**正式签名**（③）、**真实 Grok 连通**（④）仍需外部输入，四者分别记录、不可互相替代（ADR-0003）。
 
 ## 阻断项与所需外部输入（见 planning/EXTERNAL_INPUTS.json）
 
