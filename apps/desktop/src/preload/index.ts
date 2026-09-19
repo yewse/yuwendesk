@@ -9,7 +9,10 @@ import type {
   SaveDraftPayload,
   StatusData
 } from '../shared/ipc';
-import { IPC_SCHEMA_VERSION } from '../shared/ipc';
+
+// 预加载在 sandbox=true 下不能 require 本地模块，因此保持完全自包含：
+// 仅使用类型导入（编译期擦除）与本地常量，运行时只依赖 electron。
+const IPC_SCHEMA_VERSION = '1.0.0';
 
 // 预加载只暴露固定的命名方法，绝不暴露通用 invoke(channel, ...args)、fs、shell 或原始 ipcRenderer。
 function newRequestId(): string {
