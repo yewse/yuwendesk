@@ -45,5 +45,17 @@
     { "gate": "正式签名发布 (S13)", "reason": "无发布签名身份/凭据（EXT07）", "status": "BLOCKED_EXTERNAL" },
     { "gate": "在线更新发布", "reason": "无分发地址与可信更新公钥（EXT08）", "status": "BLOCKED_EXTERNAL" }
   ],
+  "ci_toolchain": {
+    "note": "第三轮 7.2：以下为实际解析身份，非不可变锁定；后续按合同将必要版本与 Action 固定。",
+    "actions": ["actions/checkout@v4", "actions/setup-node@v4", "actions/upload-artifact@v4"],
+    "node": "22",
+    "runner": "windows-latest（本次为 Windows Server 2025 / 10.0.26100，非 Win11 标准账户验收）",
+    "publish_policy": "electron-builder --publish never + publish:null（工程构建显式禁自动发布）",
+    "workflow_trigger": "workflow_dispatch 手动（暂停对 push 的自动公开上传，待可见范围授权）"
+  },
+  "dependency_audit": {
+    "summary": { "moderate": 2, "high": 1, "critical": 1, "total": 4 },
+    "assessment": "全部为 dev/test 工具链（vite/vitest/esbuild/@vitest/mocker），不随产品分发；生产运行时无对应可达路径。详见 reports/AUDIT.md，不执行 npm audit fix --force。"
+  },
   "completion_level": "工程验证版（非正式教学发布）"
 }

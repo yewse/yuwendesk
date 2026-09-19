@@ -2,6 +2,9 @@ appId: org.yuwendesk.app
 productName: 语文备课工作台
 copyright: YuwenDesk
 
+# 工程构建显式禁止自动发布（只由已批准的 CI 工件步骤分发；不外发到任何 Release/渠道）。
+publish: null
+
 directories:
   output: release
   buildResources: build

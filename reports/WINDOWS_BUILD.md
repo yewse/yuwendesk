@@ -23,6 +23,14 @@
   - 原生 Windows 构建哈希与 Linux+wine 构建（`3e6c1c03…`）不同，属正常（来源不同）。
 - **需持有人确认的最小事项（工件可见范围）**：当前仓库为 public，GitHub Actions 工作流工件对可访问该仓库 Actions 的人可下载。请确认此可见范围在既有授权内；若不允许，请指定一个私有工件渠道。**未建立公开 Release、未改仓库可见性、未采购服务、未把 111MB 二进制塞入 git 历史（GitHub 普通文件上限 100MiB）。**
 
+### 第三轮（7.1）：已暂停自动公开上传
+
+- 由于公开工件可见范围尚未明确授权，`.github/workflows/windows-build.yml` 已改为 **仅 `workflow_dispatch` 手动触发**（移除 push 自动触发），避免每次修复提交都产生新的公开工件。
+- 构建显式 `--publish never`（脚本）+ `publish: null`（electron-builder.yml），工程构建禁止任何自动发布，仅由已批准的 artifact 步骤分发。
+- 本轮修复后**在本地（Linux+wine）重建**未签名 EXE 以获得绑定修复提交的新哈希；**未新增公开上传**。文件交付待持有人明确可见范围授权（或指定私有渠道）后，通过手动 `workflow_dispatch` 或私有渠道进行。
+- ACTION/工具链版本：Actions 使用 `@v4`、Node 22、runner `windows-latest`（Windows Server 2025 / 10.0.26100，非 Win11 验收）——记录为实际解析身份，不声称不可变锁定。
+- 依赖 audit：见 `reports/AUDIT.md`（4 项均 dev/test 链，不随产品分发，不 force 修复）。
+
 ## 五条证据线分别记录，不得互相替代
 
 | 证据线 | 状态 |

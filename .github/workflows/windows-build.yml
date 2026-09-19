@@ -2,13 +2,13 @@ name: Windows 未签名工程测试包
 
 # 目的：在原生 Windows x64 runner 上以锁文件驱动（npm ci）可重复地构建未签名 NSIS 安装包，
 # 并作为工作流工件上传（含 SHA256）。这是"工程验证，非正式教学发布"。
-# 不注入真实签名私钥或 Grok 密钥；正式签名发布是独立门（见 reports/WINDOWS_BUILD.md）。
-# 触发：手动 workflow_dispatch，或推送到 cursor/* 分支。
+# 不注入真实签名私钥或 Grok 密钥；构建显式 --publish never，正式签名发布是独立门。
+#
+# 可见范围控制（第三轮 7.1）：当前仓库为 public，工作流工件对可访问 Actions 者可下载。
+# 在持有人明确授权"公开工程工件可见范围"前，**仅手动触发**（workflow_dispatch），
+# 不对 push 自动触发/自动上传，避免每次修复提交都产生新的公开工件。
 on:
   workflow_dispatch: {}
-  push:
-    branches:
-      - 'cursor/**'
 
 permissions:
   contents: read
