@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BootstrapData, HealthData } from '../shared/ipc';
+import type { BootstrapData, HealthData, SourceHitDTO, SourceListItemDTO, SourceReadDTO } from '../shared/ipc';
 import { DraftController, DraftSnapshot, getDraftController } from './draftController';
 
 type NavKey = 'prepare' | 'courses' | 'resources' | 'settings';
@@ -230,17 +230,193 @@ function CoursesPage(): JSX.Element {
   );
 }
 
+const SUPPORTED_EXT: Record<string, string> = { txt: 'txt', md: 'md', markdown: 'md', csv: 'csv' };
+
+function classifyLabel(c: string): string {
+  return (
+    { public_reference: '公开参考', licensed_reference: '授权参考', teacher_private: '教师私有', student_sensitive: '学生敏感' }[c] ?? c
+  );
+}
+
 function ResourcesPage(): JSX.Element {
+  const [sources, setSources] = useState<SourceListItemDTO[]>([]);
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<SourceHitDTO[]>([]);
+  const [searched, setSearched] = useState(false);
+  const [reader, setReader] = useState<(SourceReadDTO & { hitContextQuery?: string }) | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  async function reloadList(): Promise<void> {
+    const r = await window.yuwen.listSources();
+    if (r.ok) setSources(r.data.sources);
+  }
+  useEffect(() => {
+    void reloadList();
+  }, []);
+
+  async function importFiles(files: FileList | File[]): Promise<void> {
+    setBusy(true);
+    const summary: string[] = [];
+    for (const file of Array.from(files)) {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+      const format = SUPPORTED_EXT[ext];
+      if (!format) {
+        summary.push(`跳过「${file.name}」：暂不支持的格式（当前支持 txt / md / csv）`);
+        continue;
+      }
+      const content = await file.text();
+      const r = await window.yuwen.importSource({ title: file.name, format, content });
+      if (!r.ok) {
+        summary.push(`「${file.name}」导入失败：${r.error.message_zh}`);
+        continue;
+      }
+      const d = r.data;
+      if (d.status === 'imported') summary.push(`「${file.name}」已导入（v${d.version}，hash ${d.contentHash?.slice(0, 8)}…）`);
+      else if (d.status === 'new_version') summary.push(`「${file.name}」内容变更 → 新版本 v${d.version}（版本冲突已标记）`);
+      else if (d.status === 'duplicate') summary.push(`「${file.name}」内容重复（同哈希，未新增版本）`);
+    }
+    setMessage(summary.join('；'));
+    await reloadList();
+    if (query.trim()) await runSearch(query);
+    setBusy(false);
+  }
+
+  async function runSearch(q: string): Promise<void> {
+    const term = q.trim();
+    if (!term) {
+      setHits([]);
+      setSearched(false);
+      return;
+    }
+    const r = await window.yuwen.searchSources(term);
+    setHits(r.ok ? r.data.hits : []);
+    setSearched(true);
+  }
+
+  async function openOriginal(hit: SourceHitDTO): Promise<void> {
+    const r = hit.anchor
+      ? await window.yuwen.readSource(hit.versionId, hit.anchor.char_start, hit.anchor.char_end)
+      : await window.yuwen.readSource(hit.versionId);
+    if (r.ok) setReader({ ...r.data, hitContextQuery: query.trim() });
+  }
+
+  async function retire(documentId: string): Promise<void> {
+    await window.yuwen.retireSource(documentId);
+    await reloadList();
+    if (query.trim()) await runSearch(query);
+  }
+
   return (
     <div className="page">
       <h1>资料</h1>
-      <p className="lead">拖拽导入教材与资源，查看来源与教材覆盖。所有资料先在本机处理。</p>
-      <div className="card">
-        <div className="card-title">导入（后续开放）</div>
-        <p className="muted">
-          安全解析导入、中文全文检索与精确原文定位将在 G03 开放。学生原始材料默认仅本地保存并加密，不外发。
-        </p>
+      <p className="lead">导入教材与自拟资料，做中文全文检索并精确定位到原文。所有资料先在本机处理。</p>
+
+      <div
+        className={`dropzone ${dragOver ? 'over' : ''}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (e.dataTransfer.files.length) void importFiles(e.dataTransfer.files);
+        }}
+      >
+        <p className="muted">拖拽 txt / md / csv 文件到此处，或</p>
+        <button className="btn" disabled={busy} onClick={() => fileRef.current?.click()}>
+          选择文件导入
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          accept=".txt,.md,.markdown,.csv"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            if (e.target.files?.length) void importFiles(e.target.files);
+            e.target.value = '';
+          }}
+        />
+        {message && <p className="notice small">{message}</p>}
       </div>
+
+      <div className="card">
+        <div className="card-title">检索与原文定位</div>
+        <div className="row">
+          <input
+            className="search-input"
+            placeholder="输入关键词（支持单字短词回退）"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void runSearch(query);
+            }}
+          />
+          <button className="btn" onClick={() => void runSearch(query)}>
+            搜索
+          </button>
+        </div>
+        {searched && hits.length === 0 && <p className="muted small">未找到匹配的资料。</p>}
+        <ul className="hit-list">
+          {hits.map((h) => (
+            <li key={h.versionId + (h.anchor?.char_start ?? -1)} className="hit">
+              <div className="hit-head">
+                <b>{h.title}</b>
+                <span className="tag">v{h.version}</span>
+                {h.anchor && <span className="muted small">第 {h.anchor.line} 行 · 字符 {h.anchor.char_start}–{h.anchor.char_end}</span>}
+              </div>
+              <div className="hit-context">…{h.context}…</div>
+              <button className="btn small" onClick={() => void openOriginal(h)}>
+                查看原文
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="card">
+        <div className="card-title">已导入资料（{sources.length}）</div>
+        {sources.length === 0 && <p className="muted small">暂无资料。用上方导入自拟的 txt / md / csv 打通完整路径。</p>}
+        <ul className="src-list">
+          {sources.map((s) => (
+            <li key={s.documentId} className="src-item">
+              <div>
+                <b>{s.title}</b>{' '}
+                <span className="tag">v{s.version}</span>{' '}
+                <span className="tag">{classifyLabel(s.classification)}</span>{' '}
+                {s.status === 'retired' ? <span className="pill pill-off">已停用</span> : <span className="pill pill-on">启用中</span>}
+                <div className="muted small mono">hash {s.contentHash?.slice(0, 16)}…</div>
+              </div>
+              {s.status !== 'retired' && (
+                <button className="btn small" onClick={() => void retire(s.documentId)}>
+                  停用
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {reader && (
+        <div className="reader-mask" onClick={() => setReader(null)}>
+          <div className="reader" onClick={(e) => e.stopPropagation()}>
+            <div className="reader-head">
+              <b>{reader.title}</b> <span className="tag">v{reader.version}</span>
+              {reader.char_start !== null && <span className="muted small">定位跨度 {reader.char_start}–{reader.char_end}</span>}
+              <button className="btn small" onClick={() => setReader(null)}>
+                关闭
+              </button>
+            </div>
+            <pre className="reader-body">{reader.text}</pre>
+            {reader.truncated && <p className="muted small">（原文较长，已截断预览）</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

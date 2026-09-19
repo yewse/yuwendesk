@@ -337,3 +337,112 @@ h1 {
   border: 1px solid #efd9ad;
   color: var(--amber);
 }
+
+/* ===== G03 资料页 ===== */
+.dropzone {
+  border: 1px dashed #c9d3e0;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  background: #fbfcfe;
+  margin-bottom: 16px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone.over {
+  border-color: var(--accent, #3b6cff);
+  background: #eef3ff;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.search-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #d3dae4;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.hit-list,
+.src-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hit {
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+}
+.hit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.hit-context {
+  background: #f6f8fb;
+  border-left: 3px solid var(--accent, #3b6cff);
+  padding: 6px 10px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.src-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+}
+.btn.small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.reader-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 28, 40, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.reader {
+  background: #fff;
+  border-radius: 12px;
+  width: min(760px, 90vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+}
+.reader-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-bottom: 1px solid #eef1f6;
+}
+.reader-head .btn {
+  margin-left: auto;
+}
+.reader-body {
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+  line-height: 1.7;
+}
