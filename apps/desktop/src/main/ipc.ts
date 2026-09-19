@@ -72,32 +72,8 @@ export function validateEnvelope(op: string, req: unknown): IpcResponse<never> |
   return null;
 }
 
-// 有界的幂等结果缓存：记录已处理的 idempotency_key → {载荷指纹, 确定性响应}。
-// 用于安全地忽略网络重试/重放导致的重复写入（不重复递增版本、不误报冲突）。
-// 只缓存"确定性结果"（成功 / 版本冲突 / 载荷非法）；瞬时写盘失败不缓存，允许重试。
-const IDEMPOTENCY_CACHE_LIMIT = 256;
-
-interface IdempotentEntry {
-  fingerprint: string;
-  response: IpcResponse;
-}
-
 export class IpcService {
-  private readonly idempotency = new Map<string, IdempotentEntry>();
-  // 同键并发在途请求去重：并发重放共享同一 promise，避免二者都写入或互相误报冲突。
-  private readonly inflight = new Map<string, { fingerprint: string; promise: Promise<IpcResponse> }>();
-
   constructor(private readonly ctx: IpcServiceContext) {}
-
-  private rememberIdempotent(key: string, fingerprint: string, res: IpcResponse): void {
-    if (this.idempotency.has(key)) this.idempotency.delete(key);
-    this.idempotency.set(key, { fingerprint, response: res });
-    while (this.idempotency.size > IDEMPOTENCY_CACHE_LIMIT) {
-      const oldest = this.idempotency.keys().next().value;
-      if (oldest === undefined) break;
-      this.idempotency.delete(oldest);
-    }
-  }
 
   async handle(op: string, req: unknown): Promise<IpcResponse> {
     const invalid = validateEnvelope(op, req);
@@ -211,56 +187,37 @@ export class IpcService {
     }
     const fp = this.fingerprint(payload.content, rev);
 
-    // 幂等缓存命中：同键同请求→返回原确定性结果；同键异请求→拒绝键复用（T06，不冒充旧成功）。
-    const cached = this.idempotency.get(key);
-    if (cached) {
-      if (cached.fingerprint === fp) return cached.response as IpcResponse<DraftData>;
-      return errorResponse('INPUT_INVALID', '同一幂等键被用于不同的请求。', '请为新的修改使用新的请求标识。');
-    }
-    // 在途去重：同键同请求并发→共享同一 Promise（T07，避免二者都写或误报冲突）；同键异请求→拒绝。
-    const pending = this.inflight.get(key);
-    if (pending) {
-      if (pending.fingerprint === fp) return (await pending.promise) as IpcResponse<DraftData>;
-      return errorResponse('INPUT_INVALID', '同一幂等键正在被另一请求使用。', '请为新的修改使用新的请求标识。');
-    }
-
-    const promise = this.commitSaveDraft(payload.content, rev);
-    this.inflight.set(key, { fingerprint: fp, promise });
-    let res: IpcResponse;
+    // T04：幂等业务提交由存储层在同一事务完成（业务修改 + 持久幂等结果 + outbox 事件）。
+    // 幂等/冲突/键复用语义与并发/跨重启去重由存储层保证（SqliteStore 持久；LocalStore 会话内）。
     try {
-      res = await promise;
-    } finally {
-      this.inflight.delete(key);
-    }
-    // 仅缓存确定性结果（成功 / 版本冲突）；瞬时写盘失败不缓存，允许重试后成功。
-    if (res.ok || res.error.code === 'VERSION_CONFLICT') {
-      this.rememberIdempotent(key, fp, res);
-    }
-    return res as IpcResponse<DraftData>;
-  }
-
-  // 版本检查 + 写盘 + 内存提交在存储层同一原子边界内完成（修 R3-01：检查不再在写队列之外）。
-  private async commitSaveDraft(content: string, expectedRevision: number): Promise<IpcResponse<DraftData>> {
-    try {
-      const r = await this.ctx.store.saveDraftExpecting(content, expectedRevision);
-      if (r.ok) {
-        return { ok: true, data: { content: r.draft.content, revision: r.draft.revision, updated_at: r.draft.updated_at } };
+      const r = await this.ctx.store.commitDraftSave({
+        idempotencyKey: key,
+        fingerprint: fp,
+        content: payload.content,
+        expectedRevision: rev
+      });
+      switch (r.status) {
+        case 'applied':
+        case 'replayed':
+          return { ok: true, data: { content: r.draft.content, revision: r.draft.revision, updated_at: r.draft.updated_at } };
+        case 'conflict':
+          return errorResponse(
+            'VERSION_CONFLICT',
+            '本地草稿已在别处更新，为避免覆盖已停止保存。',
+            '请刷新查看最新草稿后重试。'
+          );
+        case 'key_reuse':
+          return errorResponse('INPUT_INVALID', '同一幂等键被用于不同的请求。', '请为新的修改使用新的请求标识。');
       }
-      return errorResponse(
-        'VERSION_CONFLICT',
-        '本地草稿已在别处更新，为避免覆盖已停止保存。',
-        '请刷新查看最新草稿后重试。'
-      );
     } catch (e) {
       if (e instanceof StoreProtectedError) {
-        // 源文件未成功读取或损坏隔离失败：为避免覆盖，暂停保存，需先恢复。
         return errorResponse(
           'DATABASE_LOCKED',
           '本地数据文件未能可靠读取或隔离，已暂停保存以防覆盖。',
           '请在设置中查看数据恢复；恢复完成前不会写入。'
         );
       }
-      // 写盘失败：返回可重试错误，且不缓存（store 保证内存版本未被提前改动，T08）。
+      // 写盘/必需记录等失败：可重试错误，不落幂等（store 事务已回滚，未提交）。
       return errorResponse('DISK_FULL', '保存到本地失败，磁盘可能空间不足或暂不可写。', '请检查磁盘空间后重试。', true);
     }
   }

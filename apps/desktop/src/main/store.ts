@@ -29,6 +29,19 @@ export type SaveExpectResult =
   | { ok: true; draft: DraftState }
   | { ok: false; reason: 'conflict'; current: DraftState };
 
+// 草稿保存的幂等业务提交（T04）：业务修改 + 幂等结果 + 事件在同一事务内提交。
+export interface DraftCommitOp {
+  idempotencyKey: string;
+  fingerprint: string; // 绑定（基线版本 + 载荷）的确定性指纹
+  content: string;
+  expectedRevision: number;
+}
+export type DraftCommitResult =
+  | { status: 'applied'; draft: DraftState }
+  | { status: 'replayed'; draft: DraftState } // 同键同请求重放：返回原结果，不重复修改
+  | { status: 'conflict'; current: DraftState }
+  | { status: 'key_reuse' }; // 同键异请求：拒绝
+
 // 草稿存储接口：LocalStore（JSON，G01）与 SqliteStore（G02）均实现，供主进程/IPC 无缝切换。
 export interface DraftStore {
   load(): Promise<void>;
@@ -36,6 +49,8 @@ export interface DraftStore {
   getWindow(): WindowState;
   saveDraft(content: string): Promise<DraftState>;
   saveDraftExpecting(content: string, expectedRevision: number): Promise<SaveExpectResult>;
+  // 幂等业务提交：将版本检查、草稿修改、幂等结果与 outbox 事件置于同一事务；失败回滚。
+  commitDraftSave(op: DraftCommitOp): Promise<DraftCommitResult>;
   saveWindow(win: WindowState): Promise<void>;
   probeWritable(): Promise<boolean>;
   isProtected(): boolean;
@@ -226,6 +241,36 @@ export class LocalStore {
       await this.writer(this.filePath, JSON.stringify(candidate, null, 2));
       this.state = candidate;
     });
+  }
+
+  // 幂等业务提交（LocalStore：会话内内存幂等 + 在途去重；跨重启持久由 SqliteStore 实现）。
+  private readonly idemCache = new Map<string, { fingerprint: string; result: DraftCommitResult }>();
+  private readonly idemInflight = new Map<string, { fingerprint: string; promise: Promise<DraftCommitResult> }>();
+
+  async commitDraftSave(op: DraftCommitOp): Promise<DraftCommitResult> {
+    const cached = this.idemCache.get(op.idempotencyKey);
+    if (cached) return cached.fingerprint === op.fingerprint ? this.asReplay(cached.result) : { status: 'key_reuse' };
+    const pending = this.idemInflight.get(op.idempotencyKey);
+    if (pending) return pending.fingerprint === op.fingerprint ? pending.promise : { status: 'key_reuse' };
+
+    const promise = (async (): Promise<DraftCommitResult> => {
+      const r = await this.saveDraftExpecting(op.content, op.expectedRevision);
+      return r.ok ? { status: 'applied', draft: r.draft } : { status: 'conflict', current: r.current };
+    })();
+    this.idemInflight.set(op.idempotencyKey, { fingerprint: op.fingerprint, promise });
+    let result: DraftCommitResult;
+    try {
+      result = await promise;
+    } finally {
+      this.idemInflight.delete(op.idempotencyKey);
+    }
+    // 仅缓存确定性结果（applied/conflict）；写盘失败已在 saveDraftExpecting 抛出并向上传播，不缓存。
+    this.idemCache.set(op.idempotencyKey, { fingerprint: op.fingerprint, result });
+    return result;
+  }
+
+  private asReplay(result: DraftCommitResult): DraftCommitResult {
+    return result.status === 'applied' ? { status: 'replayed', draft: result.draft } : result;
   }
 
   storageWritable(): boolean {

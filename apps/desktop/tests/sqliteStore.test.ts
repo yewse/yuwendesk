@@ -239,6 +239,76 @@ describe('SqliteStore 高版本/必需记录（拒写与不假成功）', () => 
   });
 });
 
+describe('SqliteStore T04 持久幂等 + outbox 单事务', () => {
+  const op = (key: string, content: string, expected: number, fp?: string) => ({
+    idempotencyKey: key,
+    fingerprint: fp ?? `${expected}\u0000${content}`,
+    content,
+    expectedRevision: expected
+  });
+
+  it('applied：写入草稿并在同一事务记录 outbox 事件与幂等结果', async () => {
+    const dir = tmp();
+    const s = makeStore(dir);
+    await s.load();
+    const r = await s.commitDraftSave(op('k1', '第一次', 0));
+    expect(r.status).toBe('applied');
+    expect(s.getDraft()).toMatchObject({ content: '第一次', revision: 1 });
+    expect(s.outboxCount()).toBe(1);
+    expect(s.readOutbox()[0].event_type).toBe('draft.saved');
+  });
+
+  it('跨重启（新连接）重放同键同请求：replayed，不重复修改、不新增 outbox', async () => {
+    const dir = tmp();
+    const a = makeStore(dir);
+    await a.load();
+    await a.commitDraftSave(op('k1', '内容A', 0));
+    expect(a.getDraft().revision).toBe(1);
+    expect(a.outboxCount()).toBe(1);
+    a.close();
+    open.delete(a);
+    // 新连接（模拟重启）后以相同 key+指纹重试
+    const b = makeStore(dir);
+    await b.load();
+    const replay = await b.commitDraftSave(op('k1', '内容A', 0));
+    expect(replay.status).toBe('replayed');
+    expect(b.getDraft().revision).toBe(1); // 未重复递增
+    expect(b.outboxCount()).toBe(1); // 未新增事件
+  });
+
+  it('同键异请求（不同指纹）→ key_reuse，不修改', async () => {
+    const dir = tmp();
+    const s = makeStore(dir);
+    await s.load();
+    await s.commitDraftSave(op('k1', 'A', 0));
+    const reuse = await s.commitDraftSave(op('k1', 'B', 0));
+    expect(reuse.status).toBe('key_reuse');
+    expect(s.getDraft().content).toBe('A');
+    expect(s.outboxCount()).toBe(1);
+  });
+
+  it('过期版本 → conflict 并记录；重放返回 conflict、不写入', async () => {
+    const dir = tmp();
+    const s = makeStore(dir);
+    await s.load();
+    await s.commitDraftSave(op('k1', 'A', 0)); // rev1
+    const c = await s.commitDraftSave(op('k2', 'B', 0)); // 期望0，实际1
+    expect(c.status).toBe('conflict');
+    expect(s.getDraft()).toMatchObject({ content: 'A', revision: 1 });
+    const replay = await s.commitDraftSave(op('k2', 'B', 0));
+    expect(replay.status).toBe('conflict');
+  });
+
+  it('必需记录缺失 → 抛出并回滚（不写 outbox/幂等）', async () => {
+    const dir = tmp();
+    const s = makeStore(dir);
+    await s.load();
+    s.withTransaction((db) => db.prepare('DELETE FROM draft WHERE id=1').run());
+    await expect(s.commitDraftSave(op('k1', 'x', 0))).rejects.toThrow(/draft_row_missing|zero_rows/);
+    expect(s.outboxCount()).toBe(0); // 回滚，无事件
+  });
+});
+
 describe('SqliteStore 保护态', () => {
   it('probeWritable 在可写目录为 true', async () => {
     const dir = tmp();

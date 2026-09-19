@@ -119,4 +119,21 @@ describe('IPC + 真实 SqliteStore 回归：幂等/并发/版本冲突/失败保
     const r = await svc.handle('ui.saveDraft', saveReq('k', 'x', 0));
     expect(r.ok).toBe(false);
   });
+
+  it('T04 跨进程/重启重试：新 SqliteStore+IpcService 同键重放不重复修改、无新增 outbox', async () => {
+    const dir = tmp();
+    const a = await svcOn(dir);
+    const first = await a.svc.handle('ui.saveDraft', saveReq('same-key', '内容', 0));
+    expect(first.ok).toBe(true);
+    expect(a.store.getDraft().revision).toBe(1);
+    expect(a.store.outboxCount()).toBe(1);
+    a.store.close();
+    stores.delete(a.store);
+    // 模拟重启：新 store + 新 IpcService，相同 key/内容/基线重试
+    const b = await svcOn(dir);
+    const retry = await b.svc.handle('ui.saveDraft', saveReq('same-key', '内容', 0));
+    expect(retry.ok).toBe(true);
+    expect(b.store.getDraft().revision).toBe(1); // 未重复递增
+    expect(b.store.outboxCount()).toBe(1); // 未新增事件
+  });
 });

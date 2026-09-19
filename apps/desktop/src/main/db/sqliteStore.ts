@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { existsSync, mkdirSync, promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { LocalStore } from '../store';
-import type { DraftState, SaveExpectResult, StoreIo, WindowState } from '../store';
+import type { DraftCommitOp, DraftCommitResult, DraftState, SaveExpectResult, StoreIo, WindowState } from '../store';
 import { StoreProtectedError } from '../store';
 
 export interface SqliteStoreOptions {
@@ -48,6 +48,29 @@ const MIGRATIONS: Migration[] = [
         );
         INSERT OR IGNORE INTO draft (id, content, revision, updated_at) VALUES (1, '', 0, NULL);
         INSERT OR IGNORE INTO window (id, width, height, x, y) VALUES (1, 1180, 800, NULL, NULL);
+      `);
+    }
+  },
+  {
+    version: 2,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS idempotency (
+          key              TEXT PRIMARY KEY,
+          fingerprint      TEXT NOT NULL,
+          status           TEXT NOT NULL,            -- applied | conflict
+          draft_content    TEXT,
+          draft_revision   INTEGER,
+          draft_updated_at TEXT,
+          current_revision INTEGER,
+          created_at       TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS outbox (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_type TEXT NOT NULL,
+          payload    TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
       `);
     }
   }
@@ -318,7 +341,77 @@ export class SqliteStore {
     tx.immediate(win);
   }
 
-  // 通用事务原语（供 G02-T04 业务事件事务复用）：抛出即回滚，不改动已提交状态。
+  // T04 幂等业务提交：幂等检查 + 版本检查 + 草稿修改 + 幂等结果 + outbox 事件在同一 IMMEDIATE 事务；
+  // 任一必要步骤失败则整体回滚。持久幂等表使跨进程/重启重试不重复修改；同键异请求拒绝。
+  async commitDraftSave(op: DraftCommitOp): Promise<DraftCommitResult> {
+    this.assertWritable();
+    const db = this.requireDb();
+    const tx = db.transaction((o: DraftCommitOp): DraftCommitResult => {
+      const existing = db.prepare('SELECT * FROM idempotency WHERE key=?').get(o.idempotencyKey) as
+        | {
+            fingerprint: string;
+            status: string;
+            draft_content: string | null;
+            draft_revision: number | null;
+            draft_updated_at: string | null;
+          }
+        | undefined;
+      if (existing) {
+        if (existing.fingerprint !== o.fingerprint) return { status: 'key_reuse' };
+        if (existing.status === 'applied') {
+          return {
+            status: 'replayed',
+            draft: {
+              content: existing.draft_content ?? '',
+              revision: existing.draft_revision ?? 0,
+              updated_at: existing.draft_updated_at
+            }
+          };
+        }
+        // 已记录的确定性冲突：返回当前值（不重复修改）。
+        return { status: 'conflict', current: this.readDraft() };
+      }
+
+      const row = this.readDraftRow();
+      if (!row) throw new Error('draft_row_missing'); // 必需记录缺失不得返回成功
+      const now = new Date().toISOString();
+      if (row.revision !== o.expectedRevision) {
+        db.prepare(
+          'INSERT INTO idempotency(key,fingerprint,status,current_revision,created_at) VALUES(?,?,?,?,?)'
+        ).run(o.idempotencyKey, o.fingerprint, 'conflict', row.revision, now);
+        return { status: 'conflict', current: { content: row.content, revision: row.revision, updated_at: row.updated_at } };
+      }
+      const info = db.prepare('UPDATE draft SET content=?, revision=revision+1, updated_at=? WHERE id=1').run(o.content, now);
+      if (info.changes !== 1) throw new Error('draft_update_zero_rows'); // 零行不得返回成功 → 抛出触发回滚
+      const d = this.readDraft();
+      db.prepare('INSERT INTO outbox(event_type,payload,created_at) VALUES(?,?,?)').run(
+        'draft.saved',
+        JSON.stringify({ revision: d.revision }),
+        now
+      );
+      db.prepare(
+        'INSERT INTO idempotency(key,fingerprint,status,draft_content,draft_revision,draft_updated_at,created_at) VALUES(?,?,?,?,?,?,?)'
+      ).run(o.idempotencyKey, o.fingerprint, 'applied', d.content, d.revision, d.updated_at, now);
+      return { status: 'applied', draft: d };
+    });
+    return tx.immediate(op);
+  }
+
+  // outbox 只读访问（测试/后续投递用）。
+  outboxCount(): number {
+    if (!this.db) return 0;
+    const row = this.db.prepare('SELECT COUNT(*) c FROM outbox').get() as { c: number };
+    return row.c;
+  }
+  readOutbox(): { event_type: string; payload: string }[] {
+    if (!this.db) return [];
+    return this.db.prepare('SELECT event_type, payload FROM outbox ORDER BY id').all() as {
+      event_type: string;
+      payload: string;
+    }[];
+  }
+
+  // 通用事务原语（供业务事件事务复用）：抛出即回滚，不改动已提交状态。
   withTransaction<T>(fn: (db: Database.Database) => T): T {
     this.assertWritable();
     const db = this.requireDb();
