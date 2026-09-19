@@ -80,13 +80,18 @@ export interface BootstrapData {
 export interface HealthData {
   main_process: 'ok';
   renderer_channel: 'ok';
-  storage_writable: boolean;
-  http_listeners: number; // 生产环境必须为 0
-  offline_ready: boolean;
-  // 真实运行标志（状态证据，不写死）：便于界面如实提示是否处于开发/非沙箱模式。
+  // 运行时探针：实际写入并清理一个临时文件后的真实结果（非"尝试建目录"的常量）。
+  storage_probe: 'ok' | 'failed';
+  // 设计保证（非运行时端口扫描）：应用不启动任何本地 HTTP/WebSocket 服务。
+  // INS-008 的验收以系统级外部证据（进程/监听套接字）为准，不以本字段替代。
+  local_http_service: 'not_started_by_design';
+  // 设计能力：离线可查阅/编辑/导出现有内容；非"当前是否联网"的实时检测。
+  offline_capable_by_design: boolean;
+  // 真实运行标志（状态证据，不写死）。
   build_mode: 'development' | 'production';
-  sandbox_enabled: boolean;
+  sandbox_enabled: boolean; // 仅启动参数层面的指示，非全进程 OS 隔离实测
   platform_dev_override: boolean;
+  recovered_from_corruption: boolean;
 }
 
 export interface StatusData {

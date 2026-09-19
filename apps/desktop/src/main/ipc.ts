@@ -68,18 +68,26 @@ export function validateEnvelope(op: string, req: unknown): IpcResponse<never> |
   return null;
 }
 
-// 有界的幂等结果缓存：记录已处理的 idempotency_key → 响应，
-// 用于安全地忽略网络重试/重放导致的重复写入（不重复递增版本，也不误报冲突）。
+// 有界的幂等结果缓存：记录已处理的 idempotency_key → {载荷指纹, 确定性响应}。
+// 用于安全地忽略网络重试/重放导致的重复写入（不重复递增版本、不误报冲突）。
+// 只缓存"确定性结果"（成功 / 版本冲突 / 载荷非法）；瞬时写盘失败不缓存，允许重试。
 const IDEMPOTENCY_CACHE_LIMIT = 256;
 
+interface IdempotentEntry {
+  fingerprint: string;
+  response: IpcResponse;
+}
+
 export class IpcService {
-  private readonly idempotency = new Map<string, IpcResponse>();
+  private readonly idempotency = new Map<string, IdempotentEntry>();
+  // 同键并发在途请求去重：并发重放共享同一 promise，避免二者都写入或互相误报冲突。
+  private readonly inflight = new Map<string, { fingerprint: string; promise: Promise<IpcResponse> }>();
 
   constructor(private readonly ctx: IpcServiceContext) {}
 
-  private rememberIdempotent(key: string, res: IpcResponse): void {
+  private rememberIdempotent(key: string, fingerprint: string, res: IpcResponse): void {
     if (this.idempotency.has(key)) this.idempotency.delete(key);
-    this.idempotency.set(key, res);
+    this.idempotency.set(key, { fingerprint, response: res });
     while (this.idempotency.size > IDEMPOTENCY_CACHE_LIMIT) {
       const oldest = this.idempotency.keys().next().value;
       if (oldest === undefined) break;
@@ -127,18 +135,20 @@ export class IpcService {
     };
   }
 
-  private health(): IpcResponse<HealthData> {
+  private async health(): Promise<IpcResponse<HealthData>> {
+    const probe = await this.ctx.store.probeWritable();
     return {
       ok: true,
       data: {
         main_process: 'ok',
         renderer_channel: 'ok',
-        storage_writable: this.ctx.store.storageWritable(),
-        http_listeners: this.ctx.httpListeners,
-        offline_ready: true,
+        storage_probe: probe ? 'ok' : 'failed',
+        local_http_service: 'not_started_by_design',
+        offline_capable_by_design: true,
         build_mode: this.ctx.buildMode,
         sandbox_enabled: this.ctx.sandboxEnabled,
-        platform_dev_override: this.ctx.platformDevOverride
+        platform_dev_override: this.ctx.platformDevOverride,
+        recovered_from_corruption: this.ctx.store.recoveredFromCorruption()
       }
     };
   }
@@ -160,6 +170,11 @@ export class IpcService {
     return { ok: true, data: { content: d.content, revision: d.revision, updated_at: d.updated_at } };
   }
 
+  // 稳定的请求指纹：把幂等键绑定到（基线版本 + 载荷）。同键异指纹视为键复用错误。
+  private fingerprint(content: string, expectedRevision: number): string {
+    return `${expectedRevision}\u0000${content}`;
+  }
+
   private async saveDraft(req: IpcRequest<SaveDraftPayload>): Promise<IpcResponse<DraftData>> {
     const payload = req.payload;
     if (!payload || typeof payload.content !== 'string') {
@@ -168,33 +183,65 @@ export class IpcService {
     if (payload.content.length > 200_000) {
       return errorResponse('INPUT_INVALID', '草稿内容过长。', '请缩减内容后重试。');
     }
-    // 幂等：写操作要求 idempotency_key；同一 key 的重放直接返回首次结果，
-    // 避免网络重试/重复派发导致重复写入或误报版本冲突（规范 9.1、10.4 REQUEST_UNCERTAIN）。
     const key = req.idempotency_key;
     if (typeof key !== 'string' || key.length === 0) {
       return errorResponse('INPUT_INVALID', '写操作缺少幂等标识。', '请重试当前操作。');
     }
-    const prior = this.idempotency.get(key);
-    if (prior) return prior as IpcResponse<DraftData>;
+    // F03/T04/T05：expected_revision 在处理边界为必填、非负、安全整数；缺失或错误类型一律拒绝。
+    const rev = req.expected_revision;
+    if (typeof rev !== 'number' || !Number.isSafeInteger(rev) || rev < 0) {
+      return errorResponse(
+        'INPUT_INVALID',
+        '写操作缺少有效的版本号（需非负整数）。',
+        '请刷新查看最新草稿后重试。'
+      );
+    }
+    const fp = this.fingerprint(payload.content, rev);
 
-    // 乐观并发：expected_revision 与当前版本不一致时返回版本冲突，展示差异而非覆盖（规范 7.3）。
+    // 幂等缓存命中：同键同请求→返回原确定性结果；同键异请求→拒绝键复用（T06，不冒充旧成功）。
+    const cached = this.idempotency.get(key);
+    if (cached) {
+      if (cached.fingerprint === fp) return cached.response as IpcResponse<DraftData>;
+      return errorResponse('INPUT_INVALID', '同一幂等键被用于不同的请求。', '请为新的修改使用新的请求标识。');
+    }
+    // 在途去重：同键同请求并发→共享同一 Promise（T07，避免二者都写或误报冲突）；同键异请求→拒绝。
+    const pending = this.inflight.get(key);
+    if (pending) {
+      if (pending.fingerprint === fp) return (await pending.promise) as IpcResponse<DraftData>;
+      return errorResponse('INPUT_INVALID', '同一幂等键正在被另一请求使用。', '请为新的修改使用新的请求标识。');
+    }
+
+    const promise = this.commitSaveDraft(payload.content, rev);
+    this.inflight.set(key, { fingerprint: fp, promise });
+    let res: IpcResponse;
+    try {
+      res = await promise;
+    } finally {
+      this.inflight.delete(key);
+    }
+    // 仅缓存确定性结果（成功 / 版本冲突）；瞬时写盘失败不缓存，允许重试后成功。
+    if (res.ok || res.error.code === 'VERSION_CONFLICT') {
+      this.rememberIdempotent(key, fp, res);
+    }
+    return res as IpcResponse<DraftData>;
+  }
+
+  // 版本检查 + 写盘 + 内存提交处于同一有序边界（写盘成功后才由 store 公布提交）。
+  private async commitSaveDraft(content: string, expectedRevision: number): Promise<IpcResponse<DraftData>> {
     const current = this.ctx.store.getDraft();
-    if (typeof req.expected_revision === 'number' && req.expected_revision !== current.revision) {
-      const conflict = errorResponse(
+    if (expectedRevision !== current.revision) {
+      return errorResponse(
         'VERSION_CONFLICT',
         '本地草稿已在别处更新，为避免覆盖已停止保存。',
         '请刷新查看最新草稿后重试。'
-      ) as IpcResponse<DraftData>;
-      // 冲突结果也按 key 记忆：同一请求重放得到一致的确定性结果，不重复触发写入尝试。
-      this.rememberIdempotent(key, conflict);
-      return conflict;
+      );
     }
-    const saved = await this.ctx.store.saveDraft(payload.content);
-    const res: IpcResponse<DraftData> = {
-      ok: true,
-      data: { content: saved.content, revision: saved.revision, updated_at: saved.updated_at }
-    };
-    this.rememberIdempotent(key, res);
-    return res;
+    try {
+      const saved = await this.ctx.store.saveDraft(content);
+      return { ok: true, data: { content: saved.content, revision: saved.revision, updated_at: saved.updated_at } };
+    } catch {
+      // 写盘失败：返回可重试错误，且不缓存（store 保证内存版本未被提前改动，T08）。
+      return errorResponse('DISK_FULL', '保存到本地失败，磁盘可能空间不足或暂不可写。', '请检查磁盘空间后重试。', true);
+    }
   }
 }
