@@ -92,7 +92,7 @@
 - **可核对结构化定位**：`source_segment` + 段级 FTS，命中定位到页/段落/表格行列/幻灯片，返回结构化 locator + 段内锚点 + 上下文 + 可读标签，不以统一文本行号冒充所有格式位置。
 - **扫描件**：无可提取文字页标记 `scanned/不可靠`，可保留与在列表/版本面板显示，但**不参与可靠检索**、不做 OCR、不以预览/摘要冒充原文核验。
 - **限额/分批/可取消**：原始文件上限 40MB；界面逐文件导入带进度与取消（文件间可取消），保留响应。
-- **实测（真实 Electron，真实 PDF/DOCX 文件）**：合成拖拽(Phase A) 与 **真实文件选择(Phase B，CDP setFileInputFiles 触发真实 `<input type=file>` onChange)** 分别记录；PDF→第1页、DOCX→第2段、表格→第2行第1列定位；扫描件唯一词 0 可靠命中；同名不同内容→需确认→新版本 v2（原件/文本哈希分列）；敏感→PRIVACY_BLOCKED；重启恢复列表与检索。Node 单测 **170 项**（新增 sources-file 8、ipc-sources versions）。证据：`/opt/cursor/artifacts/g03-files-walkthrough.mp4`、`g03f-*.png`、`g03f-transcript.json`。
+- **实测（真实 Electron，真实 PDF/DOCX 文件）**：合成拖拽(Phase A) 与 **真实文件选择(Phase B，CDP setFileInputFiles 触发真实 `<input type=file>` onChange)** 分别记录；PDF→第1页、DOCX→第2段、表格→第2行第1列定位；扫描件唯一词 0 可靠命中；同名不同内容→需确认→新版本 v2（原件/文本哈希分列）；敏感→PRIVACY_BLOCKED；重启恢复列表与检索。Node 单测 **163 项全通过**（新增 sources-file 8、ipc-sources versions 等）。证据：`/opt/cursor/artifacts/g03-files-walkthrough.mp4`、`g03f-*.png`、`g03f-transcript.json`。
 - **支持格式清单**：txt / md / csv / pdf / docx / xlsx / pptx（真实文件）。
 - **明确未验证项**：headless X11 下**原生 OS 文件选择对话框的弹出渲染**未确认（已尝试；不断定必为环境原因；已用 CDP 在 `<input>` 层驱动真实选择路径证明解析与检索不受其阻塞）。敏感学生材料加密业务落点未实现（阻塞）。Grok 连接属 G04。
 
