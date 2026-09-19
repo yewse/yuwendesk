@@ -75,10 +75,30 @@
 - **G02 本地可执行数据能力已交付并联合验证**：Node 128 项 + 真实 Electron 运行（SQLite 保存/迁移/保护/冲突/重载 + 凭据探测 + outbox 单事务）。既有保存/并发/关闭/来源边界/权限经真实 SqliteStore+IPC 回归未退化。证据 artifact `g02_capability_evidence.txt`、`g02_full_run.png`。
 - **未通过外部门**：Windows 目标环境验收（EXT02）BLOCKED_EXTERNAL。依赖后续门（不在 G02 范围）：凭据用户入口 provider.configure IPC/设置界面属 G04；敏感 payload 业务落点（学生材料）属 G03。
 
-## G03–G11 — NOT_STARTED
+### G02 保护加固补丁（同批次，保留已通过正常路径）
 
-资料与引用、Grok 与任务、教学业务 M01–M12、材料交付（含 CR-001 三类五文件，落 G05–G07）、审查与修改、反馈与纠正、备份恢复、升级性能、发布验收，均未开始。界面相应页面标注"后续版本开放"。
+- **T03 敏感读取加固**：新增只读 `readDataKey()`，`getSensitive` 改用之——**读取不自动创建/替换数据密钥**（无密钥→not_found，不生成 secure_key）；有密钥但解不开**不替换**。凭据/敏感读取**遇存储保护态直接拒绝**（不穿透）。
+- **T03 不安全后端拒绝**：新增 `isSecureSafeStorage()`，`basic_text`/`unknown` 降级后端视为不可用；`credentialEncryptionAvailable/protect/wrap` 均基于安全后端——明确拒绝不安全的 safeStorage 降级。
+- **T04 中途故障回归**：`commitDraftSave` 增测试用中途故障注入点（草稿更新后 / outbox 写入后 / 幂等写入前）；验证任一处失败时**草稿+outbox 事件+幂等结果一起回滚**，不改事务主路径。
+- 测试：`credentials-sqlite.test.ts`(10，含不安全后端拒绝/读不建密钥/读不穿保护态)、`sqliteStore.test.ts`(24，含三处中途故障回滚)。仅用虚构数据，不涉真实凭据/学生资料。
+
+## G03 资料导入 / 中文搜索 / 原文定位 — 核心闭环已交付（IN_PROGRESS）
+
+- [x] **数据基础**：SqliteStore 迁移 v4（`source_document` / `source_version` / `source_text` + FTS5 **trigram** 虚表）。
+- [x] **导入 + 来源版本与哈希**：`importSource` 计算 SHA-256 内容哈希；按标题**去重**（同哈希→duplicate，不新增版本）；内容变更→**新版本**并标记 `versionConflict`；空/超限拒绝；敏感分类需安全后端否则**阻塞**（普通非敏感继续）。单事务写入。
+- [x] **提取与精确定位**：抽取全文入库并建 FTS 索引；检索返回**精确锚点**（char_start/char_end/line）+ 上下文；`readSource` 按锚点跨度定位或受限预览。
+- [x] **中文搜索 + 短词回退**：≥3 字用 FTS5 trigram；1–2 字短词**回退 LIKE**（含标题）；仅命中活跃当前版本。
+- [x] **停用 + 重启恢复**：`retireSource` 停用后不再命中；SQLite 持久化，重开连接资料与检索恢复（停用状态持久）。
+- [x] **界面（复用资料页）**：原生文件选择 + 拖拽导入 txt/md/csv（渲染层 `file.text()` 读取，不暴露 fs/dialog）；导入结果提示；检索框（短词回退）；结果卡片（标题/版本/行号/字符跨度/上下文）；查看原文弹层；已导入列表（分类/版本/状态/哈希）+ 停用。
+- [x] **IPC**：白名单新增 `sources.import/list/search/read/retire` + schemaGate 载荷校验；`IpcServiceContext.sourceStore`；preload 命名方法。
+- **实测**：Node 单测 **151 项 PASS**（新增 `sources.test.ts` 11 + `ipc-sources.test.ts` 6）；**真实 Electron 端到端**（真实 preload+渲染层+IPC+SqliteStore，合成 drop 走真实拖拽路径）跑通 导入→去重→新版本→中文检索(FTS)→原文定位→短词回退→无结果→停用→停用后不命中→**重启恢复**，`better-sqlite3`+FTS5 trigram 在 Electron ABI 下验证通过。证据：`/opt/cursor/artifacts/g03-walkthrough.mp4`、`g03e2e-*.png`、`g03e2e-transcript.json`。
+- **本轮范围内格式**：txt / md / csv（自拟非敏感文本）。**未做（G03 剩余）**：PDF / DOCX / XLSX / PPTX 解析导入；扫描件——**不以扫描件预览冒充可靠文字识别**，OCR 未接入即视为不可靠文字，阻塞；不用模型摘要代替原文定位。敏感样例导入待 **G02 安全后端**在目标平台可用后接入（当前 headless Linux 无安全后端→敏感功能阻塞，普通资料继续）。
+- **未通过外部门**：Grok `provider.configure/probe/clear` 真实连接属 G04；缺安全后端时敏感资料落点阻塞（依赖 Windows 加密后端）。
+
+## G04–G11 — NOT_STARTED
+
+Grok 与任务、教学业务 M01–M12、材料交付（含 CR-001 三类五文件，落 G05–G07）、审查与修改、反馈与纠正、备份恢复、升级性能、发布验收，均未开始。界面相应页面标注"后续版本开放"。
 
 ## 下一步
 
-见 `HANDOFF.md`。优先在获得 Windows VM 后完成 G01-T04 安装验收，或在 G02 建立 SQLite/IPC 数据基础。
+见 `HANDOFF.md`。G03 剩余：富格式（PDF/DOCX/XLSX/PPTX）解析导入与扫描件可靠性边界；敏感样例在安全后端可用后接入。外部门保留：G01 目标环境安装验收、Windows 加密、正式签名、真实 API、公开上传授权。
