@@ -212,10 +212,12 @@ export function checkPayload(op: OperationName, payload: unknown): SchemaCheckRe
     if (!hasOwn(schema.properties, key)) errors.push(`不允许的字段 ${key}`);
   }
   for (const req of schema.required) {
-    if (!hasOwn(obj, req)) errors.push(`缺少必填字段 ${req}`);
+    // 必填字段须存在且非 undefined（显式 undefined 视为缺失）。
+    if (!hasOwn(obj, req) || obj[req] === undefined) errors.push(`缺少必填字段 ${req}`);
   }
   for (const [key, fieldSchema] of Object.entries(schema.properties)) {
-    if (hasOwn(obj, key)) validateField(key, fieldSchema, obj[key], errors);
+    // 可选字段值为 undefined 时视为未提供，跳过校验（便于渲染层传可选参数）。
+    if (hasOwn(obj, key) && obj[key] !== undefined) validateField(key, fieldSchema, obj[key], errors);
   }
   return { ok: errors.length === 0, errors };
 }
