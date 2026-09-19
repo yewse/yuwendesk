@@ -17,8 +17,12 @@
     "build:dir": "npm run build && electron-builder --dir --publish never --config electron-builder.yml",
     "build:win": "npm run build && electron-builder --win nsis --x64 --publish never --config electron-builder.yml"
   },
-  "dependencies": {},
+  "dependencies": {
+    "better-sqlite3": "13.0.3"
+  },
   "devDependencies": {
+    "@electron/rebuild": "3.7.1",
+    "@types/better-sqlite3": "7.6.11",
     "@types/node": "20.14.15",
     "@types/react": "18.3.5",
     "@types/react-dom": "18.3.0",

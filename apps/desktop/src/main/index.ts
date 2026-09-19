@@ -9,7 +9,7 @@ import { IpcService } from './ipc';
 import { CloseController } from './lifecycle';
 import { evaluatePlatform } from './platform';
 import { attachCsp, isAllowedExternalUrl, isTrustedRendererUrl, lockdownSession } from './security';
-import { LocalStore } from './store';
+import { SqliteStore } from './db/sqliteStore';
 
 const APP_NAME_ZH = '语文备课工作台';
 
@@ -17,7 +17,7 @@ const APP_NAME_ZH = '语文备课工作台';
 app.setName('YuwenDesk');
 
 let mainWindow: BrowserWindow | null = null;
-let store: LocalStore;
+let store: SqliteStore;
 let ipcService: IpcService;
 let closeController: CloseController | null = null;
 
@@ -199,7 +199,7 @@ async function bootstrap(): Promise<void> {
     console.warn('[YuwenDesk] 开发验证模式：OS 沙箱已禁用（--no-sandbox）。正式发布包不得以该方式运行。');
   }
 
-  store = new LocalStore(app.getPath('userData'));
+  store = new SqliteStore(app.getPath('userData'));
   await store.load();
 
   ipcService = new IpcService({

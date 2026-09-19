@@ -29,6 +29,20 @@ export type SaveExpectResult =
   | { ok: true; draft: DraftState }
   | { ok: false; reason: 'conflict'; current: DraftState };
 
+// 草稿存储接口：LocalStore（JSON，G01）与 SqliteStore（G02）均实现，供主进程/IPC 无缝切换。
+export interface DraftStore {
+  load(): Promise<void>;
+  getDraft(): DraftState;
+  getWindow(): WindowState;
+  saveDraft(content: string): Promise<DraftState>;
+  saveDraftExpecting(content: string, expectedRevision: number): Promise<SaveExpectResult>;
+  saveWindow(win: WindowState): Promise<void>;
+  probeWritable(): Promise<boolean>;
+  isProtected(): boolean;
+  recoveredFromCorruption(): boolean;
+  corruptBackup(): string | null;
+}
+
 // 存储保护错误：读取/隔离失败进入保护态后，任何可能覆盖源文件的写入都以此拒绝。
 export class StoreProtectedError extends Error {
   readonly code = 'STORE_PROTECTED';

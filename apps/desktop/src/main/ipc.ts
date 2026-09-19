@@ -10,7 +10,7 @@ import type {
 } from '../shared/ipc';
 import { IMPLEMENTED_OPERATIONS, IPC_SCHEMA_VERSION } from '../shared/ipc';
 import type { ErrorCode } from '../shared/ipc';
-import type { LocalStore } from './store';
+import type { DraftStore } from './store';
 import { StoreProtectedError } from './store';
 import { checkPayload } from './schemaGate';
 
@@ -24,7 +24,7 @@ function errorResponse(
 }
 
 export interface IpcServiceContext {
-  store: LocalStore;
+  store: DraftStore;
   appVersion: string;
   appNameZh: string;
   platformSupported: boolean;
