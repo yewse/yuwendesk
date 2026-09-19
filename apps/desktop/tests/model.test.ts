@@ -153,15 +153,15 @@ describe('G04 结构化调用 + 上下文边界', () => {
     if (r.status === 'blocked') expect(r.code).toBe('BUDGET_EXCEEDED');
   });
 
-  it('DeepSeek 真实调用 → failed(MODEL_NOT_AVAILABLE)，作业记 failed，不伪造成功', async () => {
+  it('DeepSeek 未授权联网 → 派发前 BLOCKED(MODEL_NOT_AVAILABLE)，不发起、不建作业、不伪造成功', async () => {
     const s = await makeStore(tmp(), fakeSafe());
     const svc = new ModelService(s);
-    svc.configure({ provider: 'deepseek', apiKey: 'sk-x' });
+    svc.configure({ provider: 'deepseek', apiKey: 'sk-x' }); // allowRealNetwork 缺省 false
     const frag = seedFragment(s);
     const r = await svc.run({ task: 'analyze_text', fragments: [{ ...frag, approved: true }] });
-    expect(r.status).toBe('failed');
-    if (r.status === 'failed') expect(r.code).toBe('MODEL_NOT_AVAILABLE');
-    expect(s.listModelJobs(10)[0].status).toBe('failed');
+    expect(r.status).toBe('blocked');
+    if (r.status === 'blocked') expect(r.code).toBe('MODEL_NOT_AVAILABLE');
+    expect(s.listModelJobs(10).length).toBe(0); // 未授权前不派发、不建作业
   });
 });
 

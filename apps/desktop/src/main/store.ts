@@ -158,6 +158,9 @@ export interface SourceStore {
   readOriginal(versionId: string): SourceOriginalResult | null;
   // 版本/权限边界检查所需：由 versionId 反查文档元信息。
   getVersionMeta(versionId: string): SourceVersionMeta | null;
+  // 精确区间读取（不加任何前后文 padding）：用于模型上下文，避免复用带未授权前后文的展示预览。
+  // 返回 { text, fullLength }；调用方据 fullLength 判断是否越界/需扩展授权，不静默截断。
+  readExactRange(versionId: string, charStart: number, charEnd: number): { text: string; fullLength: number } | null;
 }
 export interface SourceVersionMeta {
   documentId: string;

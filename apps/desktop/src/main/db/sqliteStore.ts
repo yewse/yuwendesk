@@ -1042,6 +1042,17 @@ export class SqliteStore {
     return { base64: Buffer.from(row.blob).toString('base64'), originalHash: row.originalHash, byteSize: row.byteSize, mime: row.mime ?? 'application/octet-stream' };
   }
 
+  // 精确区间读取：仅返回 full_text[charStart, charEnd)（无 padding），供模型上下文严格按授权区间使用。
+  readExactRange(versionId: string, charStart: number, charEnd: number): { text: string; fullLength: number } | null {
+    if (!this.db) return null;
+    const row = this.db.prepare('SELECT full_text FROM source_text WHERE version_id=?').get(versionId) as { full_text: string } | undefined;
+    if (!row) return null;
+    const full = row.full_text;
+    const s = Math.max(0, charStart);
+    const e = Math.min(full.length, Math.max(s, charEnd));
+    return { text: full.slice(s, e), fullLength: full.length };
+  }
+
   getVersionMeta(versionId: string): import('../store').SourceVersionMeta | null {
     if (!this.db) return null;
     const r = this.db
@@ -1099,9 +1110,11 @@ export class SqliteStore {
       )
       .run(cfg.provider, cfg.model, cfg.temperature, cfg.maxTokens, cfg.budgetCapCents, cfg.allowRealNetwork ? 1 : 0, cfg.updatedAt);
   }
+  // 预算预留与结算：running 保留预留额、succeeded 结算实际额、uncertain/failed 保留已发生额；cancelled 不计。
+  // 不以“调用失败”直接认定未计费——只有明确未发生（成本置 0）才不计。
   budgetSpentCents(): number {
     if (!this.db) return 0;
-    return (this.db.prepare("SELECT COALESCE(SUM(cost_cents),0) c FROM model_job WHERE status='succeeded'").get() as { c: number }).c;
+    return (this.db.prepare("SELECT COALESCE(SUM(cost_cents),0) c FROM model_job WHERE status != 'cancelled'").get() as { c: number }).c;
   }
   private mapJob(r: Record<string, unknown>): ModelJobRecord {
     return {

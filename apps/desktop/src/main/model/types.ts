@@ -47,10 +47,28 @@ export type ProbeResult =
 export interface CancelSignalLike {
   cancelled: boolean;
 }
+
+// 可注入/可拦截的 HTTP 传输：生产用真实 fetch；测试注入离线替身，禁止测试意外联网。
+export interface TransportRequest {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+  stream: boolean;
+}
+export interface TransportResponse {
+  status: number;
+  // 非流式：JSON 文本；流式：原始 SSE 文本（provider 负责解析）。
+  text: string;
+}
+export type HttpTransport = (req: TransportRequest) => Promise<TransportResponse>;
+
 export interface ModelProvider {
   id: string;
   defaultModel: string;
   requiresKey: boolean;
-  probe(opts: { model: string; apiKey?: string }): Promise<ProbeResult>;
-  complete(req: ModelRequest, ctx: { model: string; apiKey?: string; signal?: CancelSignalLike; timeoutMs: number }): Promise<ModelResult>;
+  // 每千 token 成本（分），用于预算预留与结算估算；测试替身为 0。
+  costPer1kCents: number;
+  probe(opts: { model: string; apiKey?: string; stream?: boolean }): Promise<ProbeResult>;
+  complete(req: ModelRequest, ctx: { model: string; apiKey?: string; signal?: CancelSignalLike; timeoutMs: number; stream?: boolean }): Promise<ModelResult>;
 }

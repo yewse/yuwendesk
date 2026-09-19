@@ -52,6 +52,46 @@ export function taskContract(id: string): string | null {
   return TASKS[id]?.outputContract ?? null;
 }
 
+export type ContractCheck = { ok: true; parsed: unknown } | { ok: false; reason: string };
+
+function isStringArray(v: unknown): boolean {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string');
+}
+function citationsInRange(v: unknown, n: number): boolean {
+  return Array.isArray(v) && v.every((x) => Number.isInteger(x) && (x as number) >= 1 && (x as number) <= n);
+}
+
+// 真实输出合同校验（供真实模型与测试替身共同遵守）：非法 JSON/缺字段/类型错误/越界引用一律判不合格。
+// citationCount = 提供给模型的获准引用数（引用序号须落在 1..citationCount）。
+export function validateContract(outputContract: string, text: string, citationCount: number): ContractCheck {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { ok: false, reason: 'invalid_json' }; // 含被截断的 JSON
+  }
+  if (typeof parsed !== 'object' || parsed === null) return { ok: false, reason: 'not_object' };
+  const o = parsed as Record<string, unknown>;
+  if (outputContract === 'analyze_text.v1') {
+    if (typeof o.summary !== 'string') return { ok: false, reason: 'missing_summary' };
+    if (!isStringArray(o.structure)) return { ok: false, reason: 'bad_structure' };
+    if (!isStringArray(o.rhetoric)) return { ok: false, reason: 'bad_rhetoric' };
+    if (!isStringArray(o.teaching_suggestions)) return { ok: false, reason: 'bad_suggestions' };
+    if (!citationsInRange(o.citations, citationCount)) return { ok: false, reason: 'citation_out_of_range' };
+    return { ok: true, parsed };
+  }
+  if (outputContract === 'lesson_outline.v1') {
+    if (!isStringArray(o.objectives)) return { ok: false, reason: 'bad_objectives' };
+    if (!Array.isArray(o.steps) || o.steps.length === 0) return { ok: false, reason: 'bad_steps' };
+    for (const st of o.steps as Record<string, unknown>[]) {
+      if (typeof st.stage !== 'string' || typeof st.minutes !== 'number' || typeof st.activity !== 'string') return { ok: false, reason: 'bad_step_shape' };
+      if (!citationsInRange(st.citations, citationCount)) return { ok: false, reason: 'citation_out_of_range' };
+    }
+    return { ok: true, parsed };
+  }
+  return { ok: false, reason: 'unknown_contract' };
+}
+
 export interface AssembledPrompt {
   system: string;
   user: string;
