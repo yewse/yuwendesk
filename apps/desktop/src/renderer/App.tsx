@@ -37,12 +37,26 @@ function StatusPill({ online }: { online: boolean }): JSX.Element {
   );
 }
 
+function newIdemKey(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `draft-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+}
+
 function DraftNote(): JSX.Element {
   const [content, setContent] = useState('');
   const [revision, setRevision] = useState(0);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
+
+  const contentRef = useRef('');
+  const revisionRef = useRef(0);
+  const dirtyRef = useRef(false);
+  const keyRef = useRef<string | null>(null);
+  const savingRef = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -50,33 +64,83 @@ function DraftNote(): JSX.Element {
       const r = await window.yuwen.loadDraft();
       if (r.ok) {
         setContent(r.data.content);
+        contentRef.current = r.data.content;
         setRevision(r.data.revision);
+        revisionRef.current = r.data.revision;
         setSavedAt(r.data.updated_at);
       }
     })();
   }, []);
 
-  const persist = useCallback(
-    async (text: string, expected: number) => {
-      setSaving(true);
-      const key = `draft-${Date.now()}`;
-      const r = await window.yuwen.saveDraft(text, expected, key);
-      setSaving(false);
-      if (r.ok) {
-        setRevision(r.data.revision);
-        setSavedAt(r.data.updated_at);
-        setConflict(false);
-      } else if (r.error.code === 'VERSION_CONFLICT') {
-        setConflict(true);
+  // 串行化保存：任一时刻仅一个在途保存；保存期间内容再变则循环续存。
+  // 每段"待保存内容"使用稳定的 idempotency_key，网络重试/关闭刷新与防抖重合时不会重复写入或误报冲突。
+  const runSave = useCallback(async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      while (dirtyRef.current) {
+        const snapshot = contentRef.current;
+        const key = keyRef.current ?? newIdemKey();
+        keyRef.current = key;
+        const r = await window.yuwen.saveDraft(snapshot, revisionRef.current, key);
+        if (r.ok) {
+          revisionRef.current = r.data.revision;
+          setRevision(r.data.revision);
+          setSavedAt(r.data.updated_at);
+          setConflict(false);
+          if (contentRef.current === snapshot) {
+            dirtyRef.current = false;
+            keyRef.current = null;
+          } else {
+            keyRef.current = newIdemKey();
+          }
+        } else if (r.error.code === 'VERSION_CONFLICT') {
+          const latest = await window.yuwen.loadDraft();
+          if (latest.ok) revisionRef.current = latest.data.revision;
+          keyRef.current = newIdemKey();
+          setConflict(true);
+          break;
+        } else {
+          break;
+        }
       }
-    },
-    []
-  );
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }, []);
+
+  const flushNow = useCallback(async () => {
+    if (timer.current) clearTimeout(timer.current);
+    if (dirtyRef.current) await runSave();
+  }, [runSave]);
+
+  // 关闭前刷新 + 切到后台/失焦时落盘（规范 3.3：窗口关闭前自动保存）。
+  useEffect(() => {
+    window.yuwen.onBeforeClose(async () => {
+      await flushNow();
+      window.yuwen.notifyFlushDone();
+    });
+    const onVis = (): void => {
+      if (document.visibilityState === 'hidden') void flushNow();
+    };
+    const onBlur = (): void => void flushNow();
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [flushNow]);
 
   const onChange = (text: string): void => {
     setContent(text);
+    contentRef.current = text;
+    dirtyRef.current = true;
+    keyRef.current = newIdemKey();
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => void persist(text, revision), 600);
+    timer.current = setTimeout(() => void runSave(), 500);
   };
 
   return (
@@ -113,7 +177,17 @@ function HealthPanel({ health }: { health: HealthData | null }): JSX.Element {
           ok: health.http_listeners === 0,
           text: health.http_listeners === 0 ? '无（符合安全要求）' : `${health.http_listeners} 个`
         },
-        { label: '离线可用', ok: health.offline_ready, text: '是' }
+        { label: '离线可用', ok: health.offline_ready, text: '是' },
+        {
+          label: '运行模式',
+          ok: health.build_mode === 'production',
+          text: health.build_mode === 'production' ? '生产' : '开发验证（非正式发布）'
+        },
+        {
+          label: 'OS 沙箱',
+          ok: health.sandbox_enabled,
+          text: health.sandbox_enabled ? '启用' : '已禁用（仅开发验证）'
+        }
       ]
     : [];
   return (

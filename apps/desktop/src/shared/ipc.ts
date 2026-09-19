@@ -83,6 +83,10 @@ export interface HealthData {
   storage_writable: boolean;
   http_listeners: number; // 生产环境必须为 0
   offline_ready: boolean;
+  // 真实运行标志（状态证据，不写死）：便于界面如实提示是否处于开发/非沙箱模式。
+  build_mode: 'development' | 'production';
+  sandbox_enabled: boolean;
+  platform_dev_override: boolean;
 }
 
 export interface StatusData {

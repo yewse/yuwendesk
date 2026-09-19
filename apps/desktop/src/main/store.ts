@@ -32,6 +32,9 @@ const DEFAULT_STATE: PersistShape = {
 export class LocalStore {
   private readonly filePath: string;
   private state: PersistShape;
+  // 串行化写入队列 + 唯一临时文件名，避免并发 flush 争用同一 tmp 文件导致 rename 竞争。
+  private writeChain: Promise<void> = Promise.resolve();
+  private writeSeq = 0;
 
   constructor(userDataDir: string) {
     this.filePath = join(userDataDir, 'yuwendesk-local-state.json');
@@ -88,10 +91,18 @@ export class LocalStore {
     }
   }
 
-  private async flush(): Promise<void> {
-    mkdirSync(dirname(this.filePath), { recursive: true });
-    const tmp = `${this.filePath}.${process.pid}.tmp`;
-    await fs.writeFile(tmp, JSON.stringify(this.state, null, 2), 'utf-8');
-    await fs.rename(tmp, this.filePath);
+  private flush(): Promise<void> {
+    // 逐次串行执行，且每次使用唯一临时文件名，写入后原子改名。
+    const run = async (): Promise<void> => {
+      mkdirSync(dirname(this.filePath), { recursive: true });
+      const snapshot = JSON.stringify(this.state, null, 2);
+      const tmp = `${this.filePath}.${process.pid}.${++this.writeSeq}.${Math.random()
+        .toString(16)
+        .slice(2)}.tmp`;
+      await fs.writeFile(tmp, snapshot, 'utf-8');
+      await fs.rename(tmp, this.filePath);
+    };
+    this.writeChain = this.writeChain.then(run, run);
+    return this.writeChain;
   }
 }

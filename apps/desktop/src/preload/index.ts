@@ -48,7 +48,17 @@ const api = {
       expected_revision: expectedRevision,
       idempotency_key: idempotencyKey,
       payload: { content } satisfies SaveDraftPayload
-    })
+    }),
+  // 关闭前刷新握手：主进程在窗口关闭前通知渲染层落盘；渲染层完成后回执。
+  // 仅暴露固定通道，不暴露任意 send/on。
+  onBeforeClose: (handler: () => void | Promise<void>): void => {
+    ipcRenderer.on('yuwen:before-close', () => {
+      void Promise.resolve(handler());
+    });
+  },
+  notifyFlushDone: (): void => {
+    ipcRenderer.send('yuwen:flush-done');
+  }
 };
 
 export type YuwenApi = typeof api;

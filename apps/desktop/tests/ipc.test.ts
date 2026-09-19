@@ -15,7 +15,10 @@ function makeService(): IpcService {
     appNameZh: '语文备课工作台',
     platformSupported: true,
     httpListeners: 0,
-    online: false
+    online: false,
+    buildMode: 'production',
+    sandboxEnabled: true,
+    platformDevOverride: false
   });
 }
 
@@ -93,6 +96,81 @@ describe('ui.saveDraft 版本并发（规范 7.3）', () => {
   it('拒绝无效 payload', async () => {
     const bad = await svc.handle('ui.saveDraft', envelope('ui.saveDraft', { payload: { content: 123 } }));
     expect(bad.ok).toBe(false);
+  });
+});
+
+describe('ui.saveDraft 幂等（idempotency_key，防重放/网络重试重复写入）', () => {
+  it('相同 idempotency_key 重放只应用一次，返回同一结果而非再次递增或冲突', async () => {
+    const svc = makeService();
+    const first = await svc.handle(
+      'ui.saveDraft',
+      envelope('ui.saveDraft', { expected_revision: 0, idempotency_key: 'same-key', payload: { content: '甲' } })
+    );
+    expect(first.ok).toBe(true);
+    const firstRev = first.ok ? (first.data as { revision: number }).revision : -1;
+    expect(firstRev).toBe(1);
+
+    // 重放同一请求（同 key、同 expected_revision）——例如客户端在 REQUEST_UNCERTAIN 后重试。
+    const replay = await svc.handle(
+      'ui.saveDraft',
+      envelope('ui.saveDraft', { expected_revision: 0, idempotency_key: 'same-key', payload: { content: '甲' } })
+    );
+    expect(replay.ok).toBe(true);
+    if (replay.ok) {
+      // 幂等：版本仍为 1，不得递增到 2，也不得因 expected_revision 过期而返回冲突。
+      expect((replay.data as { revision: number }).revision).toBe(1);
+    }
+
+    const load = await svc.handle('ui.loadDraft', envelope('ui.loadDraft'));
+    if (load.ok) expect((load.data as { content: string }).content).toBe('甲');
+  });
+
+  it('不同 idempotency_key 是不同写入，正常递增', async () => {
+    const svc = makeService();
+    const r1 = await svc.handle('ui.saveDraft', envelope('ui.saveDraft', { expected_revision: 0, idempotency_key: 'k1', payload: { content: '一' } }));
+    const r2 = await svc.handle('ui.saveDraft', envelope('ui.saveDraft', { expected_revision: 1, idempotency_key: 'k2', payload: { content: '二' } }));
+    expect(r1.ok && (r1.data as { revision: number }).revision).toBe(1);
+    expect(r2.ok && (r2.data as { revision: number }).revision).toBe(2);
+  });
+});
+
+describe('ui.saveDraft 并发：冲突时不得部分写入/覆盖', () => {
+  it('过期 expected_revision 冲突后，磁盘内容保持为冲突前的值', async () => {
+    const svc = makeService();
+    await svc.handle('ui.saveDraft', envelope('ui.saveDraft', { expected_revision: 0, idempotency_key: 'a', payload: { content: '原始' } }));
+    const conflict = await svc.handle('ui.saveDraft', envelope('ui.saveDraft', { expected_revision: 0, idempotency_key: 'b', payload: { content: '覆盖尝试' } }));
+    expect(conflict.ok).toBe(false);
+    const load = await svc.handle('ui.loadDraft', envelope('ui.loadDraft'));
+    if (load.ok) {
+      expect((load.data as { content: string }).content).toBe('原始');
+      expect((load.data as { revision: number }).revision).toBe(1);
+    }
+  });
+});
+
+describe('app.health 状态证据（真实运行标志，不写死）', () => {
+  it('如实反映 build_mode / sandbox_enabled / platform_dev_override', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'yuwendesk-test-'));
+    const store = new LocalStore(dir);
+    const svc = new IpcService({
+      store,
+      appVersion: '0.1.0',
+      appNameZh: '语文备课工作台',
+      platformSupported: true,
+      httpListeners: 0,
+      online: false,
+      buildMode: 'development',
+      sandboxEnabled: false,
+      platformDevOverride: true
+    });
+    const r = await svc.handle('app.health', envelope('app.health'));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const d = r.data as { build_mode: string; sandbox_enabled: boolean; platform_dev_override: boolean };
+      expect(d.build_mode).toBe('development');
+      expect(d.sandbox_enabled).toBe(false);
+      expect(d.platform_dev_override).toBe(true);
+    }
   });
 });
 

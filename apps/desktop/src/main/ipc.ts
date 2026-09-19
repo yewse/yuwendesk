@@ -29,6 +29,10 @@ export interface IpcServiceContext {
   // 生产环境本地监听端口数，必须为 0（对应 INS-008：无 HTTP/WebSocket 监听）。
   httpListeners: number;
   online: boolean;
+  // 真实运行标志（状态证据）。
+  buildMode: 'development' | 'production';
+  sandboxEnabled: boolean;
+  platformDevOverride: boolean;
 }
 
 export function isImplementedOperation(op: string): op is OperationName {
@@ -64,8 +68,24 @@ export function validateEnvelope(op: string, req: unknown): IpcResponse<never> |
   return null;
 }
 
+// 有界的幂等结果缓存：记录已处理的 idempotency_key → 响应，
+// 用于安全地忽略网络重试/重放导致的重复写入（不重复递增版本，也不误报冲突）。
+const IDEMPOTENCY_CACHE_LIMIT = 256;
+
 export class IpcService {
+  private readonly idempotency = new Map<string, IpcResponse>();
+
   constructor(private readonly ctx: IpcServiceContext) {}
+
+  private rememberIdempotent(key: string, res: IpcResponse): void {
+    if (this.idempotency.has(key)) this.idempotency.delete(key);
+    this.idempotency.set(key, res);
+    while (this.idempotency.size > IDEMPOTENCY_CACHE_LIMIT) {
+      const oldest = this.idempotency.keys().next().value;
+      if (oldest === undefined) break;
+      this.idempotency.delete(oldest);
+    }
+  }
 
   async handle(op: string, req: unknown): Promise<IpcResponse> {
     const invalid = validateEnvelope(op, req);
@@ -115,7 +135,10 @@ export class IpcService {
         renderer_channel: 'ok',
         storage_writable: this.ctx.store.storageWritable(),
         http_listeners: this.ctx.httpListeners,
-        offline_ready: true
+        offline_ready: true,
+        build_mode: this.ctx.buildMode,
+        sandbox_enabled: this.ctx.sandboxEnabled,
+        platform_dev_override: this.ctx.platformDevOverride
       }
     };
   }
@@ -145,16 +168,33 @@ export class IpcService {
     if (payload.content.length > 200_000) {
       return errorResponse('INPUT_INVALID', '草稿内容过长。', '请缩减内容后重试。');
     }
+    // 幂等：写操作要求 idempotency_key；同一 key 的重放直接返回首次结果，
+    // 避免网络重试/重复派发导致重复写入或误报版本冲突（规范 9.1、10.4 REQUEST_UNCERTAIN）。
+    const key = req.idempotency_key;
+    if (typeof key !== 'string' || key.length === 0) {
+      return errorResponse('INPUT_INVALID', '写操作缺少幂等标识。', '请重试当前操作。');
+    }
+    const prior = this.idempotency.get(key);
+    if (prior) return prior as IpcResponse<DraftData>;
+
     // 乐观并发：expected_revision 与当前版本不一致时返回版本冲突，展示差异而非覆盖（规范 7.3）。
     const current = this.ctx.store.getDraft();
     if (typeof req.expected_revision === 'number' && req.expected_revision !== current.revision) {
-      return errorResponse(
+      const conflict = errorResponse(
         'VERSION_CONFLICT',
         '本地草稿已在别处更新，为避免覆盖已停止保存。',
         '请刷新查看最新草稿后重试。'
-      );
+      ) as IpcResponse<DraftData>;
+      // 冲突结果也按 key 记忆：同一请求重放得到一致的确定性结果，不重复触发写入尝试。
+      this.rememberIdempotent(key, conflict);
+      return conflict;
     }
     const saved = await this.ctx.store.saveDraft(payload.content);
-    return { ok: true, data: { content: saved.content, revision: saved.revision, updated_at: saved.updated_at } };
+    const res: IpcResponse<DraftData> = {
+      ok: true,
+      data: { content: saved.content, revision: saved.revision, updated_at: saved.updated_at }
+    };
+    this.rememberIdempotent(key, res);
+    return res;
   }
 }
