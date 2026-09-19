@@ -96,11 +96,12 @@ export interface SourceSearchHit {
   version: number;
   versionId: string;
   classification: SourceClassification;
-  anchor: SourceAnchor | null;
+  anchor: SourceAnchor | null; // 正文精确锚点；正文未定位到时为 null（不制造假锚点）
   context: string;
-  locator: SourceLocator | null; // 结构化定位（页/段落/表格单元格/行列/幻灯片）
+  locator: SourceLocator | null; // 结构化定位（页/段落/表格单元格/行列/幻灯片）；标题命中为 null
   reliable: boolean; // 是否可靠文字命中（扫描件无文字不参与）
   locatorLabel: string; // 面向教师的可读定位标签
+  matchKind: 'title' | 'body'; // 标题命中与正文命中分开
 }
 export interface SourceListItem {
   documentId: string;
@@ -147,6 +148,14 @@ export interface SourceStore {
   retireSource(documentId: string): boolean;
   listSources(): SourceListItem[];
   getSourceVersions(documentId: string): SourceVersionItem[];
+  // 原件核对途径：返回原件字节（base64）与原件哈希，供外部重算/核对（提取成功≠原文已核验）。
+  readOriginal(versionId: string): SourceOriginalResult | null;
+}
+export interface SourceOriginalResult {
+  base64: string;
+  originalHash: string;
+  byteSize: number;
+  mime: string;
 }
 
 // 草稿存储接口：LocalStore（JSON，G01）与 SqliteStore（G02）均实现，供主进程/IPC 无缝切换。

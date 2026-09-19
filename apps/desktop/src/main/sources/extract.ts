@@ -192,9 +192,26 @@ function siText(node: unknown): string {
   if (o['#text'] !== undefined) return String(o['#text']);
   return '';
 }
-function trailingNum(name: string): number {
-  const m = /(\d+)\.xml$/.exec(name);
-  return m ? parseInt(m[1], 10) : 0;
+function attr(node: Record<string, unknown>, name: string): string {
+  return String(node[`@_${name}`] ?? node[`@_r:${name}`] ?? '');
+}
+// 解析 OOXML 关系文件（.rels）：Relationship Id → Target。用于按“文档关系+显示顺序”而非文件名数字定位。
+async function parseRels(zip: JSZip, relsPath: string, baseDir: string): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const f = zip.file(relsPath);
+  if (!f) return map;
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
+  const tree = parser.parse(await f.async('string')) as { Relationships?: { Relationship?: unknown } };
+  let rels = tree.Relationships?.Relationship as unknown;
+  rels = Array.isArray(rels) ? rels : rels ? [rels] : [];
+  for (const r of rels as Record<string, unknown>[]) {
+    const id = attr(r, 'Id');
+    let target = attr(r, 'Target');
+    if (!id || !target) continue;
+    target = target.startsWith('/') ? target.slice(1) : `${baseDir}${target}`;
+    map.set(id, target.replace(/\/{2,}/g, '/'));
+  }
+  return map;
 }
 
 export async function extractXlsx(buf: Buffer): Promise<ExtractResult> {
@@ -208,24 +225,33 @@ export async function extractXlsx(buf: Buffer): Promise<ExtractResult> {
     const arr = Array.isArray(si) ? si : si ? [si] : [];
     shared = arr.map((n) => siText(n));
   }
-  let sheetNames: string[] = [];
+  // 依据 workbook.xml 的 sheet 显示顺序 + workbook.xml.rels 解析每个工作表的真实文件（不按文件名数字）。
+  const rels = await parseRels(zip, 'xl/_rels/workbook.xml.rels', 'xl/');
+  const ordered: { name: string; file: string }[] = [];
   const wbFile = zip.file('xl/workbook.xml');
   if (wbFile) {
     const wb = parser.parse(await wbFile.async('string')) as { workbook?: { sheets?: { sheet?: unknown } } };
     let sh = wb.workbook?.sheets?.sheet as unknown;
-    const arr = Array.isArray(sh) ? sh : sh ? [sh] : [];
-    sheetNames = arr.map((s) => String((s as Record<string, unknown>)['@_name'] ?? ''));
-    sh = undefined;
+    sh = Array.isArray(sh) ? sh : sh ? [sh] : [];
+    for (const s of sh as Record<string, unknown>[]) {
+      const rid = String(s['@_r:id'] ?? s['@_id'] ?? '');
+      const file = rels.get(rid);
+      if (file) ordered.push({ name: String(s['@_name'] ?? ''), file });
+    }
   }
-  const sheetFiles = Object.keys(zip.files)
-    .filter((f) => /^xl\/worksheets\/sheet\d+\.xml$/.test(f))
-    .sort((a, b) => trailingNum(a) - trailingNum(b));
+  // 回退：无 workbook/rels 时按文件名排序（尽力而为，非首选）。
+  if (ordered.length === 0) {
+    Object.keys(zip.files)
+      .filter((f) => /^xl\/worksheets\/sheet\d+\.xml$/.test(f))
+      .sort()
+      .forEach((f, i) => ordered.push({ name: `Sheet${i + 1}`, file: f }));
+  }
   const raw: { text: string; locatorKind: LocatorKind; locator: Record<string, number | string>; reliable: boolean }[] = [];
-  let sIdx = 0;
-  for (const f of sheetFiles) {
-    const name = sheetNames[sIdx] || `Sheet${sIdx + 1}`;
-    sIdx += 1;
-    const ws = parser.parse(await zip.file(f)!.async('string')) as { worksheet?: { sheetData?: { row?: unknown } } };
+  for (let sIdx = 0; sIdx < ordered.length; sIdx++) {
+    const { name, file } = ordered[sIdx];
+    const wf = zip.file(file);
+    if (!wf) continue;
+    const ws = parser.parse(await wf.async('string')) as { worksheet?: { sheetData?: { row?: unknown } } };
     let rows = ws.worksheet?.sheetData?.row as unknown;
     rows = Array.isArray(rows) ? rows : rows ? [rows] : [];
     for (const row of rows as Record<string, unknown>[]) {
@@ -239,7 +265,8 @@ export async function extractXlsx(buf: Buffer): Promise<ExtractResult> {
         else if (c['@_t'] === 'inlineStr') val = siText(c.is);
         else val = c.v !== undefined ? String(typeof c.v === 'object' ? siText(c.v) : c.v) : '';
         val = val.trim();
-        if (val.length) raw.push({ text: val, locatorKind: 'xlsx_cell', locator: { sheet: name, row: rn, col }, reliable: true });
+        if (val.length)
+          raw.push({ text: val, locatorKind: 'xlsx_cell', locator: { sheet: name || `Sheet${sIdx + 1}`, sheetIndex: sIdx + 1, row: rn, col }, reliable: true });
       }
     }
   }
@@ -259,14 +286,34 @@ function decodeXml(s: string): string {
 }
 export async function extractPptx(buf: Buffer): Promise<ExtractResult> {
   const zip = await JSZip.loadAsync(buf);
-  const slideFiles = Object.keys(zip.files)
-    .filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f))
-    .sort((a, b) => trailingNum(a) - trailingNum(b));
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
+  // 依据 presentation.xml 的 sldIdLst 显示顺序 + presentation.xml.rels 解析每张幻灯片的真实文件（不按文件名数字）。
+  const rels = await parseRels(zip, 'ppt/_rels/presentation.xml.rels', 'ppt/');
+  const slideFiles: string[] = [];
+  const presFile = zip.file('ppt/presentation.xml');
+  if (presFile) {
+    const pres = parser.parse(await presFile.async('string')) as { 'p:presentation'?: { 'p:sldIdLst'?: { 'p:sldId'?: unknown } } };
+    let ids = pres['p:presentation']?.['p:sldIdLst']?.['p:sldId'] as unknown;
+    ids = Array.isArray(ids) ? ids : ids ? [ids] : [];
+    for (const s of ids as Record<string, unknown>[]) {
+      const rid = String(s['@_r:id'] ?? '');
+      const file = rels.get(rid);
+      if (file) slideFiles.push(file);
+    }
+  }
+  if (slideFiles.length === 0) {
+    Object.keys(zip.files)
+      .filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f))
+      .sort()
+      .forEach((f) => slideFiles.push(f));
+  }
   const raw: { text: string; locatorKind: LocatorKind; locator: Record<string, number | string>; reliable: boolean }[] = [];
   let i = 0;
   for (const f of slideFiles) {
     i += 1;
-    const xml = await zip.file(f)!.async('string');
+    const sf = zip.file(f);
+    if (!sf) continue;
+    const xml = await sf.async('string');
     const text = [...xml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((m) => decodeXml(m[1])).join('').trim();
     raw.push({ text, locatorKind: 'pptx_slide', locator: { slide: i }, reliable: text.length > 0 });
   }

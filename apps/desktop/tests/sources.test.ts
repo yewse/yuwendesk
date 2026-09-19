@@ -148,6 +148,31 @@ describe('G03 中文搜索与短词回退 + 原文定位', () => {
     s.importSource({ title: '春', format: 'txt', content: 春 });
     expect(s.searchSources('量子纠缠不存在于本文').length).toBe(0);
   });
+
+  it('标题命中与正文命中分开：标题命中 matchKind=title 且不制造正文锚点/定位', async () => {
+    const s = await makeStore(tmp());
+    // 标题含“教案”，正文不含“教案”
+    s.importSource({ title: '春天教案', format: 'txt', content: '盼望着，东风来了，春天的脚步近了。' });
+    const hits = s.searchSources('教案');
+    expect(hits.length).toBeGreaterThan(0);
+    const titleHit = hits.find((h) => h.matchKind === 'title');
+    expect(titleHit).toBeTruthy();
+    expect(titleHit!.anchor).toBeNull(); // 不制造正文锚点
+    expect(titleHit!.locator).toBeNull();
+    expect(titleHit!.locatorLabel).toBe('标题命中');
+    // 正文不含“教案”→ 不应出现 body 命中
+    expect(hits.some((h) => h.matchKind === 'body')).toBe(false);
+  });
+
+  it('正文命中带真实锚点；标题不含该词时仅正文命中', async () => {
+    const s = await makeStore(tmp());
+    s.importSource({ title: '春天教案', format: 'txt', content: '盼望着，东风来了，春天的脚步近了。' });
+    const hits = s.searchSources('东风');
+    const bodyHit = hits.find((h) => h.matchKind === 'body');
+    expect(bodyHit).toBeTruthy();
+    expect(bodyHit!.anchor).not.toBeNull(); // 正文命中有精确锚点
+    expect(bodyHit!.context).toContain('东风');
+  });
 });
 
 describe('G03 停用与重启恢复', () => {

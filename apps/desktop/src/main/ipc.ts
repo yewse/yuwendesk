@@ -113,6 +113,8 @@ export class IpcService {
         return this.sourcesRetire(request);
       case 'sources.versions':
         return this.sourcesVersions(request);
+      case 'sources.readOriginal':
+        return this.sourcesReadOriginal(request);
       default:
         return errorResponse('INPUT_INVALID', '未知操作。', '请重试当前操作。');
     }
@@ -203,6 +205,15 @@ export class IpcService {
     if (!src) return { ok: true, data: { versions: [] } };
     const p = req.payload as { documentId: string };
     return { ok: true, data: { versions: src.getSourceVersions(p.documentId) } };
+  }
+
+  private sourcesReadOriginal(req: IpcRequest): IpcResponse {
+    const src = this.ctx.sourceStore;
+    if (!src) return errorResponse('SOURCE_MISSING', '原件不存在。', '请刷新资料列表。');
+    const p = req.payload as { versionId: string };
+    const r = src.readOriginal(p.versionId);
+    if (!r) return errorResponse('SOURCE_MISSING', '原件不存在或未保存。', '请刷新资料列表。');
+    return { ok: true, data: r };
   }
 
   private sourcesList(): IpcResponse {

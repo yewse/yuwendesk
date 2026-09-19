@@ -840,34 +840,25 @@ export class SqliteStore {
         v: string;
       }[]).map((r) => r.v)
     );
-    const candidateSegIds: string[] = [];
+    // 正文候选段：≥3 字用段级 FTS；1–2 字段级 LIKE。仅可靠文字段。
+    const bodySegIds: string[] = [];
     if (cps.length >= 3) {
       const rows = db.prepare('SELECT segment_id FROM source_seg_fts WHERE source_seg_fts MATCH ?').all(`"${query.replace(/"/g, '""')}"`) as {
         segment_id: string;
       }[];
-      for (const r of rows) candidateSegIds.push(r.segment_id);
+      for (const r of rows) bodySegIds.push(r.segment_id);
     } else {
       const like = `%${likeEscape(query)}%`;
       for (const r of db.prepare("SELECT id FROM source_segment WHERE reliable=1 AND text LIKE ? ESCAPE '\\'").all(like) as { id: string }[])
-        candidateSegIds.push(r.id);
-      // 标题短词：回退到该文档当前版本的首个可靠段。
-      for (const r of db
-        .prepare(
-          `SELECT (SELECT id FROM source_segment WHERE version_id=sd.current_version_id AND reliable=1 ORDER BY ordinal LIMIT 1) id
-           FROM source_document sd WHERE sd.status='active' AND sd.current_version_id IS NOT NULL AND sd.title LIKE ? ESCAPE '\\'`
-        )
-        .all(like) as { id: string | null }[])
-        if (r.id) candidateSegIds.push(r.id);
+        bodySegIds.push(r.id);
     }
-    const seen = new Set<string>();
     const hits: SourceSearchHit[] = [];
-    for (const segId of candidateSegIds) {
-      if (seen.has(segId)) continue;
-      seen.add(segId);
+    const seenSeg = new Set<string>();
+    for (const segId of bodySegIds) {
+      if (seenSeg.has(segId)) continue;
+      seenSeg.add(segId);
       const seg = db
-        .prepare(
-          'SELECT version_id versionId, locator_kind locatorKind, locator, text, char_start charStart, reliable FROM source_segment WHERE id=?'
-        )
+        .prepare('SELECT version_id versionId, locator_kind locatorKind, locator, text, char_start charStart, reliable FROM source_segment WHERE id=?')
         .get(segId) as
         | { versionId: string; locatorKind: string; locator: string; text: string; charStart: number; reliable: number }
         | undefined;
@@ -878,23 +869,54 @@ export class SqliteStore {
         )
         .get(seg.versionId) as { version: number; documentId: string; title: string; classification: SourceClassification } | undefined;
       if (!meta) continue;
-      const idxInSeg = seg.text.indexOf(query);
       const parsedLocator = { kind: seg.locatorKind, ...(JSON.parse(seg.locator) as Record<string, number | string>) } as SourceLocator;
-      const line = typeof parsedLocator.line === 'number' ? parsedLocator.line : 0;
-      const absStart = seg.charStart + (idxInSeg >= 0 ? idxInSeg : 0);
-      const ctxS = Math.max(0, (idxInSeg >= 0 ? idxInSeg : 0) - 30);
-      const ctxE = Math.min(seg.text.length, (idxInSeg >= 0 ? idxInSeg : 0) + query.length + 30);
+      const idxInSeg = seg.text.indexOf(query);
+      // 正文未定位到具体位置 → 不制造精确锚点（anchor=null），仍如实给出段定位与段文预览。
+      const anchor =
+        idxInSeg >= 0
+          ? { char_start: seg.charStart + idxInSeg, char_end: seg.charStart + idxInSeg + query.length, line: typeof parsedLocator.line === 'number' ? parsedLocator.line : 0 }
+          : null;
+      const ctxAround = idxInSeg >= 0 ? seg.text.slice(Math.max(0, idxInSeg - 30), Math.min(seg.text.length, idxInSeg + query.length + 30)) : seg.text.slice(0, 80);
       hits.push({
         documentId: meta.documentId,
         title: meta.title,
         version: meta.version,
         versionId: seg.versionId,
         classification: meta.classification,
-        anchor: { char_start: absStart, char_end: absStart + query.length, line },
-        context: seg.text.slice(ctxS, ctxE),
+        anchor,
+        context: ctxAround,
         locator: parsedLocator,
         reliable: seg.reliable === 1,
-        locatorLabel: locatorLabel(parsedLocator)
+        locatorLabel: locatorLabel(parsedLocator),
+        matchKind: 'body'
+      });
+      if (hits.length >= SEARCH_LIMIT) break;
+    }
+    // 标题命中：与正文命中分开，不制造正文锚点/定位。
+    const likeT = `%${likeEscape(query)}%`;
+    const titleDocs = db
+      .prepare(
+        `SELECT sd.id documentId, sd.title title, sd.classification classification, sv.version version, sd.current_version_id versionId
+         FROM source_document sd JOIN source_version sv ON sv.id=sd.current_version_id
+         WHERE sd.status='active' AND sd.title LIKE ? ESCAPE '\\'`
+      )
+      .all(likeT) as { documentId: string; title: string; classification: SourceClassification; version: number; versionId: string }[];
+    const seenDocTitle = new Set(hits.filter((h) => h.matchKind === 'title').map((h) => h.documentId));
+    for (const d of titleDocs) {
+      if (seenDocTitle.has(d.documentId)) continue;
+      seenDocTitle.add(d.documentId);
+      hits.push({
+        documentId: d.documentId,
+        title: d.title,
+        version: d.version,
+        versionId: d.versionId,
+        classification: d.classification,
+        anchor: null,
+        context: d.title,
+        locator: null,
+        reliable: true,
+        locatorLabel: '标题命中',
+        matchKind: 'title'
       });
       if (hits.length >= SEARCH_LIMIT) break;
     }
@@ -934,6 +956,16 @@ export class SqliteStore {
     const db = this.requireDb();
     const info = db.prepare("UPDATE source_document SET status='retired', updated_at=? WHERE id=?").run(new Date().toISOString(), documentId);
     return info.changes === 1;
+  }
+
+  // 原件核对：返回原件字节 base64 + 原件哈希（供外部重算校验，提取成功≠原文已核验）。
+  readOriginal(versionId: string): { base64: string; originalHash: string; byteSize: number; mime: string } | null {
+    if (!this.db) return null;
+    const row = this.db.prepare('SELECT original_blob blob, original_hash originalHash, byte_size byteSize, mime FROM source_file WHERE version_id=?').get(versionId) as
+      | { blob: Buffer | null; originalHash: string; byteSize: number; mime: string | null }
+      | undefined;
+    if (!row || !row.blob) return null;
+    return { base64: Buffer.from(row.blob).toString('base64'), originalHash: row.originalHash, byteSize: row.byteSize, mime: row.mime ?? 'application/octet-stream' };
   }
 
   getSourceVersions(documentId: string): SourceVersionItem[] {

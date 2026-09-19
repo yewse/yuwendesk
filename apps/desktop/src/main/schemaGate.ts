@@ -88,6 +88,12 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     properties: { documentId: { type: 'string', minLength: 1, maxLength: 64 } },
     required: ['documentId'],
     additionalProperties: false
+  },
+  'sources.readOriginal': {
+    type: 'object',
+    properties: { versionId: { type: 'string', minLength: 1, maxLength: 64 } },
+    required: ['versionId'],
+    additionalProperties: false
   }
 };
 

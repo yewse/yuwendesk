@@ -273,6 +273,7 @@ function ResourcesPage(): JSX.Element {
   const [dragOver, setDragOver] = useState(false);
   const [pending, setPending] = useState<PendingItem[]>([]);
   const [versionsFor, setVersionsFor] = useState<{ title: string; versions: SourceVersionDTO[] } | null>(null);
+  const [verify, setVerify] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement | null>(null);
   const cancelRef = useRef(false);
 
@@ -350,6 +351,23 @@ function ResourcesPage(): JSX.Element {
   async function showVersions(documentId: string, title: string): Promise<void> {
     const r = await window.yuwen.sourceVersions(documentId);
     if (r.ok) setVersionsFor({ title, versions: r.data.versions });
+  }
+
+  // 原件核对：取回原件字节，在本机重算 SHA-256 与存储原件哈希比对（提取成功≠原文已核验）。
+  async function verifyOriginal(v: SourceVersionDTO): Promise<void> {
+    const r = await window.yuwen.readOriginal(v.versionId);
+    if (!r.ok) {
+      setVerify((p) => ({ ...p, [v.versionId]: '无原件字节' }));
+      return;
+    }
+    try {
+      const bin = Uint8Array.from(atob(r.data.base64), (c) => c.charCodeAt(0));
+      const digest = await crypto.subtle.digest('SHA-256', bin);
+      const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+      setVerify((p) => ({ ...p, [v.versionId]: hex === r.data.originalHash ? '核对一致 ✓' : '核对不一致 ✗' }));
+    } catch {
+      setVerify((p) => ({ ...p, [v.versionId]: `原件 ${r.data.byteSize} 字节（本机无法重算摘要）` }));
+    }
   }
 
   async function runSearch(q: string): Promise<void> {
@@ -462,12 +480,12 @@ function ResourcesPage(): JSX.Element {
               <div className="hit-head">
                 <b>{h.title}</b>
                 <span className="tag">v{h.version}</span>
-                <span className="tag">{h.locatorLabel}</span>
+                <span className="tag">{h.matchKind === 'title' ? '标题命中' : h.locatorLabel}</span>
                 {!h.reliable && <span className="pill pill-off">不可靠</span>}
               </div>
               <div className="hit-context">…{h.context}…</div>
               <button className="btn small" onClick={() => void openOriginal(h)}>
-                查看原文（{h.locatorLabel}）
+                {h.matchKind === 'title' ? '查看文档' : `查看原文（${h.locatorLabel}）`}
               </button>
             </li>
           ))}
@@ -539,6 +557,12 @@ function ResourcesPage(): JSX.Element {
                     <div className="muted small mono">原件哈希 {v.originalHash.slice(0, 24)}…</div>
                     <div className="muted small mono">文本哈希 {v.textHash.slice(0, 24)}…</div>
                     <div className="muted small">导入时间 {v.createdAt}</div>
+                    <div className="row" style={{ marginTop: 6 }}>
+                      <button className="btn small" onClick={() => void verifyOriginal(v)}>
+                        核对原件
+                      </button>
+                      {verify[v.versionId] && <span className="muted small">{verify[v.versionId]}</span>}
+                    </div>
                   </li>
                 ))}
               </ul>

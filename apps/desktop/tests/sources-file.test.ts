@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -160,7 +161,11 @@ async function makeXlsx(): Promise<Buffer> {
   );
   zip.file(
     'xl/workbook.xml',
-    '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheets><sheet name="教学计划" sheetId="1" r:id="rId1"/></sheets></workbook>'
+    '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="y"><sheets><sheet name="教学计划" sheetId="1" r:id="rId1"/></sheets></workbook>'
+  );
+  zip.file(
+    'xl/_rels/workbook.xml.rels',
+    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="t" Target="worksheets/sheet1.xml"/></Relationships>'
   );
   zip.file(
     'xl/worksheets/sheet1.xml',
@@ -181,6 +186,79 @@ async function makePptx(slides: string[]): Promise<Buffer> {
   });
   return zip.generateAsync({ type: 'nodebuffer' });
 }
+
+// 调序 XLSX：workbook 显示顺序与内部文件名数字相反（rels 交叉映射）。
+async function makeReorderedXlsx(): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file(
+    'xl/sharedStrings.xml',
+    '<?xml version="1.0"?><sst xmlns="x"><si><t>封面唯一词</t></si><si><t>内容唯一词</t></si></sst>'
+  );
+  zip.file(
+    'xl/workbook.xml',
+    '<?xml version="1.0"?><workbook xmlns="x" xmlns:r="y"><sheets><sheet name="封面" sheetId="1" r:id="rIdA"/><sheet name="内容" sheetId="2" r:id="rIdB"/></sheets></workbook>'
+  );
+  zip.file(
+    'xl/_rels/workbook.xml.rels',
+    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdA" Type="t" Target="worksheets/sheet2.xml"/><Relationship Id="rIdB" Type="t" Target="worksheets/sheet1.xml"/></Relationships>'
+  );
+  // 文件名 sheet2.xml = 显示第1个（封面）；sheet1.xml = 显示第2个（内容）
+  zip.file('xl/worksheets/sheet2.xml', '<?xml version="1.0"?><worksheet xmlns="x"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>');
+  zip.file('xl/worksheets/sheet1.xml', '<?xml version="1.0"?><worksheet xmlns="x"><sheetData><row r="1"><c r="A1" t="s"><v>1</v></c></row></sheetData></worksheet>');
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+// 调序 PPTX：presentation sldIdLst 顺序与文件名数字相反。
+async function makeReorderedPptx(): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file(
+    'ppt/presentation.xml',
+    '<?xml version="1.0"?><p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId id="256" r:id="rIdX"/><p:sldId id="257" r:id="rIdY"/></p:sldIdLst></p:presentation>'
+  );
+  zip.file(
+    'ppt/_rels/presentation.xml.rels',
+    '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdX" Type="t" Target="slides/slide2.xml"/><Relationship Id="rIdY" Type="t" Target="slides/slide1.xml"/></Relationships>'
+  );
+  zip.file('ppt/slides/slide2.xml', '<?xml version="1.0"?><p:sld xmlns:p="p" xmlns:a="a"><a:t>首页内容词</a:t></p:sld>');
+  zip.file('ppt/slides/slide1.xml', '<?xml version="1.0"?><p:sld xmlns:p="p" xmlns:a="a"><a:t>次页内容词</a:t></p:sld>');
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+describe('G03 来源准确性：调序办公文件按显示顺序定位', () => {
+  it('调序 XLSX → 按 workbook/rels 显示顺序，不按文件名数字', async () => {
+    const s = await makeStore(tmp());
+    await s.importFile({ title: 'r.xlsx', format: 'xlsx', base64: (await makeReorderedXlsx()).toString('base64') });
+    const cover = s.searchSources('封面唯一词');
+    expect(cover[0].locator?.sheet).toBe('封面');
+    expect(cover[0].locator?.sheetIndex).toBe(1); // 显示第1个（文件名却是 sheet2.xml）
+    const content = s.searchSources('内容唯一词');
+    expect(content[0].locator?.sheet).toBe('内容');
+    expect(content[0].locator?.sheetIndex).toBe(2);
+  });
+
+  it('调序 PPTX → 按 presentation 顺序，不按文件名数字', async () => {
+    const s = await makeStore(tmp());
+    await s.importFile({ title: 'r.pptx', format: 'pptx', base64: (await makeReorderedPptx()).toString('base64') });
+    const first = s.searchSources('首页内容词');
+    expect(first[0].locator?.slide).toBe(1); // 显示第1张（文件名却是 slide2.xml）
+    const second = s.searchSources('次页内容词');
+    expect(second[0].locator?.slide).toBe(2);
+  });
+});
+
+describe('G03 原件核对途径', () => {
+  it('readOriginal 返回原件字节，重算 SHA-256 与存储原件哈希一致', async () => {
+    const s = await makeStore(tmp());
+    const pdf = await makePdf(['verify original hash']);
+    const imp = await s.importFile({ title: 'v.pdf', format: 'pdf', base64: pdf.toString('base64') });
+    if (imp.status !== 'imported') throw new Error('setup');
+    const versionId = s.getSourceVersions(imp.documentId)[0].versionId;
+    const orig = s.readOriginal(versionId);
+    expect(orig).not.toBeNull();
+    const recomputed = createHash('sha256').update(Buffer.from(orig!.base64, 'base64')).digest('hex');
+    expect(recomputed).toBe(orig!.originalHash);
+    expect(recomputed).toBe(s.getSourceVersions(imp.documentId)[0].originalHash);
+  });
+});
 
 describe('G03 真实文件导入：XLSX / PPTX', () => {
   it('XLSX → 工作表/行/列(xlsx_cell)定位', async () => {
