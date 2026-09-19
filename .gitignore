@@ -5,5 +5,10 @@ Thumbs.db
 !.env.example
 node_modules/
 dist/
+release/
+out/
 .idea/
 .vscode/
+*.log
+coverage/
+.cursor-artifacts/

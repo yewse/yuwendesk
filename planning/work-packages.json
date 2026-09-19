@@ -1,0 +1,1432 @@
+{
+  "schema_version": "1.0.0",
+  "ordering_note": "默认线性阶段便于无人工编码执行。G00真实API缺失不阻止本地分支；G04真实联网和G11在线正式发布仍被阻断。并行需以合同和ADR证明依赖满足。",
+  "work_packages": [
+    {
+      "id": "G00-T01",
+      "gate": "G00",
+      "title": "核实Grok4.6能力和账户",
+      "depends_on": [],
+      "deliverables": [
+        "ENV_LOCK.json"
+      ],
+      "acceptance_ids": [],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G00-T02",
+      "gate": "G00",
+      "title": "锁定开发依赖与许可证",
+      "depends_on": [
+        "G00-T01"
+      ],
+      "deliverables": [
+        "EXTERNAL_INPUTS.json"
+      ],
+      "acceptance_ids": [],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G00-T03",
+      "gate": "G00",
+      "title": "登记Windows运行环境与资源权限",
+      "depends_on": [
+        "G00-T02"
+      ],
+      "deliverables": [
+        "SBOM初稿"
+      ],
+      "acceptance_ids": [],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G00-T04",
+      "gate": "G00",
+      "title": "建立受限命令、费用与外部阻断清单",
+      "depends_on": [
+        "G00-T03"
+      ],
+      "deliverables": [
+        "真实探测或阻断记录"
+      ],
+      "acceptance_ids": [],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G01-T01",
+      "gate": "G01",
+      "title": "原生窗口与中文导航",
+      "depends_on": [
+        "G00-T04"
+      ],
+      "deliverables": [
+        "可安装工程EXE"
+      ],
+      "acceptance_ids": [
+        "INS-001",
+        "INS-002",
+        "INS-003",
+        "INS-004",
+        "INS-005",
+        "INS-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G01-T02",
+      "gate": "G01",
+      "title": "单实例、保存与退出生命周期",
+      "depends_on": [
+        "G01-T01"
+      ],
+      "deliverables": [
+        "窗口截图"
+      ],
+      "acceptance_ids": [
+        "INS-001",
+        "INS-002",
+        "INS-003",
+        "INS-004",
+        "INS-005",
+        "INS-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G01-T03",
+      "gate": "G01",
+      "title": "当前用户离线NSIS安装与快捷方式",
+      "depends_on": [
+        "G01-T02"
+      ],
+      "deliverables": [
+        "进程与监听记录"
+      ],
+      "acceptance_ids": [
+        "INS-001",
+        "INS-002",
+        "INS-003",
+        "INS-004",
+        "INS-005",
+        "INS-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G01-T04",
+      "gate": "G01",
+      "title": "干净Windows标准账户安装证据",
+      "depends_on": [
+        "G01-T03"
+      ],
+      "deliverables": [
+        "安装报告"
+      ],
+      "acceptance_ids": [
+        "INS-001",
+        "INS-002",
+        "INS-003",
+        "INS-004",
+        "INS-005",
+        "INS-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G02-T01",
+      "gate": "G02",
+      "title": "受限IPC及Schema门",
+      "depends_on": [
+        "G01-T04"
+      ],
+      "deliverables": [
+        "IPC实现"
+      ],
+      "acceptance_ids": [
+        "SEC-001",
+        "SEC-002"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G02-T02",
+      "gate": "G02",
+      "title": "SQLite迁移与单写入者",
+      "depends_on": [
+        "G02-T01"
+      ],
+      "deliverables": [
+        "迁移文件"
+      ],
+      "acceptance_ids": [
+        "SEC-001",
+        "SEC-002"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G02-T03",
+      "gate": "G02",
+      "title": "DPAPI凭据与敏感payload加密",
+      "depends_on": [
+        "G02-T02"
+      ],
+      "deliverables": [
+        "权限与加密测试"
+      ],
+      "acceptance_ids": [
+        "SEC-001",
+        "SEC-002"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G02-T04",
+      "gate": "G02",
+      "title": "版本并发及事务事件",
+      "depends_on": [
+        "G02-T03"
+      ],
+      "deliverables": [
+        "无明文凭据报告"
+      ],
+      "acceptance_ids": [
+        "SEC-001",
+        "SEC-002"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G03-T01",
+      "gate": "G03",
+      "title": "安全解析导入和资源限制",
+      "depends_on": [
+        "G02-T04"
+      ],
+      "deliverables": [
+        "导入器"
+      ],
+      "acceptance_ids": [
+        "BIZ-R011",
+        "BIZ-R012",
+        "BIZ-R013",
+        "BIZ-R014",
+        "BIZ-R015",
+        "SRC-001",
+        "SRC-002",
+        "SRC-003",
+        "SRC-004",
+        "SRC-005",
+        "SRC-006",
+        "SRC-007",
+        "SRC-008"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G03-T02",
+      "gate": "G03",
+      "title": "来源版本与精确锚点",
+      "depends_on": [
+        "G03-T01"
+      ],
+      "deliverables": [
+        "本地检索"
+      ],
+      "acceptance_ids": [
+        "BIZ-R011",
+        "BIZ-R012",
+        "BIZ-R013",
+        "BIZ-R014",
+        "BIZ-R015",
+        "SRC-001",
+        "SRC-002",
+        "SRC-003",
+        "SRC-004",
+        "SRC-005",
+        "SRC-006",
+        "SRC-007",
+        "SRC-008"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G03-T03",
+      "gate": "G03",
+      "title": "中文FTS与短词回退",
+      "depends_on": [
+        "G03-T02"
+      ],
+      "deliverables": [
+        "来源viewer"
+      ],
+      "acceptance_ids": [
+        "BIZ-R011",
+        "BIZ-R012",
+        "BIZ-R013",
+        "BIZ-R014",
+        "BIZ-R015",
+        "SRC-001",
+        "SRC-002",
+        "SRC-003",
+        "SRC-004",
+        "SRC-005",
+        "SRC-006",
+        "SRC-007",
+        "SRC-008"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G03-T04",
+      "gate": "G03",
+      "title": "资源缺失、重复、撤销和覆盖界面",
+      "depends_on": [
+        "G03-T03"
+      ],
+      "deliverables": [
+        "来源冲突案例"
+      ],
+      "acceptance_ids": [
+        "BIZ-R011",
+        "BIZ-R012",
+        "BIZ-R013",
+        "BIZ-R014",
+        "BIZ-R015",
+        "SRC-001",
+        "SRC-002",
+        "SRC-003",
+        "SRC-004",
+        "SRC-005",
+        "SRC-006",
+        "SRC-007",
+        "SRC-008"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G04-T01",
+      "gate": "G04",
+      "title": "Grok provider及真实能力探测",
+      "depends_on": [
+        "G03-T04"
+      ],
+      "deliverables": [
+        "provider实现"
+      ],
+      "acceptance_ids": [
+        "AI-001",
+        "AI-002",
+        "AI-003",
+        "AI-004",
+        "AI-005",
+        "AI-006",
+        "AI-007",
+        "AI-008",
+        "AI-009",
+        "AI-010",
+        "JOB-001"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G04-T02",
+      "gate": "G04",
+      "title": "有限工具和结构化合同",
+      "depends_on": [
+        "G04-T01"
+      ],
+      "deliverables": [
+        "任务状态"
+      ],
+      "acceptance_ids": [
+        "AI-001",
+        "AI-002",
+        "AI-003",
+        "AI-004",
+        "AI-005",
+        "AI-006",
+        "AI-007",
+        "AI-008",
+        "AI-009",
+        "AI-010",
+        "JOB-001"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G04-T03",
+      "gate": "G04",
+      "title": "预算、取消、超时和持久检查点",
+      "depends_on": [
+        "G04-T02"
+      ],
+      "deliverables": [
+        "usage报告"
+      ],
+      "acceptance_ids": [
+        "AI-001",
+        "AI-002",
+        "AI-003",
+        "AI-004",
+        "AI-005",
+        "AI-006",
+        "AI-007",
+        "AI-008",
+        "AI-009",
+        "AI-010",
+        "JOB-001"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G04-T04",
+      "gate": "G04",
+      "title": "mock协议矩阵与真实联网烟测",
+      "depends_on": [
+        "G04-T03"
+      ],
+      "deliverables": [
+        "真实API或BLOCKED证据"
+      ],
+      "acceptance_ids": [
+        "AI-001",
+        "AI-002",
+        "AI-003",
+        "AI-004",
+        "AI-005",
+        "AI-006",
+        "AI-007",
+        "AI-008",
+        "AI-009",
+        "AI-010",
+        "JOB-001"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G05-T01",
+      "gate": "G05",
+      "title": "任务与课标教材双对齐",
+      "depends_on": [
+        "G04-T04"
+      ],
+      "deliverables": [
+        "三类完整课型fixture"
+      ],
+      "acceptance_ids": [
+        "BIZ-R001",
+        "BIZ-R002",
+        "BIZ-R003",
+        "BIZ-R004",
+        "BIZ-R005",
+        "BIZ-R006",
+        "BIZ-R007",
+        "BIZ-R008",
+        "BIZ-R009",
+        "BIZ-R010",
+        "BIZ-R021",
+        "BIZ-R022",
+        "BIZ-R023",
+        "BIZ-R024",
+        "BIZ-R025",
+        "BIZ-R026",
+        "BIZ-R027",
+        "BIZ-R028",
+        "BIZ-R029",
+        "BIZ-R030",
+        "BIZ-R031",
+        "BIZ-R032",
+        "BIZ-R033",
+        "BIZ-R034",
+        "BIZ-R035",
+        "BIZ-R036",
+        "BIZ-R037",
+        "BIZ-R038",
+        "BIZ-R039",
+        "BIZ-R040",
+        "JOB-008",
+        "PED-001",
+        "PED-002",
+        "PED-005",
+        "PED-007"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G05-T02",
+      "gate": "G05",
+      "title": "内容及未知学情处理",
+      "depends_on": [
+        "G05-T01"
+      ],
+      "deliverables": [
+        "LessonPlan输出"
+      ],
+      "acceptance_ids": [
+        "BIZ-R001",
+        "BIZ-R002",
+        "BIZ-R003",
+        "BIZ-R004",
+        "BIZ-R005",
+        "BIZ-R006",
+        "BIZ-R007",
+        "BIZ-R008",
+        "BIZ-R009",
+        "BIZ-R010",
+        "BIZ-R021",
+        "BIZ-R022",
+        "BIZ-R023",
+        "BIZ-R024",
+        "BIZ-R025",
+        "BIZ-R026",
+        "BIZ-R027",
+        "BIZ-R028",
+        "BIZ-R029",
+        "BIZ-R030",
+        "BIZ-R031",
+        "BIZ-R032",
+        "BIZ-R033",
+        "BIZ-R034",
+        "BIZ-R035",
+        "BIZ-R036",
+        "BIZ-R037",
+        "BIZ-R038",
+        "BIZ-R039",
+        "BIZ-R040",
+        "JOB-008",
+        "PED-001",
+        "PED-002",
+        "PED-005",
+        "PED-007"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G05-T03",
+      "gate": "G05",
+      "title": "联结三条时间线与方法库",
+      "depends_on": [
+        "G05-T02"
+      ],
+      "deliverables": [
+        "模块trace"
+      ],
+      "acceptance_ids": [
+        "BIZ-R001",
+        "BIZ-R002",
+        "BIZ-R003",
+        "BIZ-R004",
+        "BIZ-R005",
+        "BIZ-R006",
+        "BIZ-R007",
+        "BIZ-R008",
+        "BIZ-R009",
+        "BIZ-R010",
+        "BIZ-R021",
+        "BIZ-R022",
+        "BIZ-R023",
+        "BIZ-R024",
+        "BIZ-R025",
+        "BIZ-R026",
+        "BIZ-R027",
+        "BIZ-R028",
+        "BIZ-R029",
+        "BIZ-R030",
+        "BIZ-R031",
+        "BIZ-R032",
+        "BIZ-R033",
+        "BIZ-R034",
+        "BIZ-R035",
+        "BIZ-R036",
+        "BIZ-R037",
+        "BIZ-R038",
+        "BIZ-R039",
+        "BIZ-R040",
+        "JOB-008",
+        "PED-001",
+        "PED-002",
+        "PED-005",
+        "PED-007"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G05-T04",
+      "gate": "G05",
+      "title": "核心任务、评分范围与课时编排",
+      "depends_on": [
+        "G05-T03"
+      ],
+      "deliverables": [
+        "语义反例报告"
+      ],
+      "acceptance_ids": [
+        "BIZ-R001",
+        "BIZ-R002",
+        "BIZ-R003",
+        "BIZ-R004",
+        "BIZ-R005",
+        "BIZ-R006",
+        "BIZ-R007",
+        "BIZ-R008",
+        "BIZ-R009",
+        "BIZ-R010",
+        "BIZ-R021",
+        "BIZ-R022",
+        "BIZ-R023",
+        "BIZ-R024",
+        "BIZ-R025",
+        "BIZ-R026",
+        "BIZ-R027",
+        "BIZ-R028",
+        "BIZ-R029",
+        "BIZ-R030",
+        "BIZ-R031",
+        "BIZ-R032",
+        "BIZ-R033",
+        "BIZ-R034",
+        "BIZ-R035",
+        "BIZ-R036",
+        "BIZ-R037",
+        "BIZ-R038",
+        "BIZ-R039",
+        "BIZ-R040",
+        "JOB-008",
+        "PED-001",
+        "PED-002",
+        "PED-005",
+        "PED-007"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G06-T01",
+      "gate": "G06",
+      "title": "结构化编辑和撤销",
+      "depends_on": [
+        "G05-T04"
+      ],
+      "deliverables": [
+        "真实导出文件"
+      ],
+      "acceptance_ids": [
+        "BIZ-R041",
+        "BIZ-R042",
+        "BIZ-R043",
+        "BIZ-R044",
+        "BIZ-R045",
+        "EXP-001",
+        "EXP-002",
+        "EXP-003",
+        "EXP-004",
+        "EXP-005",
+        "EXP-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G06-T02",
+      "gate": "G06",
+      "title": "DOCX与PPTX可编辑导出",
+      "depends_on": [
+        "G06-T01"
+      ],
+      "deliverables": [
+        "渲染图"
+      ],
+      "acceptance_ids": [
+        "BIZ-R041",
+        "BIZ-R042",
+        "BIZ-R043",
+        "BIZ-R044",
+        "BIZ-R045",
+        "EXP-001",
+        "EXP-002",
+        "EXP-003",
+        "EXP-004",
+        "EXP-005",
+        "EXP-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G06-T03",
+      "gate": "G06",
+      "title": "PDF与本地课堂展示",
+      "depends_on": [
+        "G06-T02"
+      ],
+      "deliverables": [
+        "manifest"
+      ],
+      "acceptance_ids": [
+        "BIZ-R041",
+        "BIZ-R042",
+        "BIZ-R043",
+        "BIZ-R044",
+        "BIZ-R045",
+        "EXP-001",
+        "EXP-002",
+        "EXP-003",
+        "EXP-004",
+        "EXP-005",
+        "EXP-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G06-T04",
+      "gate": "G06",
+      "title": "逐格式渲染和同源一致检查",
+      "depends_on": [
+        "G06-T03"
+      ],
+      "deliverables": [
+        "编辑器兼容记录"
+      ],
+      "acceptance_ids": [
+        "BIZ-R041",
+        "BIZ-R042",
+        "BIZ-R043",
+        "BIZ-R044",
+        "BIZ-R045",
+        "EXP-001",
+        "EXP-002",
+        "EXP-003",
+        "EXP-004",
+        "EXP-005",
+        "EXP-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G07-T01",
+      "gate": "G07",
+      "title": "确定性与模型审查分层",
+      "depends_on": [
+        "G06-T04"
+      ],
+      "deliverables": [
+        "ReviewReport"
+      ],
+      "acceptance_ids": [
+        "BIZ-R046",
+        "BIZ-R047",
+        "BIZ-R048",
+        "BIZ-R049",
+        "BIZ-R050",
+        "JOB-002",
+        "JOB-003",
+        "JOB-004",
+        "JOB-006",
+        "JOB-007",
+        "PED-003"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G07-T02",
+      "gate": "G07",
+      "title": "受影响依赖失效和重算",
+      "depends_on": [
+        "G07-T01"
+      ],
+      "deliverables": [
+        "ChangeProposal"
+      ],
+      "acceptance_ids": [
+        "BIZ-R046",
+        "BIZ-R047",
+        "BIZ-R048",
+        "BIZ-R049",
+        "BIZ-R050",
+        "JOB-002",
+        "JOB-003",
+        "JOB-004",
+        "JOB-006",
+        "JOB-007",
+        "PED-003"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G07-T03",
+      "gate": "G07",
+      "title": "单方案与最少选择界面",
+      "depends_on": [
+        "G07-T02"
+      ],
+      "deliverables": [
+        "变更diff"
+      ],
+      "acceptance_ids": [
+        "BIZ-R046",
+        "BIZ-R047",
+        "BIZ-R048",
+        "BIZ-R049",
+        "BIZ-R050",
+        "JOB-002",
+        "JOB-003",
+        "JOB-004",
+        "JOB-006",
+        "JOB-007",
+        "PED-003"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G07-T04",
+      "gate": "G07",
+      "title": "争议解释和失败降级",
+      "depends_on": [
+        "G07-T03"
+      ],
+      "deliverables": [
+        "一致性回归结果"
+      ],
+      "acceptance_ids": [
+        "BIZ-R046",
+        "BIZ-R047",
+        "BIZ-R048",
+        "BIZ-R049",
+        "BIZ-R050",
+        "JOB-002",
+        "JOB-003",
+        "JOB-004",
+        "JOB-006",
+        "JOB-007",
+        "PED-003"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G08-T01",
+      "gate": "G08",
+      "title": "采用与实际授课分离",
+      "depends_on": [
+        "G07-T04"
+      ],
+      "deliverables": [
+        "Observation"
+      ],
+      "acceptance_ids": [
+        "BIZ-R016",
+        "BIZ-R017",
+        "BIZ-R018",
+        "BIZ-R019",
+        "BIZ-R020",
+        "BIZ-R051",
+        "BIZ-R052",
+        "BIZ-R053",
+        "BIZ-R054",
+        "BIZ-R055",
+        "BIZ-R056",
+        "BIZ-R057",
+        "BIZ-R058",
+        "BIZ-R059",
+        "BIZ-R060",
+        "JOB-005",
+        "PED-004",
+        "PED-006",
+        "PED-008"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G08-T02",
+      "gate": "G08",
+      "title": "可选观察和样本范围",
+      "depends_on": [
+        "G08-T01"
+      ],
+      "deliverables": [
+        "改进卡"
+      ],
+      "acceptance_ids": [
+        "BIZ-R016",
+        "BIZ-R017",
+        "BIZ-R018",
+        "BIZ-R019",
+        "BIZ-R020",
+        "BIZ-R051",
+        "BIZ-R052",
+        "BIZ-R053",
+        "BIZ-R054",
+        "BIZ-R055",
+        "BIZ-R056",
+        "BIZ-R057",
+        "BIZ-R058",
+        "BIZ-R059",
+        "BIZ-R060",
+        "JOB-005",
+        "PED-004",
+        "PED-006",
+        "PED-008"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G08-T03",
+      "gate": "G08",
+      "title": "先查题目评分再提出原因假设",
+      "depends_on": [
+        "G08-T02"
+      ],
+      "deliverables": [
+        "事件记录"
+      ],
+      "acceptance_ids": [
+        "BIZ-R016",
+        "BIZ-R017",
+        "BIZ-R018",
+        "BIZ-R019",
+        "BIZ-R020",
+        "BIZ-R051",
+        "BIZ-R052",
+        "BIZ-R053",
+        "BIZ-R054",
+        "BIZ-R055",
+        "BIZ-R056",
+        "BIZ-R057",
+        "BIZ-R058",
+        "BIZ-R059",
+        "BIZ-R060",
+        "JOB-005",
+        "PED-004",
+        "PED-006",
+        "PED-008"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G08-T04",
+      "gate": "G08",
+      "title": "偏好与效果双轨更新及撤回",
+      "depends_on": [
+        "G08-T03"
+      ],
+      "deliverables": [
+        "证据边界测试"
+      ],
+      "acceptance_ids": [
+        "BIZ-R016",
+        "BIZ-R017",
+        "BIZ-R018",
+        "BIZ-R019",
+        "BIZ-R020",
+        "BIZ-R051",
+        "BIZ-R052",
+        "BIZ-R053",
+        "BIZ-R054",
+        "BIZ-R055",
+        "BIZ-R056",
+        "BIZ-R057",
+        "BIZ-R058",
+        "BIZ-R059",
+        "BIZ-R060",
+        "JOB-005",
+        "PED-004",
+        "PED-006",
+        "PED-008"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G09-T01",
+      "gate": "G09",
+      "title": "一致备份和跨机加密恢复",
+      "depends_on": [
+        "G08-T04"
+      ],
+      "deliverables": [
+        "备份恢复结果"
+      ],
+      "acceptance_ids": [
+        "INS-008",
+        "SEC-003",
+        "SEC-004",
+        "SEC-005",
+        "SEC-006",
+        "SEC-007",
+        "SEC-008",
+        "SEC-009",
+        "SEC-010",
+        "DAT-001",
+        "DAT-002",
+        "DAT-003",
+        "DAT-004",
+        "DAT-005",
+        "DAT-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G09-T02",
+      "gate": "G09",
+      "title": "敏感重分类及彻底删除路径",
+      "depends_on": [
+        "G09-T01"
+      ],
+      "deliverables": [
+        "安全测试"
+      ],
+      "acceptance_ids": [
+        "INS-008",
+        "SEC-003",
+        "SEC-004",
+        "SEC-005",
+        "SEC-006",
+        "SEC-007",
+        "SEC-008",
+        "SEC-009",
+        "SEC-010",
+        "DAT-001",
+        "DAT-002",
+        "DAT-003",
+        "DAT-004",
+        "DAT-005",
+        "DAT-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G09-T03",
+      "gate": "G09",
+      "title": "诊断最小化与故障注入",
+      "depends_on": [
+        "G09-T02"
+      ],
+      "deliverables": [
+        "诊断样包"
+      ],
+      "acceptance_ids": [
+        "INS-008",
+        "SEC-003",
+        "SEC-004",
+        "SEC-005",
+        "SEC-006",
+        "SEC-007",
+        "SEC-008",
+        "SEC-009",
+        "SEC-010",
+        "DAT-001",
+        "DAT-002",
+        "DAT-003",
+        "DAT-004",
+        "DAT-005",
+        "DAT-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G09-T04",
+      "gate": "G09",
+      "title": "注入/越权/文件资源攻击测试",
+      "depends_on": [
+        "G09-T03"
+      ],
+      "deliverables": [
+        "威胁检查清单"
+      ],
+      "acceptance_ids": [
+        "INS-008",
+        "SEC-003",
+        "SEC-004",
+        "SEC-005",
+        "SEC-006",
+        "SEC-007",
+        "SEC-008",
+        "SEC-009",
+        "SEC-010",
+        "DAT-001",
+        "DAT-002",
+        "DAT-003",
+        "DAT-004",
+        "DAT-005",
+        "DAT-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G10-T01",
+      "gate": "G10",
+      "title": "签名更新清单和离线更新",
+      "depends_on": [
+        "G09-T04"
+      ],
+      "deliverables": [
+        "升级证据"
+      ],
+      "acceptance_ids": [
+        "INS-007",
+        "UPD-001",
+        "UPD-002",
+        "UPD-003",
+        "UPD-004"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G10-T02",
+      "gate": "G10",
+      "title": "迁移失败恢复与不兼容回退",
+      "depends_on": [
+        "G10-T01"
+      ],
+      "deliverables": [
+        "恢复证据"
+      ],
+      "acceptance_ids": [
+        "INS-007",
+        "UPD-001",
+        "UPD-002",
+        "UPD-003",
+        "UPD-004"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G10-T03",
+      "gate": "G10",
+      "title": "中文路径/缩放/辅助使用",
+      "depends_on": [
+        "G10-T02"
+      ],
+      "deliverables": [
+        "性能原始记录"
+      ],
+      "acceptance_ids": [
+        "INS-007",
+        "UPD-001",
+        "UPD-002",
+        "UPD-003",
+        "UPD-004"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G10-T04",
+      "gate": "G10",
+      "title": "冷启动检索导出性能与压力",
+      "depends_on": [
+        "G10-T03"
+      ],
+      "deliverables": [
+        "兼容矩阵"
+      ],
+      "acceptance_ids": [
+        "INS-007",
+        "UPD-001",
+        "UPD-002",
+        "UPD-003",
+        "UPD-004"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G11-T01",
+      "gate": "G11",
+      "title": "执行全案例并追踪所有原需求",
+      "depends_on": [
+        "G10-T04"
+      ],
+      "deliverables": [
+        "发行安装包或测试构建"
+      ],
+      "acceptance_ids": [
+        "UPD-005",
+        "UPD-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G11-T02",
+      "gate": "G11",
+      "title": "核对资源覆盖和已知缺口",
+      "depends_on": [
+        "G11-T01"
+      ],
+      "deliverables": [
+        "release-evidence.json"
+      ],
+      "acceptance_ids": [
+        "UPD-005",
+        "UPD-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G11-T03",
+      "gate": "G11",
+      "title": "签名EXE和SBOM及哈希清单",
+      "depends_on": [
+        "G11-T02"
+      ],
+      "deliverables": [
+        "校验清单"
+      ],
+      "acceptance_ids": [
+        "UPD-005",
+        "UPD-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    },
+    {
+      "id": "G11-T04",
+      "gate": "G11",
+      "title": "最终交付及真实状态报告",
+      "depends_on": [
+        "G11-T03"
+      ],
+      "deliverables": [
+        "中文用户手册"
+      ],
+      "acceptance_ids": [
+        "UPD-005",
+        "UPD-006"
+      ],
+      "status": "NOT_STARTED",
+      "rules": [
+        "先验证最小可运行纵向路径，再扩展",
+        "保留实际命令、退出码和证据；无环境标BLOCKED",
+        "不得删验收项、硬编码成功或提交真实凭据"
+      ]
+    }
+  ]
+}

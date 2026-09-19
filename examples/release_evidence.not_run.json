@@ -1,0 +1,11 @@
+{
+  "test_id": "DESK-001",
+  "status": "NOT_RUN",
+  "commit_sha": null,
+  "build_sha256": null,
+  "environment": "本次仅交付工程文档，尚未开发应用。",
+  "executed_at": null,
+  "evidence_paths": [],
+  "observed_result": "尚未执行Windows安装测试。",
+  "blocker": null
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "task_id": "context_demo",
+  "workspace_id": "workspace_demo",
+  "class_id": "class_demo",
+  "task_kind": "lesson",
+  "grade": 7,
+  "actual_duration_sec": 2400,
+  "duration_confirmed": true,
+  "school_timezone": "Asia/Shanghai",
+  "profile_revision": 1,
+  "textbook_version_ids": [],
+  "current_work_id": "self_authored_demo",
+  "confirmed_learned_work_ids": [],
+  "critical_unknowns": [
+    "尚无真实教材与本班作答；本案例仅验证软件。"
+  ],
+  "available_resources": [
+    "projector"
+  ],
+  "cloud_egress_policy": "approved_reference_only",
+  "max_model_calls": 24,
+  "max_cost_microusd": 1000000,
+  "provider_profile_id": null
+}

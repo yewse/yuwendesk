@@ -1,0 +1,66 @@
+{
+  "report_type": "DOCUMENT_PACKAGE_VALIDATION_ONLY",
+  "date": "2026-09-19",
+  "app_implemented": false,
+  "windows_installer_test": "NOT_RUN",
+  "live_grok_test": "NOT_RUN",
+  "teaching_effect_test": "NOT_RUN",
+  "checks": [
+    {
+      "check": "JSON文件语法",
+      "status": "PASS",
+      "detail": 29
+    },
+    {
+      "check": "JSON Schema元模式",
+      "status": "PASS",
+      "detail": "11份通过结构检查"
+    },
+    {
+      "check": "任务有效样例",
+      "status": "PASS",
+      "detail": "task_context.valid.json"
+    },
+    {
+      "check": "计划有效样例",
+      "status": "PASS",
+      "detail": "lesson_plan.valid.json"
+    },
+    {
+      "check": "未执行发行证据样例",
+      "status": "PASS",
+      "detail": "release_evidence.not_run.json"
+    },
+    {
+      "check": "结构负例被拒绝",
+      "status": "PASS",
+      "detail": "故意无效枚举被拒绝：'all_students_mastered' is not one of ['unknown', 'initial_support', 'repeated_support']"
+    },
+    {
+      "check": "语义负例结构可通过",
+      "status": "PASS",
+      "detail": {
+        "note": "样例故意符合Schema但违反语义，证明结构与业务检查不能混淆",
+        "differences": [
+          "tasks",
+          "activities"
+        ]
+      }
+    },
+    {
+      "check": "需求覆盖与真实状态",
+      "status": "PASS",
+      "detail": "130条案例；60条原需求都有对应案例；全部应用测试保持NOT_RUN"
+    },
+    {
+      "check": "工作包依赖",
+      "status": "PASS",
+      "detail": "48个工作包依赖无环且用例引用存在"
+    },
+    {
+      "check": "SQL基线语法及有限不变量",
+      "status": "PASS",
+      "detail": "SQLite 3.46.1内存执行；33张表（含FTS虚表，不含FTS内部表）；敏感明文、敏感锚点和原地改版本负例被拒绝。非桌面应用测试。"
+    }
+  ]
+}
