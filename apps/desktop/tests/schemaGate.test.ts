@@ -30,6 +30,27 @@ describe('IPC 载荷 Schema 门（G02-T01 / SEC 边界）', () => {
     expect(r.errors.join()).toContain('不允许的字段 teacher_only');
   });
 
+  it('继承属性名不得被误判为已声明字段：constructor / toString 额外字段被拒绝', () => {
+    const withConstructor = checkPayload('ui.saveDraft', { content: 'x', constructor: 1 });
+    expect(withConstructor.ok).toBe(false);
+    expect(withConstructor.errors.join()).toContain('不允许的字段 constructor');
+
+    const withToString = checkPayload('ui.saveDraft', { content: 'x', toString: 'evil' });
+    expect(withToString.ok).toBe(false);
+    expect(withToString.errors.join()).toContain('不允许的字段 toString');
+  });
+
+  it('__proto__ 作为真实自有字段（JSON 解析）被拒绝', () => {
+    const parsed = JSON.parse('{"content":"x","__proto__":{"polluted":true}}');
+    const r = checkPayload('ui.saveDraft', parsed);
+    expect(r.ok).toBe(false);
+    expect(r.errors.join()).toContain('不允许的字段 __proto__');
+  });
+
+  it('正常请求回归：仅 content 仍通过', () => {
+    expect(checkPayload('ui.saveDraft', { content: '仅内容' }).ok).toBe(true);
+  });
+
   it('content 过长 → 失败', () => {
     const r = checkPayload('ui.saveDraft', { content: 'a'.repeat(200_001) });
     expect(r.ok).toBe(false);

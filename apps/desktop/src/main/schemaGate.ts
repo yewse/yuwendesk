@@ -83,14 +83,16 @@ export function checkPayload(op: OperationName, payload: unknown): SchemaCheckRe
     return { ok: false, errors };
   }
   const obj = payload as Record<string, unknown>;
+  // 用 hasOwnProperty 判断，避免 `in` 命中原型链导致 constructor/toString/__proto__ 等继承属性误判为已声明字段。
+  const hasOwn = (o: object, k: string): boolean => Object.prototype.hasOwnProperty.call(o, k);
   for (const key of Object.keys(obj)) {
-    if (!(key in schema.properties)) errors.push(`不允许的字段 ${key}`);
+    if (!hasOwn(schema.properties, key)) errors.push(`不允许的字段 ${key}`);
   }
   for (const req of schema.required) {
-    if (!(req in obj)) errors.push(`缺少必填字段 ${req}`);
+    if (!hasOwn(obj, req)) errors.push(`缺少必填字段 ${req}`);
   }
   for (const [key, fieldSchema] of Object.entries(schema.properties)) {
-    if (key in obj) validateField(key, fieldSchema, obj[key], errors);
+    if (hasOwn(obj, key)) validateField(key, fieldSchema, obj[key], errors);
   }
   return { ok: errors.length === 0, errors };
 }
