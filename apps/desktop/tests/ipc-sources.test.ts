@@ -83,11 +83,11 @@ describe('IPC 资料闭环：导入/搜索/定位/查看/停用', () => {
     expect((search.data as { hits: unknown[] }).hits.length).toBe(0);
   });
 
-  it('敏感分类无安全后端 → KEY_UNAVAILABLE，不落库', async () => {
+  it('敏感分类 → PRIVACY_BLOCKED（无条件阻止），不落库', async () => {
     const { svc, store } = await svcOn(tmp());
     const r = await svc.handle('sources.import', req('sources.import', { title: '学生作答', format: 'txt', content: '自拟', classification: 'student_sensitive' }));
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.code).toBe('KEY_UNAVAILABLE');
+    if (!r.ok) expect(r.error.code).toBe('PRIVACY_BLOCKED');
     expect(store.listSources().length).toBe(0);
   });
 

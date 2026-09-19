@@ -15,10 +15,11 @@ import type {
   SourceListItem,
   SourceReadResult,
   SourceSearchHit,
+  SourceVersionItem,
   StoreIo,
   WindowState
 } from '../store';
-import { StoreProtectedError } from '../store';
+import { DEFAULT_CLASSIFICATION, SOURCE_CLASSIFICATIONS, StoreProtectedError } from '../store';
 import {
   CredentialProtector,
   DataKeyManager,
@@ -622,39 +623,31 @@ export class SqliteStore {
 
   // ===== G03 资料导入 / 搜索 / 原文定位 =====
 
-  // 导入文本类资料：计算 SHA-256、按标题去重/新增版本、抽取入库并建 FTS 索引。
-  // 敏感分类需安全加密后端，否则阻塞（普通非敏感资料不受影响）。
+  // 导入文本类资料：SHA-256 文本哈希、严格分类、去重、版本关系需明确确认（不自动切换当前版本）。
+  // 敏感分类（student_sensitive）在完整加密资料路径实现前一律阻塞；普通非敏感资料照常。
   importSource(input: SourceImportInput): SourceImportResult {
     this.assertWritable();
-    const classification = input.classification ?? 'public_reference';
+    // 严格分类枚举：未知值拒绝；缺省→安全默认（本地私有，不外发），绝不默认公开。
+    const classification: SourceClassification =
+      input.classification === undefined
+        ? DEFAULT_CLASSIFICATION
+        : (input.classification as SourceClassification);
+    if (input.classification !== undefined && !SOURCE_CLASSIFICATIONS.includes(classification)) {
+      return { status: 'rejected', reason: 'bad_classification' };
+    }
+    // 敏感资料：加密业务落点未实现前无条件阻止（不得把正文写入普通 source_text/source_fts）。
+    if (classification === 'student_sensitive') {
+      return { status: 'blocked_sensitive', reason: 'not_implemented' };
+    }
     if (input.content.length === 0) return { status: 'rejected', reason: 'empty' };
     if (Buffer.byteLength(input.content, 'utf8') > SOURCE_MAX_BYTES) return { status: 'rejected', reason: 'too_large' };
-    if (classification === 'student_sensitive' && !this.credentialEncryptionAvailable()) {
-      return { status: 'blocked_sensitive', reason: 'encryption_unavailable' };
-    }
+
     const db = this.requireDb();
     const now = new Date().toISOString();
     const hash = createHash('sha256').update(input.content, 'utf8').digest('hex');
     const byteSize = Buffer.byteLength(input.content, 'utf8');
 
-    const tx = db.transaction((): SourceImportResult => {
-      const doc = db.prepare('SELECT id, current_version_id FROM source_document WHERE title=?').get(input.title) as
-        | { id: string; current_version_id: string | null }
-        | undefined;
-      if (doc && doc.current_version_id) {
-        const cur = db.prepare('SELECT content_hash, version FROM source_version WHERE id=?').get(doc.current_version_id) as
-          | { content_hash: string; version: number }
-          | undefined;
-        if (cur && cur.content_hash === hash) {
-          return { status: 'duplicate', documentId: doc.id, versionId: doc.current_version_id, version: cur.version, contentHash: hash };
-        }
-      }
-      const documentId = doc ? doc.id : randomUUID();
-      if (!doc) {
-        db.prepare(
-          'INSERT INTO source_document(id,title,classification,status,current_version_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?)'
-        ).run(documentId, input.title, classification, 'active', null, now, now);
-      }
+    const addVersion = (documentId: string, makeCurrent: boolean, versionConflict: boolean): SourceImportResult => {
       const maxV = (db.prepare('SELECT COALESCE(MAX(version),0) m FROM source_version WHERE document_id=?').get(documentId) as { m: number }).m;
       const version = maxV + 1;
       const versionId = randomUUID();
@@ -669,8 +662,54 @@ export class SqliteStore {
       );
       db.prepare('INSERT INTO source_text(version_id,full_text) VALUES(?,?)').run(versionId, input.content);
       db.prepare('INSERT INTO source_fts(text,version_id) VALUES(?,?)').run(input.content, versionId);
-      db.prepare('UPDATE source_document SET current_version_id=?, status=?, updated_at=? WHERE id=?').run(versionId, 'active', now, documentId);
-      return { status: doc ? 'new_version' : 'imported', documentId, versionId, version, contentHash: hash, versionConflict: !!doc };
+      if (makeCurrent) {
+        db.prepare('UPDATE source_document SET current_version_id=?, status=?, updated_at=? WHERE id=?').run(versionId, 'active', now, documentId);
+      } else {
+        db.prepare('UPDATE source_document SET updated_at=? WHERE id=?').run(now, documentId);
+      }
+      return { status: maxV === 0 ? 'imported' : 'new_version', documentId, versionId, version, contentHash: hash, versionConflict };
+    };
+    const createDoc = (): string => {
+      const documentId = randomUUID();
+      db.prepare(
+        'INSERT INTO source_document(id,title,classification,status,current_version_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?)'
+      ).run(documentId, input.title, classification, 'active', null, now, now);
+      return documentId;
+    };
+    const hashInDoc = (documentId: string): { versionId: string; version: number } | undefined =>
+      db.prepare('SELECT id versionId, version FROM source_version WHERE document_id=? AND content_hash=? ORDER BY version LIMIT 1').get(documentId, hash) as
+        | { versionId: string; version: number }
+        | undefined;
+
+    const tx = db.transaction((): SourceImportResult => {
+      // 明确确认为已有文档的新版本（显式关系 → 允许切换当前版本）。
+      if (input.relation === 'new_version' && input.targetDocumentId) {
+        const doc = db.prepare('SELECT id FROM source_document WHERE id=?').get(input.targetDocumentId) as { id: string } | undefined;
+        if (!doc) return { status: 'rejected', reason: 'empty' }; // 目标不存在（调用方应先刷新）
+        const dup = hashInDoc(doc.id);
+        if (dup) return { status: 'duplicate', documentId: doc.id, versionId: dup.versionId, version: dup.version, contentHash: hash };
+        return addVersion(doc.id, true, true);
+      }
+      // 明确确认为独立新文档（即使同名）。
+      if (input.relation === 'separate') {
+        return addVersion(createDoc(), true, false);
+      }
+      // 自动路径：同标题仅“疑似关联”，需确认。
+      const doc = db.prepare('SELECT id, current_version_id FROM source_document WHERE title=? ORDER BY created_at LIMIT 1').get(input.title) as
+        | { id: string; current_version_id: string | null }
+        | undefined;
+      if (!doc) return addVersion(createDoc(), true, false); // 新文档 v1
+      const dup = hashInDoc(doc.id);
+      if (dup) return { status: 'duplicate', documentId: doc.id, versionId: dup.versionId, version: dup.version, contentHash: hash };
+      // 同名不同内容：不自动新增版本/切换当前版本，返回需确认。
+      const cur = doc.current_version_id
+        ? (db.prepare('SELECT version, content_hash FROM source_version WHERE id=?').get(doc.current_version_id) as { version: number; content_hash: string } | undefined)
+        : undefined;
+      return {
+        status: 'needs_confirmation',
+        contentHash: hash,
+        existing: { documentId: doc.id, title: input.title, currentVersion: cur?.version ?? 0, currentHash: cur?.content_hash ?? '' }
+      };
     });
     return tx.immediate();
   }
@@ -761,6 +800,16 @@ export class SqliteStore {
     const db = this.requireDb();
     const info = db.prepare("UPDATE source_document SET status='retired', updated_at=? WHERE id=?").run(new Date().toISOString(), documentId);
     return info.changes === 1;
+  }
+
+  getSourceVersions(documentId: string): SourceVersionItem[] {
+    if (!this.db) return [];
+    const cur = (this.db.prepare('SELECT current_version_id v FROM source_document WHERE id=?').get(documentId) as { v: string | null } | undefined)?.v ?? null;
+    return (
+      this.db
+        .prepare('SELECT id versionId, version, content_hash contentHash, format, created_at createdAt FROM source_version WHERE document_id=? ORDER BY version')
+        .all(documentId) as Omit<SourceVersionItem, 'isCurrent'>[]
+    ).map((v) => ({ ...v, isCurrent: v.versionId === cur }));
   }
 
   listSources(): SourceListItem[] {

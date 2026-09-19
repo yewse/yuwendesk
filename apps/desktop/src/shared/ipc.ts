@@ -158,4 +158,6 @@ export interface SourceImportPayload {
   format: string;
   content: string;
   classification?: string;
+  relation?: 'new_version' | 'separate';
+  targetDocumentId?: string;
 }

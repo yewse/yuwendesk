@@ -53,17 +53,39 @@ export interface SourceAnchor {
   char_end: number;
   line: number;
 }
+export const SOURCE_CLASSIFICATIONS: readonly SourceClassification[] = [
+  'public_reference',
+  'licensed_reference',
+  'teacher_private',
+  'student_sensitive'
+];
+// 未显式分类时的安全默认：本地私有、不可外发（绝不默认公开）。
+export const DEFAULT_CLASSIFICATION: SourceClassification = 'teacher_private';
+
 export interface SourceImportInput {
   title: string;
   format: string;
   content: string;
-  classification?: SourceClassification;
+  classification?: SourceClassification | string;
+  // 版本关系（仅在明确确认后传入）：
+  //  - relation='new_version' + targetDocumentId：确认为该文档的新版本（显式，允许切换当前版本）。
+  //  - relation='separate'：确认为独立的新文档（即使同名）。
+  relation?: 'new_version' | 'separate';
+  targetDocumentId?: string;
+}
+export interface SourceExistingSummary {
+  documentId: string;
+  title: string;
+  currentVersion: number;
+  currentHash: string;
 }
 export type SourceImportResult =
   | { status: 'imported' | 'new_version'; documentId: string; versionId: string; version: number; contentHash: string; versionConflict: boolean }
   | { status: 'duplicate'; documentId: string; versionId: string; version: number; contentHash: string }
-  | { status: 'blocked_sensitive'; reason: 'encryption_unavailable' }
-  | { status: 'rejected'; reason: 'too_large' | 'empty' };
+  // 同标题但内容不同：仅“疑似关联”，需教师明确关系后再落库，不自动新增版本/切换当前版本。
+  | { status: 'needs_confirmation'; contentHash: string; existing: SourceExistingSummary }
+  | { status: 'blocked_sensitive'; reason: 'not_implemented' | 'encryption_unavailable' }
+  | { status: 'rejected'; reason: 'too_large' | 'empty' | 'bad_classification' };
 export interface SourceSearchHit {
   documentId: string;
   title: string;
@@ -89,12 +111,21 @@ export interface SourceReadResult {
   char_end: number | null;
   truncated: boolean;
 }
+export interface SourceVersionItem {
+  versionId: string;
+  version: number;
+  contentHash: string;
+  format: string;
+  createdAt: string;
+  isCurrent: boolean;
+}
 export interface SourceStore {
   importSource(input: SourceImportInput): SourceImportResult;
   searchSources(query: string): SourceSearchHit[];
   readSource(versionId: string, charStart?: number, charEnd?: number): SourceReadResult | null;
   retireSource(documentId: string): boolean;
   listSources(): SourceListItem[];
+  getSourceVersions(documentId: string): SourceVersionItem[];
 }
 
 // 草稿存储接口：LocalStore（JSON，G01）与 SqliteStore（G02）均实现，供主进程/IPC 无缝切换。

@@ -247,6 +247,9 @@ function ResourcesPage(): JSX.Element {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [pending, setPending] = useState<
+    { title: string; format: string; content: string; existing: { documentId: string; title: string; currentVersion: number; currentHash: string } }[]
+  >([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   async function reloadList(): Promise<void> {
@@ -275,13 +278,33 @@ function ResourcesPage(): JSX.Element {
       }
       const d = r.data;
       if (d.status === 'imported') summary.push(`「${file.name}」已导入（v${d.version}，hash ${d.contentHash?.slice(0, 8)}…）`);
-      else if (d.status === 'new_version') summary.push(`「${file.name}」内容变更 → 新版本 v${d.version}（版本冲突已标记）`);
+      else if (d.status === 'new_version') summary.push(`「${file.name}」已作为新版本 v${d.version}`);
       else if (d.status === 'duplicate') summary.push(`「${file.name}」内容重复（同哈希，未新增版本）`);
+      else if (d.status === 'needs_confirmation' && d.existing) {
+        summary.push(`「${file.name}」检测到同名资料（当前 v${d.existing.currentVersion}），需确认关系`);
+        setPending((prev) => [...prev, { title: file.name, format, content, existing: d.existing! }]);
+      }
     }
     setMessage(summary.join('；'));
     await reloadList();
     if (query.trim()) await runSearch(query);
     setBusy(false);
+  }
+
+  async function resolvePending(
+    item: { title: string; format: string; content: string; existing: { documentId: string } },
+    relation: 'new_version' | 'separate'
+  ): Promise<void> {
+    await window.yuwen.importSource({
+      title: item.title,
+      format: item.format,
+      content: item.content,
+      relation,
+      targetDocumentId: relation === 'new_version' ? item.existing.documentId : undefined
+    });
+    setPending((prev) => prev.filter((p) => p !== item));
+    await reloadList();
+    if (query.trim()) await runSearch(query);
   }
 
   async function runSearch(q: string): Promise<void> {
@@ -344,6 +367,25 @@ function ResourcesPage(): JSX.Element {
         />
         {message && <p className="notice small">{message}</p>}
       </div>
+
+      {pending.map((item, i) => (
+        <div className="notice warn confirm-box" key={item.title + i}>
+          <div>
+            检测到同名资料「{item.title}」（现有当前版本 v{item.existing.currentVersion}）。同名仅表示疑似关联，请明确关系：
+          </div>
+          <div className="confirm-actions">
+            <button className="btn small" onClick={() => void resolvePending(item, 'new_version')}>
+              作为新版本（切换当前版本，保留旧版本）
+            </button>
+            <button className="btn small" onClick={() => void resolvePending(item, 'separate')}>
+              作为独立文档
+            </button>
+            <button className="btn small" onClick={() => setPending((prev) => prev.filter((p) => p !== item))}>
+              取消
+            </button>
+          </div>
+        </div>
+      ))}
 
       <div className="card">
         <div className="card-title">检索与原文定位</div>

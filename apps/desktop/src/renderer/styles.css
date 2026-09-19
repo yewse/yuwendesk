@@ -446,3 +446,6 @@ h1 {
   font-size: 14px;
   line-height: 1.7;
 }
+
+.confirm-box{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
+.confirm-actions{display:flex;gap:8px;flex-wrap:wrap;}

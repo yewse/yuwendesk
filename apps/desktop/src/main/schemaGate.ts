@@ -40,7 +40,9 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
       title: { type: 'string', minLength: 1, maxLength: 500 },
       format: { type: 'string', maxLength: 16 },
       content: { type: 'string', maxLength: 6_000_000 },
-      classification: { type: 'string', maxLength: 32 }
+      classification: { type: 'string', maxLength: 32 },
+      relation: { type: 'string', maxLength: 16 },
+      targetDocumentId: { type: 'string', maxLength: 64 }
     },
     required: ['title', 'format', 'content'],
     additionalProperties: false

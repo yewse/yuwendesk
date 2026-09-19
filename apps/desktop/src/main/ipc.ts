@@ -117,20 +117,36 @@ export class IpcService {
   private sourcesImport(req: IpcRequest): IpcResponse {
     const src = this.ctx.sourceStore;
     if (!src) return errorResponse('INPUT_INVALID', '资料功能不可用。', '请重启应用。');
-    const p = req.payload as { title: string; format: string; content: string; classification?: string };
+    const p = req.payload as {
+      title: string;
+      format: string;
+      content: string;
+      classification?: string;
+      relation?: 'new_version' | 'separate';
+      targetDocumentId?: string;
+    };
     try {
       const r = src.importSource({
         title: p.title,
         format: p.format,
         content: p.content,
-        classification: p.classification as never
+        classification: p.classification,
+        relation: p.relation,
+        targetDocumentId: p.targetDocumentId
       });
       if (r.status === 'blocked_sensitive') {
-        return errorResponse('KEY_UNAVAILABLE', '敏感资料需要可用的加密后端，已阻止导入以防明文落盘。', '请在受支持系统上配置加密后再导入敏感材料。');
+        return errorResponse(
+          'PRIVACY_BLOCKED',
+          '敏感资料（学生材料）导入已被阻止：完整加密资料路径尚未实现，不会将正文写入普通存储。',
+          '普通非敏感资料可正常导入；敏感材料待加密业务落点实现后再启用。'
+        );
       }
       if (r.status === 'rejected') {
-        return errorResponse('INPUT_INVALID', r.reason === 'too_large' ? '文件过大。' : '内容为空。', '请检查文件后重试。');
+        const msg =
+          r.reason === 'too_large' ? '文件过大。' : r.reason === 'bad_classification' ? '资料分类取值非法。' : '内容为空。';
+        return errorResponse('INPUT_INVALID', msg, '请检查文件与分类后重试。');
       }
+      // needs_confirmation / imported / new_version / duplicate 均为正常数据返回。
       return { ok: true, data: r };
     } catch (e) {
       if (e instanceof StoreProtectedError) {

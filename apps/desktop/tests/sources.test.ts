@@ -9,6 +9,13 @@ const open = new Set<SqliteStore>();
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), 'yuwendesk-src-'));
 }
+function fakeSafe(available = true): SafeStorageLike {
+  return {
+    isEncryptionAvailable: () => available,
+    encryptString: (s) => Buffer.from('ENC1:' + Buffer.from(s, 'utf8').toString('base64'), 'utf8'),
+    decryptString: (b) => Buffer.from(b.toString('utf8').slice(5), 'base64').toString('utf8')
+  };
+}
 async function makeStore(dir: string, safeStorage?: SafeStorageLike): Promise<SqliteStore> {
   const s = new SqliteStore(dir, { safeStorage });
   open.add(s);
@@ -48,23 +55,54 @@ describe('G03 资料导入与版本/哈希', () => {
     expect(s.listSources()[0].version).toBe(1);
   });
 
-  it('同标题不同内容 → new_version + 版本冲突标记', async () => {
+  it('同标题不同内容 → 仅需确认（不自动新增版本/切换当前版本）', async () => {
     const s = await makeStore(tmp());
-    s.importSource({ title: '春', format: 'txt', content: 春 });
-    const v2 = s.importSource({ title: '春', format: 'txt', content: 春 + '\n（修订版新增一句）' });
+    const v1 = s.importSource({ title: '春', format: 'txt', content: 春 });
+    const r = s.importSource({ title: '春', format: 'txt', content: 春 + '\n（修订版新增一句）' });
+    expect(r.status).toBe('needs_confirmation');
+    if (r.status === 'needs_confirmation') {
+      expect(r.existing.currentVersion).toBe(1);
+    }
+    // 未确认前：仍是 v1，未新增版本、当前版本未变
+    expect(s.listSources()[0].version).toBe(1);
+    if (v1.status === 'imported') expect(s.getSourceVersions(v1.documentId).length).toBe(1);
+  });
+
+  it('确认为新版本 → 显式切换当前版本，旧版本保留', async () => {
+    const s = await makeStore(tmp());
+    const v1 = s.importSource({ title: '春', format: 'txt', content: 春 });
+    if (v1.status !== 'imported') throw new Error('setup');
+    const v2 = s.importSource({ title: '春', format: 'txt', content: 春 + '\n新增', relation: 'new_version', targetDocumentId: v1.documentId });
     expect(v2.status).toBe('new_version');
     if (v2.status === 'new_version') {
       expect(v2.version).toBe(2);
       expect(v2.versionConflict).toBe(true);
     }
-    expect(s.listSources()[0].version).toBe(2);
+    expect(s.listSources()[0].version).toBe(2); // 当前版本已显式切换
+    expect(s.getSourceVersions(v1.documentId).length).toBe(2); // 旧版本保留
   });
 
-  it('敏感分类无安全后端 → 阻塞（不导入）', async () => {
-    const s = await makeStore(tmp()); // 无 safeStorage
-    const r = s.importSource({ title: '学生作答', format: 'txt', content: '自拟样例', classification: 'student_sensitive' });
+  it('确认为独立文档 → 同名但独立文档', async () => {
+    const s = await makeStore(tmp());
+    s.importSource({ title: '春', format: 'txt', content: 春 });
+    const sep = s.importSource({ title: '春', format: 'txt', content: 春 + '\n另一篇', relation: 'separate' });
+    expect(sep.status).toBe('imported');
+    expect(s.listSources().length).toBe(2);
+  });
+
+  it('敏感分类 → 无条件阻塞（即使加密后端可用，也不落普通存储）', async () => {
+    const withSafe = await makeStore(tmp(), fakeSafe(true));
+    const r = withSafe.importSource({ title: '学生作答', format: 'txt', content: '自拟样例', classification: 'student_sensitive' });
     expect(r.status).toBe('blocked_sensitive');
-    expect(s.listSources().length).toBe(0);
+    if (r.status === 'blocked_sensitive') expect(r.reason).toBe('not_implemented');
+    expect(withSafe.listSources().length).toBe(0);
+  });
+
+  it('未知分类 → 拒绝；缺省分类为本地私有(不默认公开)', async () => {
+    const s = await makeStore(tmp());
+    expect(s.importSource({ title: 'x', format: 'txt', content: 'a', classification: 'whatever' }).status).toBe('rejected');
+    s.importSource({ title: '默认分类', format: 'txt', content: '正文' });
+    expect(s.listSources()[0].classification).toBe('teacher_private');
   });
 
   it('空内容/超限 → rejected', async () => {

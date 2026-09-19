@@ -55,10 +55,15 @@ const api = {
     }),
   // G03 资料：导入/列表/搜索/查看/停用（内容在渲染层通过原生文件选择或拖拽读取后传入）。
   importSource: (payload: SourceImportPayload) =>
-    call<{ status: string; documentId?: string; versionId?: string; version?: number; contentHash?: string; versionConflict?: boolean }>(
-      'sources.import',
-      { payload }
-    ),
+    call<{
+      status: string;
+      documentId?: string;
+      versionId?: string;
+      version?: number;
+      contentHash?: string;
+      versionConflict?: boolean;
+      existing?: { documentId: string; title: string; currentVersion: number; currentHash: string };
+    }>('sources.import', { payload }),
   listSources: () => call<{ sources: SourceListItemDTO[] }>('sources.list'),
   searchSources: (query: string) => call<{ hits: SourceHitDTO[] }>('sources.search', { payload: { query } }),
   readSource: (versionId: string, charStart?: number, charEnd?: number) =>
