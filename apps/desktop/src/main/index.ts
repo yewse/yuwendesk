@@ -1,11 +1,13 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron';
+import { release } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { IMPLEMENTED_OPERATIONS } from '../shared/ipc';
 import { IpcService } from './ipc';
+import { CloseController } from './lifecycle';
 import { evaluatePlatform } from './platform';
-import { attachCsp, isTrustedRendererUrl, lockdownSession } from './security';
+import { attachCsp, isAllowedExternalUrl, isTrustedRendererUrl, lockdownSession } from './security';
 import { LocalStore } from './store';
 
 const APP_NAME_ZH = '语文备课工作台';
@@ -16,6 +18,7 @@ app.setName('YuwenDesk');
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore;
 let ipcService: IpcService;
+let closeController: CloseController | null = null;
 
 // 仅在未打包（开发）且显式提供开发服务器地址时才进入开发模式；打包后一律走本地静态资源。
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
@@ -31,11 +34,12 @@ function rendererIndexPath(): string {
 
 function isTrustedSender(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   if (!mainWindow || event.sender.id !== mainWindow.webContents.id) return false;
-  // 仅接受主窗口的顶层 frame，拒绝任何子 frame（若被注入 iframe）。
+  // 缺少 frame 身份依据时拒绝；仅接受主窗口顶层 frame（拒绝任何子 frame/注入 iframe）。
   const frame = event.senderFrame;
-  if (frame && frame !== event.sender.mainFrame) return false;
+  if (!frame || frame !== event.sender.mainFrame) return false;
   const expected = pathToFileURL(rendererIndexPath()).toString();
-  return isTrustedRendererUrl(event.sender.getURL(), expected, DEV_SERVER_URL, isDev);
+  // 以实际发送 frame 的 URL 为准做精确来源校验。
+  return isTrustedRendererUrl(frame.url, expected, DEV_SERVER_URL, isDev);
 }
 
 function createWindow(): void {
@@ -63,9 +67,9 @@ function createWindow(): void {
     }
   });
 
-  // 禁止渲染进程打开任意窗口/导航到外部页面；外链交由系统浏览器（受控 HTTPS）。
+  // 禁止渲染进程打开任意窗口/导航到外部页面；外链仅在通过规范化 https 策略时交由系统浏览器。
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://')) void shell.openExternal(url);
+    if (isAllowedExternalUrl(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
@@ -91,27 +95,38 @@ function createWindow(): void {
   mainWindow.on('resize', persistBounds);
   mainWindow.on('move', persistBounds);
 
-  // 关闭前刷新保存（规范 3.3「窗口关闭前自动保存」）：先请求渲染层落盘未保存草稿，
-  // 收到完成回执或超时后再真正关闭，避免防抖丢失最后一次编辑。
-  let allowClose = false;
-  mainWindow.on('close', (event) => {
-    if (allowClose || !mainWindow) return;
-    event.preventDefault();
-    const finish = (): void => {
-      allowClose = true;
+  // 关闭前刷新保存（规范 3.3「窗口关闭前自动保存」）：由 CloseController 协调——
+  // 请求渲染层落盘、只接受本次握手的成功回执、失败或超时询问用户而非静默丢弃。
+  closeController = new CloseController({
+    requestFlush: (requestId) => {
+      mainWindow?.webContents.send('yuwen:before-close', requestId);
+    },
+    closeWindow: () => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
-    };
-    const timer = setTimeout(finish, 1500);
-    ipcMain.once('yuwen:flush-done', (e: IpcMainEvent) => {
-      if (!isTrustedSender(e)) return;
-      clearTimeout(timer);
-      finish();
-    });
-    mainWindow.webContents.send('yuwen:before-close');
+    },
+    confirmForceQuit: async () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return true;
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: ['继续编辑', '仍要退出'],
+        defaultId: 0,
+        cancelId: 0,
+        title: APP_NAME_ZH,
+        message: '有未保存的修改尚未成功保存。',
+        detail: '选择“继续编辑”可返回修改并重试保存；“仍要退出”将放弃尚未保存的修改。'
+      });
+      return response === 1;
+    },
+    timeoutMs: 10000
+  });
+
+  mainWindow.on('close', (event) => {
+    if (closeController && !closeController.onClose()) event.preventDefault();
   });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    closeController = null;
   });
 }
 
@@ -133,10 +148,21 @@ function registerIpc(): void {
       return ipcService.handle(op, request);
     });
   }
+
+  // 关闭握手回执（带 requestId 与保存结果）；校验发送者，路由到关闭协调器。
+  ipcMain.on('yuwen:flush-done', (event: IpcMainEvent, requestId: unknown, saved: unknown) => {
+    if (!isTrustedSender(event)) return;
+    if (typeof requestId !== 'string') return;
+    void closeController?.onFlushResult(requestId, saved === true);
+  });
 }
 
 async function bootstrap(): Promise<void> {
-  const platform = evaluatePlatform(process.platform, process.arch);
+  // 平台判定：打包版本禁用开发放行（allowDevOverride=false）；用 os.release() 判定 Win11。
+  const platform = evaluatePlatform(process.platform, process.arch, process.env, {
+    allowDevOverride: !app.isPackaged,
+    osRelease: release()
+  });
   if (!platform.supported) {
     // 不支持的系统：给中文说明并安全退出，不做任何安装/更改（INS-006）。
     dialog.showErrorBox(APP_NAME_ZH, platform.reason_zh);
@@ -144,9 +170,9 @@ async function bootstrap(): Promise<void> {
     return;
   }
 
-  // 生产安全边界：拒绝一切渲染进程权限请求、拦截非本地网络请求、注入 CSP 响应头。
+  // 生产安全边界：拒绝一切渲染进程权限请求、按模式拦截网络请求、注入 CSP 响应头。
   const { session } = await import('electron');
-  lockdownSession(session.defaultSession);
+  lockdownSession(session.defaultSession, isDev ? { devOrigin: DEV_SERVER_URL } : {});
   attachCsp(session.defaultSession);
 
   if (!app.isPackaged && sandboxDisabled) {

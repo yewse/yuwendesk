@@ -49,15 +49,19 @@ const api = {
       idempotency_key: idempotencyKey,
       payload: { content } satisfies SaveDraftPayload
     }),
-  // 关闭前刷新握手：主进程在窗口关闭前通知渲染层落盘；渲染层完成后回执。
-  // 仅暴露固定通道，不暴露任意 send/on。
-  onBeforeClose: (handler: () => void | Promise<void>): void => {
-    ipcRenderer.on('yuwen:before-close', () => {
-      void Promise.resolve(handler());
-    });
+  // 关闭前刷新握手：主进程在窗口关闭前通知渲染层落盘（带唯一 requestId）；渲染层完成后回执。
+  // 仅暴露固定通道，不暴露任意 send/on。返回取消订阅函数，供组件卸载时释放监听。
+  onBeforeClose: (handler: (requestId: string) => void | Promise<void>): (() => void) => {
+    const listener = (_e: unknown, requestId: string): void => {
+      void Promise.resolve(handler(requestId));
+    };
+    ipcRenderer.on('yuwen:before-close', listener);
+    return () => {
+      ipcRenderer.removeListener('yuwen:before-close', listener);
+    };
   },
-  notifyFlushDone: (): void => {
-    ipcRenderer.send('yuwen:flush-done');
+  notifyFlushDone: (requestId: string, saved: boolean): void => {
+    ipcRenderer.send('yuwen:flush-done', requestId, saved);
   }
 };
 

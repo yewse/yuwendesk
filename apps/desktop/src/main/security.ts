@@ -1,14 +1,22 @@
 import type { Session } from 'electron';
 
-// 生产安全边界工具。纯函数便于单元测试；副作用函数集中在此，主进程统一调用。
+// 生产安全边界工具（F05）。纯函数便于单元测试；副作用函数集中在此，主进程统一调用。
 
 function stripFragmentAndQuery(url: string): string {
   return url.split('#')[0].split('?')[0];
 }
 
+function safeOrigin(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
 // 判定渲染进程当前 URL 是否为受信任来源：
-// - 生产：必须严格等于本地打包的 index.html 的 file:// URL；
-// - 开发：仅当 allowDev=true 且严格匹配开发服务器来源（防止 http://host.evil 前缀伪造）。
+// - 生产：必须严格等于本地打包 index.html 的 file:// URL；
+// - 开发：仅当 allowDev=true 且 origin 与开发服务器 **完全一致**（用 URL 解析，杜绝前缀伪造）。
 export function isTrustedRendererUrl(
   currentUrl: string,
   expectedFileUrl: string,
@@ -19,32 +27,63 @@ export function isTrustedRendererUrl(
   const base = stripFragmentAndQuery(currentUrl);
   if (base === stripFragmentAndQuery(expectedFileUrl)) return true;
   if (allowDev && devServerUrl) {
-    const dev = stripFragmentAndQuery(devServerUrl);
-    if (base === dev) return true;
-    if (base.startsWith(dev + '/')) return true;
+    const cur = safeOrigin(currentUrl);
+    const dev = safeOrigin(devServerUrl);
+    if (cur !== null && dev !== null && cur === dev) return true;
   }
   return false;
 }
 
-// 拒绝渲染进程发起的一切权限请求（摄像头、麦克风、地理位置、通知等）：
-// 首版桌面备课应用不需要这些权限（S05 安全清单）。
-export function lockdownSession(session: Session): void {
+// 外链策略：仅接受可规范化的 https 地址、含主机名、且不含内嵌凭据；其余拒绝。
+// 由明确用户动作（window.open）触发时才交给系统浏览器。
+export function isAllowedExternalUrl(url: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== 'https:') return false;
+  if (!u.hostname) return false;
+  if (u.username || u.password) return false;
+  return true;
+}
+
+export interface LockdownOptions {
+  // 开发模式下允许的渲染来源 origin（如 http://127.0.0.1:5199）。生产为 undefined。
+  devOrigin?: string;
+}
+
+// 拒绝渲染进程发起的一切权限请求（摄像头、麦克风、地理位置、通知等）。
+// 网络：生产仅允许本地资源（file/devtools/data/blob）；开发额外仅放行精确匹配的开发 origin。
+export function lockdownSession(session: Session, opts: LockdownOptions = {}): void {
   session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   session.setPermissionCheckHandler(() => false);
-  // 禁止渲染进程发起任何网络请求；对外网络仅由主进程在受控出口进行（生产不含本地监听）。
-  // 允许加载本地打包资源（file:）与开发服务器（devtools 场景），其余一律拦截。
+
+  const devOrigin = opts.devOrigin ? safeOrigin(opts.devOrigin) : null;
   session.webRequest.onBeforeRequest((details, callback) => {
     const url = details.url;
-    const allowed =
+    const localScheme =
       url.startsWith('file:') ||
       url.startsWith('devtools:') ||
-      url.startsWith('http://127.0.0.1:') ||
-      url.startsWith('http://localhost:') ||
-      url.startsWith('ws://127.0.0.1:') ||
-      url.startsWith('ws://localhost:') ||
       url.startsWith('blob:') ||
       url.startsWith('data:');
-    callback({ cancel: !allowed });
+    if (localScheme) return callback({ cancel: false });
+    // 仅开发模式放行精确匹配的开发服务器 origin（含其 ws/http 资源）。
+    if (devOrigin) {
+      const o = safeOrigin(url);
+      if (o !== null && o === devOrigin) return callback({ cancel: false });
+      // 允许 vite 的 HMR websocket（同 origin 的 ws://）。
+      try {
+        const u = new URL(url);
+        if ((u.protocol === 'ws:' || u.protocol === 'wss:') && `http://${u.host}` === devOrigin) {
+          return callback({ cancel: false });
+        }
+      } catch {
+        /* fallthrough to cancel */
+      }
+    }
+    return callback({ cancel: true });
   });
 }
 

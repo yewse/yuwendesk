@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BootstrapData, HealthData } from '../shared/ipc';
+import { DraftController, DraftSnapshot, getDraftController } from './draftController';
 
 type NavKey = 'prepare' | 'courses' | 'resources' | 'settings';
 
@@ -37,131 +38,58 @@ function StatusPill({ online }: { online: boolean }): JSX.Element {
   );
 }
 
-function newIdemKey(): string {
-  try {
-    return crypto.randomUUID();
-  } catch {
-    return `draft-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
+function useDraftController(): [DraftSnapshot, DraftController] {
+  const controller = getDraftController();
+  const [snap, setSnap] = useState<DraftSnapshot>(() => controller.snapshot());
+  useEffect(() => {
+    const unsub = controller.subscribe(() => setSnap(controller.snapshot()));
+    void controller.load();
+    return unsub;
+  }, [controller]);
+  return [snap, controller];
 }
 
 function DraftNote(): JSX.Element {
-  const [content, setContent] = useState('');
-  const [revision, setRevision] = useState(0);
-  const [savedAt, setSavedAt] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [conflict, setConflict] = useState(false);
-
-  const contentRef = useRef('');
-  const revisionRef = useRef(0);
-  const dirtyRef = useRef(false);
-  const keyRef = useRef<string | null>(null);
-  const savingRef = useRef(false);
+  const [snap, controller] = useDraftController();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      const r = await window.yuwen.loadDraft();
-      if (r.ok) {
-        setContent(r.data.content);
-        contentRef.current = r.data.content;
-        setRevision(r.data.revision);
-        revisionRef.current = r.data.revision;
-        setSavedAt(r.data.updated_at);
-      }
-    })();
-  }, []);
-
-  // 串行化保存：任一时刻仅一个在途保存；保存期间内容再变则循环续存。
-  // 每段"待保存内容"使用稳定的 idempotency_key，网络重试/关闭刷新与防抖重合时不会重复写入或误报冲突。
-  const runSave = useCallback(async () => {
-    if (savingRef.current) return;
-    savingRef.current = true;
-    setSaving(true);
-    try {
-      while (dirtyRef.current) {
-        const snapshot = contentRef.current;
-        const key = keyRef.current ?? newIdemKey();
-        keyRef.current = key;
-        const r = await window.yuwen.saveDraft(snapshot, revisionRef.current, key);
-        if (r.ok) {
-          revisionRef.current = r.data.revision;
-          setRevision(r.data.revision);
-          setSavedAt(r.data.updated_at);
-          setConflict(false);
-          if (contentRef.current === snapshot) {
-            dirtyRef.current = false;
-            keyRef.current = null;
-          } else {
-            keyRef.current = newIdemKey();
-          }
-        } else if (r.error.code === 'VERSION_CONFLICT') {
-          const latest = await window.yuwen.loadDraft();
-          if (latest.ok) revisionRef.current = latest.data.revision;
-          keyRef.current = newIdemKey();
-          setConflict(true);
-          break;
-        } else {
-          break;
-        }
-      }
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
-    }
-  }, []);
-
-  const flushNow = useCallback(async () => {
-    if (timer.current) clearTimeout(timer.current);
-    if (dirtyRef.current) await runSave();
-  }, [runSave]);
-
-  // 关闭前刷新 + 切到后台/失焦时落盘（规范 3.3：窗口关闭前自动保存）。
-  useEffect(() => {
-    window.yuwen.onBeforeClose(async () => {
-      await flushNow();
-      window.yuwen.notifyFlushDone();
-    });
-    const onVis = (): void => {
-      if (document.visibilityState === 'hidden') void flushNow();
-    };
-    const onBlur = (): void => void flushNow();
-    document.addEventListener('visibilitychange', onVis);
-    window.addEventListener('blur', onBlur);
-    return () => {
-      document.removeEventListener('visibilitychange', onVis);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, [flushNow]);
-
   const onChange = (text: string): void => {
-    setContent(text);
-    contentRef.current = text;
-    dirtyRef.current = true;
-    keyRef.current = newIdemKey();
+    controller.setContent(text);
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => void runSave(), 500);
+    // 防抖仅决定何时触发；真正的等待/串行由控制器保证（关闭刷新会等待在途与后续 dirty）。
+    timer.current = setTimeout(() => void controller.save(), 500);
   };
 
   return (
     <div className="card">
       <div className="card-title">备课草稿（本地保存）</div>
       <p className="muted small">
-        随手记录本课思路；内容仅保存在本机，自动保存并保留版本。演示离线可用与退出不丢失。
+        随手记录本课思路；内容仅保存在本机，自动保存并保留版本。退出前会先完成保存。
       </p>
       <textarea
         className="draft"
-        value={content}
+        value={snap.content}
         onChange={(e) => onChange(e.target.value)}
         placeholder="例如：本课《春》——朗读中体会比喻与排比，学生尝试仿写一句…"
         spellCheck={false}
       />
       <div className="row small muted">
-        <span>版本 v{revision}</span>
-        <span>{saving ? '保存中…' : savedAt ? `已保存 ${new Date(savedAt).toLocaleString('zh-CN')}` : '尚未保存'}</span>
+        <span>版本 v{snap.revision}</span>
+        <span>
+          {snap.saving
+            ? '保存中…'
+            : snap.updatedAt
+              ? `已保存 ${new Date(snap.updatedAt).toLocaleString('zh-CN')}`
+              : '尚未保存'}
+        </span>
       </div>
-      {conflict && (
-        <div className="notice warn small">本地草稿已在别处更新，已停止覆盖，请刷新后重试。</div>
+      {snap.conflict && (
+        <div className="notice warn small">
+          本地草稿已在别处更新。已保留你的本地内容、暂停自动覆盖；继续编辑后将以你的最新内容保存。
+        </div>
+      )}
+      {!snap.conflict && snap.lastError && (
+        <div className="notice warn small">保存未完成：{snap.lastError}。已保留本地内容，可继续编辑重试。</div>
       )}
     </div>
   );
@@ -171,22 +99,26 @@ function HealthPanel({ health }: { health: HealthData | null }): JSX.Element {
   const rows: { label: string; ok: boolean; text: string }[] = health
     ? [
         { label: '主进程', ok: health.main_process === 'ok', text: '正常' },
-        { label: '本地存储', ok: health.storage_writable, text: health.storage_writable ? '可写' : '不可写' },
         {
-          label: '本地网络监听',
-          ok: health.http_listeners === 0,
-          text: health.http_listeners === 0 ? '无（符合安全要求）' : `${health.http_listeners} 个`
+          label: '本地存储',
+          ok: health.storage_probe === 'ok',
+          text: health.storage_probe === 'ok' ? '可写（实测写入探针）' : '写入失败'
         },
-        { label: '离线可用', ok: health.offline_ready, text: '是' },
+        {
+          label: '本地服务',
+          ok: true,
+          text: '未启动（设计保证；INS-008 以系统级证据为准）'
+        },
+        { label: '离线能力', ok: health.offline_capable_by_design, text: '支持（设计能力）' },
         {
           label: '运行模式',
           ok: health.build_mode === 'production',
-          text: health.build_mode === 'production' ? '生产' : '开发验证（非正式发布）'
+          text: health.build_mode === 'production' ? '生产（打包）' : '开发验证（非正式发布）'
         },
         {
           label: 'OS 沙箱',
           ok: health.sandbox_enabled,
-          text: health.sandbox_enabled ? '启用' : '已禁用（仅开发验证）'
+          text: health.sandbox_enabled ? '启用（仅启动参数指示）' : '已禁用（仅开发验证）'
         }
       ]
     : [];
@@ -299,6 +231,27 @@ function SettingsPage({ boot }: { boot: BootstrapData | null }): JSX.Element {
 export function App(): JSX.Element {
   const [nav, setNav] = useState<NavKey>('prepare');
   const { boot, health } = useBootstrap();
+
+  // 关闭前刷新握手在 App 级注册（跨页面生存），卸载时释放订阅（F01）。
+  // 控制器为模块单例，页面切换不会丢失在途保存或 dirty 状态。
+  useEffect(() => {
+    const controller = getDraftController();
+    const unsub = window.yuwen.onBeforeClose(async (requestId) => {
+      const saved = await controller.flush();
+      window.yuwen.notifyFlushDone(requestId, saved);
+    });
+    const onVis = (): void => {
+      if (document.visibilityState === 'hidden') void controller.save();
+    };
+    const onBlur = (): void => void controller.save();
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      unsub();
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
 
   return (
     <div className="app">
