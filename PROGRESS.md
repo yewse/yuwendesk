@@ -70,7 +70,10 @@
 - [~] G02-T02 真实 SQLite 存储与单写入者（**进行中，未标整体完成**）：`src/main/db/sqliteStore.ts`（better-sqlite3 13.0.3，WAL/外键/busy_timeout、user_version 版本迁移、`saveDraftExpecting` IMMEDIATE 事务原子乐观并发、`withTransaction` 失败回滚、旧 JSON 安全迁入并备份、integrity_check 保护态）。主进程 `index.ts` 已切换为 `SqliteStore`（经 `DraftStore` 接口）。
   - 本轮加固：**高版本 DB/未知结构拒写**（user_version>目标→保护）；**旧 JSON 读取/隔离失败→迁入保护**（不以空库覆盖）；**必需记录缺失/UPDATE 零行→抛出不假成功**；迁入标记与数据同一事务提交（可恢复一致）；**原件归档失败如实记录**（legacyArchive=failed，不吞掉后宣称完成）；**正常迁入(migratedFromJson) 与损坏恢复(recoveredFromCorruption) 分开表达**。
   - 实测：仓库单测 **104 项 PASS**（`sqliteStore.test.ts` 16 + 新增 `ipc-sqlite.test.ts` 6，经**真实 SqliteStore+IPC 路径**回归幂等/并发/冲突/失败保护，不依赖旧 LocalStore 说明不退化）；Electron 真实加载 PASS（加固版）；Windows 目标包运行 BLOCKED_EXTERNAL（未验证）。证据 artifact `g02_t02_hardening_evidence.txt`、`g02_sqlite_restored.png`。
-- [ ] G02-T03 凭据/敏感 payload 加密（safeStorage/DPAPI）、G02-T04 持久幂等与业务事件事务：待续；G02-T04 复用 `withTransaction`，不得让已有并发/保存保护退化。
+- [x] G02-T03 凭据/敏感 payload 保护：`src/main/crypto/secrets.ts`（CredentialProtector 经 safeStorage 包裹凭据、只存密文+末四位；AES-256-GCM 敏感载荷，随机 96 位 nonce 不复用、AAD 绑定工作区/对象/版本；DataKeyManager 封装数据密钥）。加密不可用→拒绝落明文；解密失败→不覆盖原密文。接入 SqliteStore（migration v3：credential/secure_key/sensitive）+ 主进程注入 electron.safeStorage + health `credential_encryption` 界面如实显示。
+- [x] G02-T04 持久幂等 + 业务事件事务：`commitDraftSave` 将 草稿修改 + 持久幂等结果 + outbox 事件 置于同一 IMMEDIATE 事务；跨进程/重启重试不重复修改；同键异请求 key_reuse；任一必要步骤失败回滚。IpcService.saveDraft 已委托之（幂等落存储层）。
+- **G02 本地可执行数据能力已交付并联合验证**：Node 128 项 + 真实 Electron 运行（SQLite 保存/迁移/保护/冲突/重载 + 凭据探测 + outbox 单事务）。既有保存/并发/关闭/来源边界/权限经真实 SqliteStore+IPC 回归未退化。证据 artifact `g02_capability_evidence.txt`、`g02_full_run.png`。
+- **未通过外部门**：Windows 目标环境验收（EXT02）BLOCKED_EXTERNAL。依赖后续门（不在 G02 范围）：凭据用户入口 provider.configure IPC/设置界面属 G04；敏感 payload 业务落点（学生材料）属 G03。
 
 ## G03–G11 — NOT_STARTED
 

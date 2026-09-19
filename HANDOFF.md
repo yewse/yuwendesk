@@ -12,11 +12,14 @@
 ## 当前状态（2026-09-19，最新）
 
 - **G00 + G01 可执行项完成**并经三轮审查修复（F01–F08 + R3-01–R3-05）；唯一剩余 G01 门（干净 Win11 x64 实机安装 = G01-T04）为 BLOCKED_EXTERNAL。
-- **G02 进行中**：
-  - G02-T01 受限 IPC + **Schema 门**（`src/main/schemaGate.ts`，`hasOwnProperty` 白名单，拒绝多余/继承属性字段）——完成。
-  - G02-T02 **真实 SQLite 存储**（`src/main/db/sqliteStore.ts`，better-sqlite3 13.0.3，WAL/外键、版本迁移、IMMEDIATE 事务原子乐观并发、失败回滚、旧 JSON 安全迁入、integrity_check 保护态）——完成并接入主进程（`index.ts` 用 `SqliteStore`，经 `DraftStore` 接口）。三级证据见 `reports/`（Node PASS / Electron 真实加载 PASS / Windows 目标包 BLOCKED）。
-  - 待续：G02-T03 凭据/敏感 payload 加密（safeStorage/DPAPI）、G02-T04 持久幂等与业务事件事务（复用 `withTransaction`，不得让并发/保存保护退化）。
-- 仓库单测 **93 项通过**；typecheck/lint/`verify:contracts` 通过。已产出未签名 Windows EXE（本地 Linux+wine + 原生 Windows CI，哈希见 `reports/WINDOWS_BUILD.md`）。
+- **G02 本地数据能力已交付（T01–T04）**：
+  - T01 受限 IPC + **Schema 门**（`schemaGate.ts`，`hasOwnProperty` 白名单）。
+  - T02 **真实 SQLite 存储**（`db/sqliteStore.ts`，WAL/外键、版本迁移、IMMEDIATE 事务原子乐观并发、失败回滚、旧 JSON 安全迁入、高版本/必需记录/隔离·归档失败保护），主进程 `index.ts` 用 `SqliteStore`。
+  - T03 **凭据/敏感 payload 保护**（`crypto/secrets.ts`：safeStorage 包裹凭据、AES-256-GCM 敏感载荷、加密不可用拒绝落明文、解密失败不覆盖），迁移 v3 + 注入 electron.safeStorage + health 显示。
+  - T04 **持久幂等 + outbox 单事务**（`commitDraftSave`：业务修改+幂等结果+事件同一事务；跨进程重启不重复；IpcService 已委托）。
+  - 联合验证：Node 128 项 + 真实 Electron 运行（SQLite 保存/迁移/保护/冲突/重载 + 凭据探测 + outbox）；证据 `reports/` 与 artifacts。**Windows 目标环境验收 BLOCKED_EXTERNAL**。
+- 后续门（不在 G02 范围）：G03 资料/敏感数据落点、G04 provider.configure（凭据用户入口）；或获 Win11 后关闭 G01-T04 + G02 Windows 目标验收。
+- 仓库单测 **128 项通过**；typecheck/lint/`verify:contracts` 通过。已产出未签名 Windows EXE（本地 Linux+wine + 原生 Windows CI，哈希见 `reports/WINDOWS_BUILD.md`）。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 数据基础说明：生产改用 `apps/desktop`（app.getPath('userData')）下的 `yuwendesk.db`；旧 `yuwendesk-local-state.json` 首次运行安全迁入并备份为 `.migrated.*`。LocalStore(JSON) 保留为迁入来源与 G01 回归。
 
@@ -59,9 +62,9 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 
 ## 下一个有界工作包建议
 
-1. G02-T03 凭据/敏感 payload 加密（Electron safeStorage/DPAPI；加密不可用时阻止明文持久化），先补失败测试。
-2. G02-T04 持久幂等（幂等结果落 SQLite，跨重启去重）与业务事件事务（同一事务提交业务更改 + outbox），复用 `SqliteStore.withTransaction`，回归并发/保存保护不退化。
-3. 在获得 Windows VM 后关闭 G01-T04（干净标准账户安装→桌面图标启动→退出重启→保留数据）。
+1. G03 资料与来源（安全解析导入、中文 FTS、精确锚点）——敏感 payload 保护（T03 能力）在此获得真实业务落点。
+2. G04 provider.configure/probe/clear（凭据用户入口 + 真实 Grok 连通）——凭据保护（T03 能力）在此端到端接入；需 EXT03/04。
+3. 获得 Windows VM 后关闭 G01-T04 与 G02 Windows 目标环境验收（安装→启动→保存→重启→保留数据 + SQLite/凭据在真实 Windows 的行为）。
 
 ## 重要纪律
 
