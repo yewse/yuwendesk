@@ -82,7 +82,21 @@
 - **T04 中途故障回归**：`commitDraftSave` 增测试用中途故障注入点（草稿更新后 / outbox 写入后 / 幂等写入前）；验证任一处失败时**草稿+outbox 事件+幂等结果一起回滚**，不改事务主路径。
 - 测试：`credentials-sqlite.test.ts`(10，含不安全后端拒绝/读不建密钥/读不穿保护态)、`sqliteStore.test.ts`(24，含三处中途故障回滚)。仅用虚构数据，不涉真实凭据/学生资料。
 
-## G03 资料导入 / 中文搜索 / 原文定位 — 核心闭环已交付（IN_PROGRESS）
+## G03 资料导入 / 中文搜索 / 原文定位 — 真实原始文件闭环已交付（IN_PROGRESS）
+
+### 第二批（真实原始文件 PDF/DOCX/XLSX/PPTX + 策略修正）
+
+- **策略修正**：敏感（student_sensitive）在完整加密资料路径实现前**无条件阻塞**（不写入普通存储）；分类**严格枚举**未知拒绝；缺省分类为 `teacher_private`（本地私有不外发，不默认公开）。版本关系：同标题仅**疑似关联**，返回 `needs_confirmation`，不自动新增版本/切换当前版本；显式 `new_version`（保留旧版本、切换当前）或 `separate` 才落库。
+- **真实文件导入**：`importFile`（base64）走 `src/main/sources/extract.ts`：PDF 逐页（pdfjs）、DOCX 段落/表格单元格（jszip+fast-xml-parser）、XLSX 工作表/行/列、PPTX 幻灯片页；txt/md/csv 行/行段。教师直接导入 Word/PDF，无需先转 Markdown。
+- **原件保存 + 双哈希**：原件字节存 `source_file`；**原件哈希与文本哈希分开**（版本/来源面板可核对）。去重按原件哈希。
+- **可核对结构化定位**：`source_segment` + 段级 FTS，命中定位到页/段落/表格行列/幻灯片，返回结构化 locator + 段内锚点 + 上下文 + 可读标签，不以统一文本行号冒充所有格式位置。
+- **扫描件**：无可提取文字页标记 `scanned/不可靠`，可保留与在列表/版本面板显示，但**不参与可靠检索**、不做 OCR、不以预览/摘要冒充原文核验。
+- **限额/分批/可取消**：原始文件上限 40MB；界面逐文件导入带进度与取消（文件间可取消），保留响应。
+- **实测（真实 Electron，真实 PDF/DOCX 文件）**：合成拖拽(Phase A) 与 **真实文件选择(Phase B，CDP setFileInputFiles 触发真实 `<input type=file>` onChange)** 分别记录；PDF→第1页、DOCX→第2段、表格→第2行第1列定位；扫描件唯一词 0 可靠命中；同名不同内容→需确认→新版本 v2（原件/文本哈希分列）；敏感→PRIVACY_BLOCKED；重启恢复列表与检索。Node 单测 **170 项**（新增 sources-file 8、ipc-sources versions）。证据：`/opt/cursor/artifacts/g03-files-walkthrough.mp4`、`g03f-*.png`、`g03f-transcript.json`。
+- **支持格式清单**：txt / md / csv / pdf / docx / xlsx / pptx（真实文件）。
+- **明确未验证项**：headless X11 下**原生 OS 文件选择对话框的弹出渲染**未确认（已尝试；不断定必为环境原因；已用 CDP 在 `<input>` 层驱动真实选择路径证明解析与检索不受其阻塞）。敏感学生材料加密业务落点未实现（阻塞）。Grok 连接属 G04。
+
+### 第一批（自拟文本 txt/md/csv 核心闭环）
 
 - [x] **数据基础**：SqliteStore 迁移 v4（`source_document` / `source_version` / `source_text` + FTS5 **trigram** 虚表）。
 - [x] **导入 + 来源版本与哈希**：`importSource` 计算 SHA-256 内容哈希；按标题**去重**（同哈希→duplicate，不新增版本）；内容变更→**新版本**并标记 `versionConflict`；空/超限拒绝；敏感分类需安全后端否则**阻塞**（普通非敏感继续）。单事务写入。
