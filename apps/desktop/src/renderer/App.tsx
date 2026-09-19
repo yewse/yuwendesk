@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BootstrapData, HealthData, SourceHitDTO, SourceListItemDTO, SourceReadDTO } from '../shared/ipc';
+import type { BootstrapData, HealthData, SourceHitDTO, SourceListItemDTO, SourceReadDTO, SourceVersionDTO } from '../shared/ipc';
 import { DraftController, DraftSnapshot, getDraftController } from './draftController';
 
 type NavKey = 'prepare' | 'courses' | 'resources' | 'settings';
@@ -230,13 +230,36 @@ function CoursesPage(): JSX.Element {
   );
 }
 
-const SUPPORTED_EXT: Record<string, string> = { txt: 'txt', md: 'md', markdown: 'md', csv: 'csv' };
+// 文本格式（渲染层直接读文本）与二进制格式（读 ArrayBuffer→base64 交主进程解析）。
+const TEXT_EXT: Record<string, string> = { txt: 'txt', md: 'md', markdown: 'md', csv: 'csv' };
+const BINARY_EXT: Record<string, string> = { pdf: 'pdf', docx: 'docx', xlsx: 'xlsx', pptx: 'pptx' };
+const ACCEPT = '.txt,.md,.markdown,.csv,.pdf,.docx,.xlsx,.pptx';
 
 function classifyLabel(c: string): string {
   return (
     { public_reference: '公开参考', licensed_reference: '授权参考', teacher_private: '教师私有', student_sensitive: '学生敏感' }[c] ?? c
   );
 }
+
+// 用 FileReader 读为 base64（避免大文件 apply 栈溢出）。
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error('read_failed'));
+    fr.onload = () => {
+      const s = String(fr.result);
+      const i = s.indexOf(',');
+      resolve(i >= 0 ? s.slice(i + 1) : s);
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+type PendingItem = {
+  title: string;
+  format: string;
+  existing: { documentId: string; title: string; currentVersion: number; currentHash: string };
+} & ({ kind: 'text'; content: string } | { kind: 'file'; base64: string });
 
 function ResourcesPage(): JSX.Element {
   const [sources, setSources] = useState<SourceListItemDTO[]>([]);
@@ -246,11 +269,12 @@ function ResourcesPage(): JSX.Element {
   const [reader, setReader] = useState<(SourceReadDTO & { hitContextQuery?: string }) | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [pending, setPending] = useState<
-    { title: string; format: string; content: string; existing: { documentId: string; title: string; currentVersion: number; currentHash: string } }[]
-  >([]);
+  const [pending, setPending] = useState<PendingItem[]>([]);
+  const [versionsFor, setVersionsFor] = useState<{ title: string; versions: SourceVersionDTO[] } | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const cancelRef = useRef(false);
 
   async function reloadList(): Promise<void> {
     const r = await window.yuwen.listSources();
@@ -260,51 +284,72 @@ function ResourcesPage(): JSX.Element {
     void reloadList();
   }, []);
 
+  // 分批导入：逐个文件处理，保留界面响应，可在文件之间取消。
   async function importFiles(files: FileList | File[]): Promise<void> {
+    const list = Array.from(files);
     setBusy(true);
+    cancelRef.current = false;
     const summary: string[] = [];
-    for (const file of Array.from(files)) {
+    for (let idx = 0; idx < list.length; idx++) {
+      if (cancelRef.current) {
+        summary.push(`已取消，剩余 ${list.length - idx} 个未处理`);
+        break;
+      }
+      const file = list[idx];
+      setProgress(`导入中 ${idx + 1}/${list.length}：${file.name}`);
       const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-      const format = SUPPORTED_EXT[ext];
-      if (!format) {
-        summary.push(`跳过「${file.name}」：暂不支持的格式（当前支持 txt / md / csv）`);
+      const textFormat = TEXT_EXT[ext];
+      const binFormat = BINARY_EXT[ext];
+      if (!textFormat && !binFormat) {
+        summary.push(`跳过「${file.name}」：暂不支持的格式（支持 txt/md/csv/pdf/docx/xlsx/pptx）`);
         continue;
       }
-      const content = await file.text();
-      const r = await window.yuwen.importSource({ title: file.name, format, content });
-      if (!r.ok) {
-        summary.push(`「${file.name}」导入失败：${r.error.message_zh}`);
-        continue;
-      }
-      const d = r.data;
-      if (d.status === 'imported') summary.push(`「${file.name}」已导入（v${d.version}，hash ${d.contentHash?.slice(0, 8)}…）`);
-      else if (d.status === 'new_version') summary.push(`「${file.name}」已作为新版本 v${d.version}`);
-      else if (d.status === 'duplicate') summary.push(`「${file.name}」内容重复（同哈希，未新增版本）`);
-      else if (d.status === 'needs_confirmation' && d.existing) {
-        summary.push(`「${file.name}」检测到同名资料（当前 v${d.existing.currentVersion}），需确认关系`);
-        setPending((prev) => [...prev, { title: file.name, format, content, existing: d.existing! }]);
+      try {
+        const r = textFormat
+          ? await window.yuwen.importSource({ title: file.name, format: textFormat, content: await file.text() })
+          : await window.yuwen.importFile({ title: file.name, format: binFormat, base64: await readAsBase64(file) });
+        if (!r.ok) {
+          summary.push(`「${file.name}」未导入：${r.error.message_zh}`);
+          continue;
+        }
+        const d = r.data;
+        if (d.status === 'imported') summary.push(`「${file.name}」已导入（v${d.version}，hash ${d.contentHash?.slice(0, 8)}…）`);
+        else if (d.status === 'new_version') summary.push(`「${file.name}」已作为新版本 v${d.version}`);
+        else if (d.status === 'duplicate') summary.push(`「${file.name}」重复（同原件哈希，未新增版本）`);
+        else if (d.status === 'needs_confirmation' && d.existing) {
+          summary.push(`「${file.name}」检测到同名资料（当前 v${d.existing.currentVersion}），需确认关系`);
+          const base: Omit<PendingItem, 'kind' | 'content' | 'base64'> = { title: file.name, format: textFormat ?? binFormat, existing: d.existing };
+          const item: PendingItem = textFormat
+            ? { ...base, kind: 'text', content: await file.text() }
+            : { ...base, kind: 'file', base64: await readAsBase64(file) };
+          setPending((prev) => [...prev, item]);
+        }
+      } catch {
+        summary.push(`「${file.name}」读取失败`);
       }
     }
+    setProgress(null);
     setMessage(summary.join('；'));
     await reloadList();
     if (query.trim()) await runSearch(query);
     setBusy(false);
   }
 
-  async function resolvePending(
-    item: { title: string; format: string; content: string; existing: { documentId: string } },
-    relation: 'new_version' | 'separate'
-  ): Promise<void> {
-    await window.yuwen.importSource({
-      title: item.title,
-      format: item.format,
-      content: item.content,
-      relation,
-      targetDocumentId: relation === 'new_version' ? item.existing.documentId : undefined
-    });
+  async function resolvePending(item: PendingItem, relation: 'new_version' | 'separate'): Promise<void> {
+    const targetDocumentId = relation === 'new_version' ? item.existing.documentId : undefined;
+    if (item.kind === 'text') {
+      await window.yuwen.importSource({ title: item.title, format: item.format, content: item.content, relation, targetDocumentId });
+    } else {
+      await window.yuwen.importFile({ title: item.title, format: item.format, base64: item.base64, relation, targetDocumentId });
+    }
     setPending((prev) => prev.filter((p) => p !== item));
     await reloadList();
     if (query.trim()) await runSearch(query);
+  }
+
+  async function showVersions(documentId: string, title: string): Promise<void> {
+    const r = await window.yuwen.sourceVersions(documentId);
+    if (r.ok) setVersionsFor({ title, versions: r.data.versions });
   }
 
   async function runSearch(q: string): Promise<void> {
@@ -350,21 +395,28 @@ function ResourcesPage(): JSX.Element {
           if (e.dataTransfer.files.length) void importFiles(e.dataTransfer.files);
         }}
       >
-        <p className="muted">拖拽 txt / md / csv 文件到此处，或</p>
+        <p className="muted">拖拽 txt / md / csv / pdf / docx / xlsx / pptx 文件到此处，或</p>
         <button className="btn" disabled={busy} onClick={() => fileRef.current?.click()}>
           选择文件导入
         </button>
+        {busy && (
+          <button className="btn small" onClick={() => (cancelRef.current = true)}>
+            取消
+          </button>
+        )}
         <input
           ref={fileRef}
           type="file"
           multiple
-          accept=".txt,.md,.markdown,.csv"
+          accept={ACCEPT}
           style={{ display: 'none' }}
           onChange={(e) => {
             if (e.target.files?.length) void importFiles(e.target.files);
             e.target.value = '';
           }}
         />
+        <p className="muted small">Word / PDF 直接导入，无需先转换；教师私有为默认分类，敏感学生材料在安全路径实现前一律阻止。</p>
+        {progress && <p className="notice small">{progress}</p>}
         {message && <p className="notice small">{message}</p>}
       </div>
 
@@ -410,11 +462,12 @@ function ResourcesPage(): JSX.Element {
               <div className="hit-head">
                 <b>{h.title}</b>
                 <span className="tag">v{h.version}</span>
-                {h.anchor && <span className="muted small">第 {h.anchor.line} 行 · 字符 {h.anchor.char_start}–{h.anchor.char_end}</span>}
+                <span className="tag">{h.locatorLabel}</span>
+                {!h.reliable && <span className="pill pill-off">不可靠</span>}
               </div>
               <div className="hit-context">…{h.context}…</div>
               <button className="btn small" onClick={() => void openOriginal(h)}>
-                查看原文
+                查看原文（{h.locatorLabel}）
               </button>
             </li>
           ))}
@@ -432,13 +485,18 @@ function ResourcesPage(): JSX.Element {
                 <span className="tag">v{s.version}</span>{' '}
                 <span className="tag">{classifyLabel(s.classification)}</span>{' '}
                 {s.status === 'retired' ? <span className="pill pill-off">已停用</span> : <span className="pill pill-on">启用中</span>}
-                <div className="muted small mono">hash {s.contentHash?.slice(0, 16)}…</div>
+                <div className="muted small mono">文本哈希 {s.contentHash?.slice(0, 16)}…</div>
               </div>
-              {s.status !== 'retired' && (
-                <button className="btn small" onClick={() => void retire(s.documentId)}>
-                  停用
+              <div className="src-actions">
+                <button className="btn small" onClick={() => void showVersions(s.documentId, s.title)}>
+                  版本/来源
                 </button>
-              )}
+                {s.status !== 'retired' && (
+                  <button className="btn small" onClick={() => void retire(s.documentId)}>
+                    停用
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -456,6 +514,35 @@ function ResourcesPage(): JSX.Element {
             </div>
             <pre className="reader-body">{reader.text}</pre>
             {reader.truncated && <p className="muted small">（原文较长，已截断预览）</p>}
+          </div>
+        </div>
+      )}
+
+      {versionsFor && (
+        <div className="reader-mask" onClick={() => setVersionsFor(null)}>
+          <div className="reader" onClick={(e) => e.stopPropagation()}>
+            <div className="reader-head">
+              <b>{versionsFor.title} · 版本与来源核对</b>
+              <button className="btn small" onClick={() => setVersionsFor(null)}>
+                关闭
+              </button>
+            </div>
+            <div className="reader-body">
+              <ul className="ver-list">
+                {versionsFor.versions.map((v) => (
+                  <li key={v.versionId} className="ver-item">
+                    <div>
+                      <b>v{v.version}</b> {v.isCurrent && <span className="pill pill-on">当前</span>}{' '}
+                      <span className="tag">{v.format}</span>
+                      {v.scanned && <span className="pill pill-off">扫描件（无可靠文字·未OCR）</span>}
+                    </div>
+                    <div className="muted small mono">原件哈希 {v.originalHash.slice(0, 24)}…</div>
+                    <div className="muted small mono">文本哈希 {v.textHash.slice(0, 24)}…</div>
+                    <div className="muted small">导入时间 {v.createdAt}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       )}

@@ -187,7 +187,8 @@ describe('白名单与目录一致性', () => {
       'sources.list',
       'sources.search',
       'sources.read',
-      'sources.retire'
+      'sources.retire',
+      'sources.versions'
     ];
     expect([...IMPLEMENTED_OPERATIONS].sort()).toEqual([...expected].sort());
     expect(new Set(IMPLEMENTED_OPERATIONS).size).toBe(IMPLEMENTED_OPERATIONS.length);

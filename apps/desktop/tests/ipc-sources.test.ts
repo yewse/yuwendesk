@@ -97,6 +97,19 @@ describe('IPC 资料闭环：导入/搜索/定位/查看/停用', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('sources.versions 返回版本与双哈希（来源核对）', async () => {
+    const { svc } = await svcOn(tmp());
+    const imp = await svc.handle('sources.import', req('sources.import', { title: '春', format: 'txt', content: 春 }));
+    const documentId = (imp.data as { documentId: string }).documentId;
+    const r = await svc.handle('sources.versions', req('sources.versions', { documentId }));
+    expect(r.ok).toBe(true);
+    const versions = (r.data as { versions: Array<{ version: number; originalHash: string; textHash: string; isCurrent: boolean }> }).versions;
+    expect(versions.length).toBe(1);
+    expect(versions[0].isCurrent).toBe(true);
+    expect(versions[0].originalHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(versions[0].textHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
   it('读取不存在版本 → SOURCE_MISSING', async () => {
     const { svc } = await svcOn(tmp());
     const r = await svc.handle('sources.read', req('sources.read', { versionId: 'nope' }));

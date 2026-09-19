@@ -43,7 +43,8 @@ export const IMPLEMENTED_OPERATIONS = [
   'sources.list',
   'sources.search',
   'sources.read',
-  'sources.retire'
+  'sources.retire',
+  'sources.versions'
 ] as const;
 
 export type OperationName = (typeof IMPLEMENTED_OPERATIONS)[number];
@@ -137,6 +138,21 @@ export interface SourceHitDTO {
   classification: string;
   anchor: SourceAnchorDTO | null;
   context: string;
+  locator: ({ kind: string } & Record<string, number | string>) | null;
+  reliable: boolean;
+  locatorLabel: string;
+}
+export interface SourceVersionDTO {
+  versionId: string;
+  version: number;
+  contentHash: string;
+  originalHash: string;
+  textHash: string;
+  format: string;
+  scanned: boolean;
+  reliableText: boolean;
+  createdAt: string;
+  isCurrent: boolean;
 }
 export interface SourceListItemDTO {
   documentId: string;

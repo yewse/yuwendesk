@@ -449,3 +449,7 @@ h1 {
 
 .confirm-box{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
 .confirm-actions{display:flex;gap:8px;flex-wrap:wrap;}
+
+.src-actions{display:flex;gap:8px;flex-shrink:0;}
+.ver-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}
+.ver-item{border:1px solid #e6ebf2;border-radius:8px;padding:8px 10px;background:#fff;}

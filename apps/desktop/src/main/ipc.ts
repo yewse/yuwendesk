@@ -111,6 +111,8 @@ export class IpcService {
         return this.sourcesRead(request);
       case 'sources.retire':
         return this.sourcesRetire(request);
+      case 'sources.versions':
+        return this.sourcesVersions(request);
       default:
         return errorResponse('INPUT_INVALID', '未知操作。', '请重试当前操作。');
     }
@@ -194,6 +196,13 @@ export class IpcService {
       return errorResponse('DATABASE_LOCKED', '本地数据暂停写入以防覆盖。', '请先完成数据恢复。');
     }
     return errorResponse('DISK_FULL', '导入失败，本地写入异常。', '请检查磁盘后重试。', true);
+  }
+
+  private sourcesVersions(req: IpcRequest): IpcResponse {
+    const src = this.ctx.sourceStore;
+    if (!src) return { ok: true, data: { versions: [] } };
+    const p = req.payload as { documentId: string };
+    return { ok: true, data: { versions: src.getSourceVersions(p.documentId) } };
   }
 
   private sourcesList(): IpcResponse {

@@ -11,6 +11,7 @@ import type {
   SourceImportPayload,
   SourceListItemDTO,
   SourceReadDTO,
+  SourceVersionDTO,
   StatusData
 } from '../shared/ipc';
 
@@ -82,6 +83,7 @@ const api = {
         typeof charStart === 'number' && typeof charEnd === 'number' ? { versionId, charStart, charEnd } : { versionId }
     }),
   retireSource: (documentId: string) => call<{ documentId: string; status: string }>('sources.retire', { payload: { documentId } }),
+  sourceVersions: (documentId: string) => call<{ versions: SourceVersionDTO[] }>('sources.versions', { payload: { documentId } }),
   // 关闭前刷新握手：主进程在窗口关闭前通知渲染层落盘（带唯一 requestId）；渲染层完成后回执。
   // 仅暴露固定通道，不暴露任意 send/on。返回取消订阅函数，供组件卸载时释放监听。
   onBeforeClose: (handler: (requestId: string) => void | Promise<void>): (() => void) => {
