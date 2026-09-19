@@ -274,6 +274,8 @@ function ResourcesPage(): JSX.Element {
   const [pending, setPending] = useState<PendingItem[]>([]);
   const [versionsFor, setVersionsFor] = useState<{ title: string; versions: SourceVersionDTO[] } | null>(null);
   const [verify, setVerify] = useState<Record<string, string>>({});
+  const [analysis, setAnalysis] = useState<{ title: string; text: string; isTestDouble: boolean; fromCache: boolean } | null>(null);
+  const [aiMsg, setAiMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const cancelRef = useRef(false);
   const currentJobRef = useRef<string | null>(null);
@@ -400,6 +402,26 @@ function ResourcesPage(): JSX.Element {
     if (r.ok) setReader({ ...r.data, hitContextQuery: query.trim() });
   }
 
+  // 用正文命中片段作为“获准依据”进行结构化分析（上下文边界：仅该获准非敏感片段进入模型）。
+  async function analyze(hit: SourceHitDTO): Promise<void> {
+    setAiMsg(null);
+    if (hit.matchKind !== 'body' || !hit.anchor) {
+      setAiMsg('请选择正文命中的片段作为依据（标题命中不作为原文依据）。');
+      return;
+    }
+    const r = await window.yuwen.modelRun({
+      task: 'analyze_text',
+      fragments: [{ versionId: hit.versionId, charStart: hit.anchor.char_start, charEnd: hit.anchor.char_end, approved: true }]
+    });
+    if (!r.ok) {
+      setAiMsg(`分析未成功：${r.error.message_zh}`);
+      return;
+    }
+    const d = r.data;
+    const res = (d.result ?? {}) as { text?: string; isTestDouble?: boolean };
+    setAnalysis({ title: hit.title, text: res.text ?? '', isTestDouble: !!res.isTestDouble, fromCache: d.status === 'cached' || !!d.fromCache });
+  }
+
   async function retire(documentId: string): Promise<void> {
     await window.yuwen.retireSource(documentId);
     await reloadList();
@@ -496,6 +518,7 @@ function ResourcesPage(): JSX.Element {
             搜索
           </button>
         </div>
+        {aiMsg && <p className="notice warn small">{aiMsg}</p>}
         {searched && hits.length === 0 && <p className="muted small">未找到匹配的资料。</p>}
         <ul className="hit-list">
           {hits.map((h) => (
@@ -510,6 +533,11 @@ function ResourcesPage(): JSX.Element {
               <button className="btn small" onClick={() => void openOriginal(h)}>
                 {h.matchKind === 'title' ? '查看文档' : `查看原文（${h.locatorLabel}）`}
               </button>
+              {h.matchKind === 'body' && h.anchor && (
+                <button className="btn small" onClick={() => void analyze(h)}>
+                  用作依据·分析
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -559,6 +587,23 @@ function ResourcesPage(): JSX.Element {
         </div>
       )}
 
+      {analysis && (
+        <div className="reader-mask" onClick={() => setAnalysis(null)}>
+          <div className="reader" onClick={(e) => e.stopPropagation()}>
+            <div className="reader-head">
+              <b>{analysis.title} · 结构化分析</b>
+              {analysis.isTestDouble && <span className="pill pill-off">测试替身（非真实模型）</span>}
+              {analysis.fromCache && <span className="tag">缓存复用</span>}
+              <button className="btn small" onClick={() => setAnalysis(null)}>
+                关闭
+              </button>
+            </div>
+            <pre className="reader-body">{analysis.text}</pre>
+            <p className="muted small">依据仅限所选获准片段；精确事实/引文/版本需教师核实。</p>
+          </div>
+        </div>
+      )}
+
       {versionsFor && (
         <div className="reader-mask" onClick={() => setVersionsFor(null)}>
           <div className="reader" onClick={(e) => e.stopPropagation()}>
@@ -597,26 +642,109 @@ function ResourcesPage(): JSX.Element {
   );
 }
 
+function ModelPanel(): JSX.Element {
+  const [providers, setProviders] = useState<{ id: string; defaultModel: string; requiresKey: boolean }[]>([]);
+  const [provider, setProvider] = useState('test-double');
+  const [model, setModel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [budget, setBudget] = useState('0');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [probeNote, setProbeNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const p = await window.yuwen.modelProviders();
+      if (p.ok) setProviders(p.data.providers);
+      const c = await window.yuwen.modelGetConfig();
+      if (c.ok && c.data.config) {
+        const cfg = c.data.config as { provider: string; model: string; budgetCapCents: number };
+        setProvider(cfg.provider);
+        setModel(cfg.model);
+        setBudget(String(cfg.budgetCapCents));
+      }
+    })();
+  }, []);
+
+  const current = providers.find((p) => p.id === provider);
+  async function save(): Promise<void> {
+    const r = await window.yuwen.modelConfigure({
+      provider,
+      model: model.trim() || undefined,
+      budgetCapCents: Number(budget) || 0,
+      apiKey: apiKey.trim() || undefined
+    });
+    setMsg(r.ok ? '已保存配置。' : `配置失败：${r.error.message_zh}`);
+    if (r.ok) setApiKey('');
+  }
+  async function probe(): Promise<void> {
+    const r = await window.yuwen.modelProbe();
+    setProbeNote(r.ok ? `可用：${r.data.note}` : `未通过：${r.error.message_zh}`);
+  }
+
+  return (
+    <div className="card">
+      <div className="card-title">AI 连接（可配置服务商）</div>
+      <p className="muted small">产品运行模型可配置，不绑定单一厂商。默认使用本机“测试替身”打通本地链路；真实云模型需授权账户与联网，未授权保持 BLOCKED。</p>
+      <div className="row">
+        <label className="muted small">服务商</label>
+        <select
+          className="search-input"
+          value={provider}
+          onChange={(e) => {
+            setProvider(e.target.value);
+            const pv = providers.find((x) => x.id === e.target.value);
+            setModel(pv?.defaultModel ?? '');
+          }}
+        >
+          {providers.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.id}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="row">
+        <label className="muted small">模型 ID</label>
+        <input className="search-input" value={model} placeholder={current?.defaultModel} onChange={(e) => setModel(e.target.value)} />
+      </div>
+      <div className="row">
+        <label className="muted small">预算上限(分)</label>
+        <input className="search-input" value={budget} onChange={(e) => setBudget(e.target.value)} />
+      </div>
+      {current?.requiresKey && (
+        <div className="row">
+          <label className="muted small">API 密钥</label>
+          <input className="search-input" type="password" value={apiKey} placeholder="仅经系统加密保存，无安全后端将拒绝" onChange={(e) => setApiKey(e.target.value)} />
+        </div>
+      )}
+      <div className="confirm-actions">
+        <button className="btn small" onClick={() => void save()}>
+          保存配置
+        </button>
+        <button className="btn small" onClick={() => void probe()}>
+          探测
+        </button>
+      </div>
+      {msg && <p className="notice small">{msg}</p>}
+      {probeNote && <p className="notice small">{probeNote}</p>}
+    </div>
+  );
+}
+
 function SettingsPage({ boot }: { boot: BootstrapData | null }): JSX.Element {
   return (
     <div className="page">
       <h1>帮助与设置</h1>
-      <p className="lead">图形化连接 AI、设置费用上限、备份恢复、检查更新与导出诊断。无需命令行或编辑配置文件。</p>
+      <p className="lead">图形化连接 AI、设置费用上限、备份恢复、检查更新与导出诊断。无需命令行或编辑配置文件。教师无需编写或调试提示词。</p>
       <div className="grid">
-        <div className="card">
-          <div className="card-title">AI 连接</div>
-          <p className="muted">
-            未连接。真实 Grok 连接与能力探测需持有人在此配置密钥与费用上限（G04）。当前离线可查阅与编辑现有内容。
-          </p>
-          <span className="tag">状态：待配置（BLOCKED · 需外部账户）</span>
-        </div>
+        <ModelPanel />
         <div className="card">
           <div className="card-title">关于</div>
           <ul className="kv">
             <li><span>应用</span><b>语文备课工作台</b></li>
             <li><span>版本</span><b>{boot?.app_version ?? '—'}</b></li>
             <li><span>接口版本</span><b>{boot?.schema_version ?? '—'}</b></li>
-            <li><span>阶段</span><b>G00/G01 工程验证骨架</b></li>
+            <li><span>阶段</span><b>G01 骨架 · G02 本地数据 · G03 资料 · G04 模型闭环(测试替身)</b></li>
           </ul>
           <p className="muted small">
             工程验证版：可自动构建与本地运行，暂缺真实账户、签名与完整教学资料。非正式教学发布。
