@@ -3,13 +3,11 @@
   "items": [
     {
       "id": "EXT01",
-      "description": "获授权代码工作区与编码代理运行能力",
-      "status": "NOT_PROVIDED",
+      "description": "获授权代码工作区与编码代理运行能力（Linux 终端/文件/Git，可安装开发依赖、构建、运行测试）",
+      "status": "PROVIDED",
       "secret_value": null,
-      "owner_action": "通过持有人环境授权",
-      "blocks": [
-        "自动执行"
-      ]
+      "owner_action": "已在 Cloud Agent 环境提供；G00/G01 已在此环境执行真实构建与本地运行",
+      "blocks": []
     },
     {
       "id": "EXT02",
