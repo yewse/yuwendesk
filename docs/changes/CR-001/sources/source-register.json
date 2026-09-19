@@ -1,0 +1,57 @@
+{
+  "date": "2026-09-19",
+  "sources": [
+    {
+      "id": "SRC-01",
+      "kind": "user_requirement",
+      "title": "课堂主要载体为PPT与讲义；教师少量选择；当前回合要求补充新需求",
+      "location": "本次及紧邻上一次用户消息",
+      "scope": "本CR的产品目标与授权范围"
+    },
+    {
+      "id": "SRC-02",
+      "kind": "repository",
+      "title": "ENGINEERING_SPEC 第15章：唯一计划真源与多格式输出",
+      "url": "https://github.com/yewse/yuwendesk/blob/cffcd59aa925032f0d51fcecb8167616e87bf01e/docs/ENGINEERING_SPEC.md",
+      "scope": "同源、可编辑PPTX/DOCX、PDF与离线课堂模式、外部编辑边界"
+    },
+    {
+      "id": "SRC-03",
+      "kind": "repository",
+      "title": "既有ArtifactManifest / LessonPlan严格合同",
+      "url": "https://github.com/yewse/yuwendesk/blob/cffcd59aa925032f0d51fcecb8167616e87bf01e/contracts/ArtifactManifest.schema.json",
+      "scope": "V1.0格式合同严格；本次新增角色与整包完成度需要追加合同，不能未经版本处理直接加字段"
+    },
+    {
+      "id": "SRC-04",
+      "kind": "baseline",
+      "title": "V0.1需求R041—R045与原G06/G07、EXP-001—005",
+      "location": "已上传工程包的baseline/requirements_v0_1.json、planning/work-packages.json、acceptance/cases.json",
+      "scope": "既有交付、变更、验收要求保留；不能以本CR降低原门槛"
+    },
+    {
+      "id": "SRC-05",
+      "kind": "official_documentation",
+      "title": "Microsoft：检查文档、演示文稿的隐藏数据与个人信息",
+      "url": "https://support.microsoft.com/en-us/office/collab-files/remove-hidden-data-and-personal-information-by-inspecting-documents-presentations-or-workbooks",
+      "checked_on": "2026-09-19",
+      "scope": "批注、修订、属性、隐藏内容与演示备注可能保留可取回信息；不把隐藏当受众隔离，不要求教师手工执行检查器"
+    },
+    {
+      "id": "SRC-06",
+      "kind": "official_documentation",
+      "title": "Microsoft：使PowerPoint演示文稿对残障人士可访问",
+      "url": "https://support.microsoft.com/en-us/accessibility/powerpoint/make-your-powerpoint-presentations-accessible-to-people-with-disabilities",
+      "checked_on": "2026-09-19",
+      "scope": "阅读顺序、对比与替代文字等一般可访问性要求；本CR具体字号/纸张为项目默认，不是该来源证明的课堂效能阈值"
+    },
+    {
+      "id": "SRC-07",
+      "kind": "repository_metadata",
+      "title": "PR #1 HEAD与提交方最新进度",
+      "url": "https://github.com/yewse/yuwendesk/pull/1",
+      "read_commit": "cffcd59aa925032f0d51fcecb8167616e87bf01e",
+      "scope": "确认仍为draft/open、当前HEAD和提交方进度；本次没有独立复跑57项/16项或下载新EXE"
+    }
+  ]
+}

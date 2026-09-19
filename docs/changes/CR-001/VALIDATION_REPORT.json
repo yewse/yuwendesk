@@ -1,0 +1,57 @@
+{
+  "checked_on": "2026-09-19",
+  "scope": "文档与规划静态一致性；不是产品执行验收",
+  "counts": {
+    "requirements": 24,
+    "acceptance_cases": 40,
+    "work_items": 5,
+    "scenarios": 3
+  },
+  "checks": [
+    {
+      "name": "需求ID唯一",
+      "pass": true
+    },
+    {
+      "name": "新增案例ID唯一",
+      "pass": true
+    },
+    {
+      "name": "新案例不与原冻结案例冲突",
+      "pass": true
+    },
+    {
+      "name": "每个新增案例引用已定义需求",
+      "pass": true
+    },
+    {
+      "name": "每条需求至少一个新增验收",
+      "pass": true
+    },
+    {
+      "name": "所有产品验收保持NOT_RUN",
+      "pass": true
+    },
+    {
+      "name": "原ArtifactManifest严格合同确认",
+      "pass": true
+    },
+    {
+      "name": "原LessonPlan严格合同确认",
+      "pass": true
+    },
+    {
+      "name": "保留的EXP-001—005与JOB-002存在于上传基线",
+      "pass": true
+    }
+  ],
+  "not_performed": [
+    "未修改GitHub仓库",
+    "未实现应用代码或新合同schema",
+    "未运行40项产品验收",
+    "未生成课堂PPT或DOCX/PDF讲义样例",
+    "未重新运行当前57项单测/16项复现",
+    "未下载或重算当前新EXE哈希",
+    "未给予工件可见性、合并、费用或签名授权"
+  ]
+}

@@ -1,0 +1,432 @@
+{
+  "change_id": "CR-001",
+  "baseline_finding_ids_unchanged": [
+    "F01",
+    "F02",
+    "F03",
+    "F04",
+    "F05",
+    "F06",
+    "F07",
+    "F08"
+  ],
+  "baseline_acceptance_ids_preserved": [
+    "BIZ-R041",
+    "BIZ-R042",
+    "BIZ-R043",
+    "BIZ-R044",
+    "BIZ-R045",
+    "EXP-001",
+    "EXP-002",
+    "EXP-003",
+    "EXP-004",
+    "EXP-005",
+    "JOB-002",
+    "INS-004",
+    "INS-005"
+  ],
+  "links": [
+    {
+      "requirement_id": "CR001-R01",
+      "baseline_requirement_ids": [
+        "R041",
+        "R042"
+      ],
+      "case_ids": [
+        "CLS-001",
+        "CLS-002",
+        "CLS-032"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R02",
+      "baseline_requirement_ids": [
+        "R005",
+        "R042",
+        "R043"
+      ],
+      "case_ids": [
+        "CLS-001",
+        "CLS-003",
+        "CLS-028",
+        "CLS-037",
+        "CLS-040"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R03",
+      "baseline_requirement_ids": [
+        "R031",
+        "R042",
+        "R044",
+        "R045"
+      ],
+      "case_ids": [
+        "CLS-004",
+        "CLS-022",
+        "CLS-029",
+        "CLS-037",
+        "CLS-038"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R04",
+      "baseline_requirement_ids": [
+        "R042",
+        "R044"
+      ],
+      "case_ids": [
+        "CLS-004",
+        "CLS-005",
+        "CLS-017",
+        "CLS-022"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R05",
+      "baseline_requirement_ids": [
+        "R027",
+        "R029",
+        "R042"
+      ],
+      "case_ids": [
+        "CLS-002",
+        "CLS-006"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R06",
+      "baseline_requirement_ids": [
+        "R037",
+        "R042",
+        "R050"
+      ],
+      "case_ids": [
+        "CLS-007",
+        "CLS-008",
+        "CLS-030",
+        "CLS-038"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R07",
+      "baseline_requirement_ids": [
+        "R031",
+        "R032",
+        "R034",
+        "R043"
+      ],
+      "case_ids": [
+        "CLS-009",
+        "CLS-010",
+        "CLS-011"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R08",
+      "baseline_requirement_ids": [
+        "R027",
+        "R029",
+        "R042"
+      ],
+      "case_ids": [
+        "CLS-011",
+        "CLS-012",
+        "CLS-013"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R09",
+      "baseline_requirement_ids": [
+        "R014",
+        "R032",
+        "R041",
+        "R043"
+      ],
+      "case_ids": [
+        "CLS-005",
+        "CLS-014"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R10",
+      "baseline_requirement_ids": [
+        "R037",
+        "R042"
+      ],
+      "case_ids": [
+        "CLS-007",
+        "CLS-012",
+        "CLS-013",
+        "CLS-015",
+        "CLS-030"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R11",
+      "baseline_requirement_ids": [
+        "R037",
+        "R039",
+        "R042"
+      ],
+      "case_ids": [
+        "CLS-016",
+        "CLS-032"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R12",
+      "baseline_requirement_ids": [
+        "R037",
+        "R038",
+        "R039",
+        "R060"
+      ],
+      "case_ids": [
+        "CLS-016",
+        "CLS-017",
+        "CLS-023"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R13",
+      "baseline_requirement_ids": [
+        "R021",
+        "R022",
+        "R023",
+        "R024"
+      ],
+      "case_ids": [
+        "CLS-018",
+        "CLS-021"
+      ],
+      "primary_gate": "G05"
+    },
+    {
+      "requirement_id": "CR001-R14",
+      "baseline_requirement_ids": [
+        "R012",
+        "R029",
+        "R030",
+        "R033"
+      ],
+      "case_ids": [
+        "CLS-019",
+        "CLS-036"
+      ],
+      "primary_gate": "G05"
+    },
+    {
+      "requirement_id": "CR001-R15",
+      "baseline_requirement_ids": [
+        "R011",
+        "R013",
+        "R015",
+        "R046"
+      ],
+      "case_ids": [
+        "CLS-018",
+        "CLS-020",
+        "CLS-035"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R16",
+      "baseline_requirement_ids": [
+        "R005",
+        "R020",
+        "R043",
+        "R046"
+      ],
+      "case_ids": [
+        "CLS-003",
+        "CLS-009",
+        "CLS-010",
+        "CLS-011",
+        "CLS-035",
+        "CLS-040"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R17",
+      "baseline_requirement_ids": [
+        "R044",
+        "R045",
+        "R048"
+      ],
+      "case_ids": [
+        "CLS-021",
+        "CLS-022",
+        "CLS-023",
+        "CLS-027",
+        "CLS-031",
+        "CLS-038",
+        "CLS-039"
+      ],
+      "primary_gate": "G07"
+    },
+    {
+      "requirement_id": "CR001-R18",
+      "baseline_requirement_ids": [
+        "R042",
+        "R045",
+        "R046"
+      ],
+      "case_ids": [
+        "CLS-024",
+        "CLS-025",
+        "CLS-029"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R19",
+      "baseline_requirement_ids": [
+        "R042",
+        "R049"
+      ],
+      "case_ids": [
+        "CLS-026",
+        "CLS-040"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R20",
+      "baseline_requirement_ids": [
+        "R003",
+        "R041",
+        "R042",
+        "R043"
+      ],
+      "case_ids": [
+        "CLS-003",
+        "CLS-016",
+        "CLS-027",
+        "CLS-028"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R21",
+      "baseline_requirement_ids": [
+        "R046",
+        "R047",
+        "R049",
+        "R050"
+      ],
+      "case_ids": [
+        "CLS-002",
+        "CLS-007",
+        "CLS-008",
+        "CLS-015",
+        "CLS-029",
+        "CLS-030",
+        "CLS-036"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R22",
+      "baseline_requirement_ids": [
+        "R044",
+        "R045",
+        "R050"
+      ],
+      "case_ids": [
+        "CLS-030",
+        "CLS-031",
+        "CLS-039"
+      ],
+      "primary_gate": "G07"
+    },
+    {
+      "requirement_id": "CR001-R23",
+      "baseline_requirement_ids": [
+        "R045",
+        "R049",
+        "R059"
+      ],
+      "case_ids": [
+        "CLS-033",
+        "CLS-034",
+        "CLS-037"
+      ],
+      "primary_gate": "G06"
+    },
+    {
+      "requirement_id": "CR001-R24",
+      "baseline_requirement_ids": [
+        "R001",
+        "R003",
+        "R042",
+        "R047",
+        "R060"
+      ],
+      "case_ids": [
+        "CLS-001",
+        "CLS-020",
+        "CLS-032",
+        "CLS-034",
+        "CLS-035"
+      ],
+      "primary_gate": "G06"
+    }
+  ],
+  "file_changes": [
+    {
+      "path": "docs/ENGINEERING_SPEC.md",
+      "change": "第15章追加/引用三角色交付规范，保留15.1/15.3及隐私/预算/离线要求；明确每种文件而非只有格式。"
+    },
+    {
+      "path": "docs/MODULES_AND_SKILLS.md",
+      "change": "M05/M06/M07明确联结、任务、答案曝光和作答空间；M08编排；M09按角色交付；M10检查。"
+    },
+    {
+      "path": "contracts/ArtifactManifest.schema.json",
+      "change": "保持既有V1.0兼容；通过独立伴随合同或受控新版本记录角色、交付规格、整包状态及映射；不能静默塞字段。"
+    },
+    {
+      "path": "contracts/LessonPlan.schema.json",
+      "change": "检查新字段是否属于教学语义；语义新增应版本化，纯呈现不强迫复制整套计划。"
+    },
+    {
+      "path": "planning/work-packages.json",
+      "change": "G06-T01—T04/G07-T01—T04增补交付/测试映射，G09/G11引用回归，不删原depends_on。"
+    },
+    {
+      "path": "acceptance/cases.json",
+      "change": "冻结原件不改；新增acceptance/addenda/classroom-delivery.cases.json并在验收索引加载。"
+    },
+    {
+      "path": "planning/requirements-traceability.json",
+      "change": "新增CR001-R01—R24与CLS-001—040映射，不重新编号原60需求。"
+    },
+    {
+      "path": "docs/TEACHER_QUICK_GUIDE.md",
+      "change": "增加课堂PPT/学生讲义/教师版预览、学生打印、整包导出、旧纸本与外部编辑边界。"
+    },
+    {
+      "path": "HANDOFF.md",
+      "change": "记录CR-001已归档/未实现；当前安全和安装门不因新增需求关闭。"
+    },
+    {
+      "path": "PROGRESS.md",
+      "change": "记录文档接入完成与功能完成为两种不同状态；没有运行的案例保持NOT_RUN。"
+    }
+  ]
+}

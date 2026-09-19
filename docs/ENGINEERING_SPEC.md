@@ -370,6 +370,17 @@ PDF由可信本地模板渲染，保留文本可选择；分页规则不能裁�
 
 提供目标、题目、答案、活动、时间的结构化编辑及撤销。手动编辑后重新检查相关项；不偷偷改回AI偏好。外部修改导出的Word或PPT不自动更新内部计划；重新导入只作为新资料，提示不是源计划的无损往返编辑。此限制必须在帮助中写明。
 
+## 15.4 课堂成品增补（CR-001，引用）
+
+本章的多格式输出经变更请求 CR-001 细化为明确的课堂最终交付：一套课时默认包含三类成品五文件——可编辑课堂 **PPTX**、学生讲义 **DOCX/PDF**、教师讲解版 **DOCX/PDF**；教案与学校提交格式保留但不得替代这三类课堂成品。受众分工、任务跨载体定位、先题后反馈、学生作答空间、教师合理答案与追问、一处修改整套联动、导出失败不覆坏旧包、受众过滤而非隐藏等要求见：
+
+- 需求与规范：`docs/changes/CR-001/CR001_CLASSROOM_DELIVERABLES.md`（`CR001-R01–R24`）
+- 伴随合同（不放宽严格 schema）：`docs/changes/CR-001/contracts/CLASSROOM_DELIVERY_CONTRACT.md`
+- 验收增补（`CLS-001–040`，全部 NOT_RUN）：`acceptance/addenda/classroom-delivery.cases.json`
+- 工作项与追踪：`planning/changes/CR001/`；决策见 `docs/adr/ADR-0005-cr001-classroom-deliverables.md`
+
+实现落 G05–G07 并在 G09/G11 回归；不重编 R001–R060 / F01–F08 / R3；冻结用例不改。当前为"需求已归档 / 合同待实现 / 功能未实现"。
+
 # 16　质量门与诚实降级
 
 ## 16.1 三级检查

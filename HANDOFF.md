@@ -2,6 +2,13 @@
 
 新会话请先读：`README_START_HERE.md` → `AGENTS.md` → `docs/ENGINEERING_SPEC.md` → `planning/AUTONOMOUS_WORKPLAN.md` → 本文件与 `PROGRESS.md`。
 
+## CR-001 课堂成品需求（已归档，功能未实现）
+
+- 独立业务变更：最终课堂交付 = 可编辑 PPTX + 学生讲义 DOCX/PDF + 教师讲解版 DOCX/PDF（三类五文件）。教案/学校格式保留但不替代。
+- 现状：**需求已归档 / 合同待实现 / 功能未实现**。`CR001-R01–R24`、`CLS-001–040`（全部 NOT_RUN）。归档见 `docs/changes/CR-001/`、`planning/changes/CR001/`、`acceptance/addenda/`、规范 §15.4、ADR-0005。
+- 后续实现（不改现有阶段门/授权）：G05/G06 角色与内容映射合同 → G06 三类五文件与本地课堂模式 → G07 一处改动联动/旧版与失败恢复 → G09/G11 受众隔离与整包回归。实现阶段验收须提交真实 PPTX/DOCX/PDF + 角色清单 + 计划哈希 + 渲染/打开/编辑证据，不得用截图/提纲/自评替代。
+- 严格 schema（`additionalProperties:false`）不放宽：用伴随合同或受控版本升级表达新字段。
+
 ## 当前状态（2026-09-19）
 
 - 已完成 G00 环境锁定与 G01 可安装骨架的工程验证级实现。仓库含完整工程规格包 + `apps/desktop` 应用。

@@ -5,7 +5,7 @@
 // 3) 明确标记的无效示例确实缺少必填字段。
 // 该脚本仅供开发者/CI 执行，不进入教师使用界面。
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,6 +41,26 @@ const catalogCodes = catalog.error_codes ?? [];
 const missing = catalogCodes.filter((c) => !sharedTs.includes(`'${c}'`));
 log(missing.length === 0, `错误码一致：目录 ${catalogCodes.length} 项${missing.length ? '，缺失 ' + missing.join(',') : ''}`);
 log(catalogCodes.length === 21, `错误码数量为 21（实际 ${catalogCodes.length}）`);
+
+// 2b) CR-001 验收增补：addenda 可解析，CLS 案例全部 NOT_RUN，且不与冻结用例 ID 冲突。
+try {
+  const frozen = readJson(join(root, 'acceptance', 'cases.json'));
+  const frozenIds = new Set((frozen.cases ?? []).map((c) => c.id));
+  const addendaDir = join(root, 'acceptance', 'addenda');
+  if (existsSync(addendaDir)) {
+    for (const f of readdirSync(addendaDir)) {
+      if (!f.endsWith('.json')) continue;
+      const d = readJson(join(addendaDir, f));
+      const cases = d.cases ?? [];
+      const notRun = cases.every((c) => c.status === 'NOT_RUN');
+      log(notRun, `addenda/${f}：全部 NOT_RUN（${cases.length} 项）`);
+      const collide = cases.filter((c) => frozenIds.has(c.id));
+      log(collide.length === 0, `addenda/${f}：与冻结用例无 ID 冲突${collide.length ? '，冲突 ' + collide.map((c) => c.id).join(',') : ''}`);
+    }
+  }
+} catch (e) {
+  log(false, `CR-001 addenda 校验失败：${e.message}`);
+}
 
 // 3) 无效示例确实无效（结构层面）
 try {
