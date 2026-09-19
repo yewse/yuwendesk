@@ -15,15 +15,20 @@
 ## 交付渠道现状（第 5 条证据线：可获得性）
 
 - **Cloud Agent 工件渠道无法承载该 EXE**：实测该渠道约 100MB 上限（50MB/95MB 可存，111MB 写入被丢弃），因此无法把 EXE 作为可下载工件随附。
-- 已新增 **CI 工件渠道**（reviewer 首选，原生 Windows、锁文件驱动）：`.github/workflows/windows-build.yml` 在 `windows-latest` 上 `npm ci` → typecheck/lint/test → `build:win`（未签名）→ 计算 SHA256 → 以工作流工件 `YuwenDesk-Setup-unsigned-x64` 上传（含 `SHA256SUMS.txt`、`BUILD_ENV.txt`，保留 30 天）。原生 Windows 构建的哈希会与 Linux+wine 构建不同，属正常（不同来源）。
-- **需持有人确认的最小事项（工件可见范围）**：当前仓库为 public，GitHub Actions 工作流工件对可访问该仓库 Actions 的人可下载。请确认此可见范围在既有授权内；若不允许，请指定一个私有工件渠道。**在确认前不建立公开 Release、不改仓库可见性、不采购服务、不把 111MB 二进制塞入 git 历史（GitHub 普通文件上限 100MiB）。**
+- 已新增并**成功运行** CI 工件渠道（reviewer 首选，原生 Windows、锁文件驱动）：`.github/workflows/windows-build.yml` 在 `windows-latest` 上 `npm ci` → typecheck/lint/test（48 项）→ `build:win`（未签名，原生无需 wine）→ 计算 SHA256 → 上传工件。
+  - 运行：https://github.com/yewse/yuwendesk/actions/runs/35440376395 （成功，2m1s，commit e072a06）
+  - 工件：`YuwenDesk-Setup-unsigned-x64`（zip 111,328,743 字节，保留 30 天，含 `SHA256SUMS.txt`、`BUILD_ENV.txt`）
+  - **原生 Windows 构建 EXE 的 SHA256：`ed468ffec8f3aa1798cee856ea4ddbc5a0e4c9cf9757d05731e56ffcbe48fc3d`**（`YuwenDesk-Setup-0.1.0-x64.exe`，PE32 NSIS，111,322,738 字节，runner_os=Windows/AMD64）。
+  - **收件侧独立复核**：已下载该工件并用本机 `sha256sum` 重算，与 CI 的 `SHA256SUMS.txt` 完全一致（见 artifact `pr1_windows_exe_delivery.txt`）。
+  - 原生 Windows 构建哈希与 Linux+wine 构建（`3e6c1c03…`）不同，属正常（来源不同）。
+- **需持有人确认的最小事项（工件可见范围）**：当前仓库为 public，GitHub Actions 工作流工件对可访问该仓库 Actions 的人可下载。请确认此可见范围在既有授权内；若不允许，请指定一个私有工件渠道。**未建立公开 Release、未改仓库可见性、未采购服务、未把 111MB 二进制塞入 git 历史（GitHub 普通文件上限 100MiB）。**
 
 ## 五条证据线分别记录，不得互相替代
 
 | 证据线 | 状态 |
 |---|---|
-| ① 未签名工程包构建（本地 Linux+wine） | PASS（SHA256 见上） |
-| ② 原始 EXE 上传、持有人可下载、独立重算哈希 | PENDING（受工件渠道限制；CI 工件待运行/授权确认） |
+| ① 未签名工程包构建（原生 Windows CI + 本地 Linux+wine 对照） | PASS（CI SHA256 `ed468ffe…`；本地 `3e6c1c03…`） |
+| ② 原始 EXE 上传、持有人可下载、独立重算哈希 | PASS（CI 工件可下载；收件侧独立重算与 CI 一致。仅剩 public 可见范围待持有人确认） |
 | ③ 干净 Win11 x64 普通用户安装验收 | BLOCKED_EXTERNAL（无目标机器，EXT02） |
 | ④ 正式代码签名（受信任发布者） | BLOCKED_EXTERNAL（无签名证书，EXT07；缺证书不阻断未签名构建） |
 | ⑤ 真实 Grok 连通/能力探测 | BLOCKED_EXTERNAL（无账户/密钥/预算，EXT03/04） |
