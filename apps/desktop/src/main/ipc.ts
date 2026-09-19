@@ -12,6 +12,7 @@ import { IMPLEMENTED_OPERATIONS, IPC_SCHEMA_VERSION } from '../shared/ipc';
 import type { ErrorCode } from '../shared/ipc';
 import type { LocalStore } from './store';
 import { StoreProtectedError } from './store';
+import { checkPayload } from './schemaGate';
 
 function errorResponse(
   code: ErrorCode,
@@ -102,6 +103,12 @@ export class IpcService {
     const invalid = validateEnvelope(op, req);
     if (invalid) return invalid;
     const request = req as IpcRequest;
+
+    // G02-T01 Schema 门：分发前统一校验载荷结构（类型/必填/多余字段），结构不合直接拒绝。
+    const gate = checkPayload(request.operation, request.payload);
+    if (!gate.ok) {
+      return errorResponse('INPUT_INVALID', `请求载荷结构无效：${gate.errors.join('；')}`, '请检查后重试。');
+    }
 
     switch (request.operation) {
       case 'app.bootstrap':

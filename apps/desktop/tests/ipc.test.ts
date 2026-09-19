@@ -109,6 +109,20 @@ describe('ui.saveDraft 版本校验（T04/T05 + 负数/小数）', () => {
     const r = await svc.handle('ui.saveDraft', saveReq('k', 123, 0));
     expect(r.ok).toBe(false);
   });
+  it('载荷含多余字段 → INPUT_INVALID（Schema 门 additionalProperties:false）', async () => {
+    const bad = {
+      schema_version: IPC_SCHEMA_VERSION,
+      request_id: 'r',
+      operation: 'ui.saveDraft',
+      workspace_id: null,
+      idempotency_key: 'k',
+      expected_revision: 0,
+      payload: { content: 'x', teacher_only: '不该出现' }
+    };
+    const r = await svc.handle('ui.saveDraft', bad);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('INPUT_INVALID');
+  });
 });
 
 // —— F03 / 定向检查 T02,T06,T07：幂等语义 ——

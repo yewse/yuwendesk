@@ -64,9 +64,14 @@
 - F07 验收分期：ADR-0003 明确 G01 工程验证 vs 干净 Win11 实机两级 + 四条证据线互不替代；INS-008 追加到 G01 验收（保留 G09，不降低要求）。
 - F08 Windows 构建：产出未签名工程测试安装包 `YuwenDesk-Setup-0.1.0-x64.exe`（SHA256 见报告）。
 
-## G02–G11 — NOT_STARTED
+## G02 本地安全数据基础 — IN_PROGRESS（起步，无外部依赖）
 
-数据基础、资料与引用、Grok 与任务、教学业务 M01–M12、材料交付、审查与修改、反馈与纠正、备份恢复、升级性能、发布验收，均未开始。界面相应页面标注"后续版本开放"。
+- [~] G02-T01 受限 IPC 及 **Schema 门**：新增声明式载荷 Schema 门 `src/main/schemaGate.ts`，在 `IpcService.handle` 分发前对所有已实现操作统一校验载荷结构（类型/必填/多余字段 additionalProperties:false/超长）；读操作拒绝夹带载荷。测试 `schemaGate.test.ts`(8) + ipc 多余字段拒绝用例；运行时冒烟确认不阻断正常保存。SEC-001/SEC-002 的结构门部分已具备。
+- [ ] G02-T02 SQLite 迁移与单写入者、G02-T03 凭据/敏感 payload 加密、G02-T04 版本并发与事务事件：待续（better-sqlite3 需针对 Electron ABI 重建，属已知后续项，无外部账户依赖）。
+
+## G03–G11 — NOT_STARTED
+
+资料与引用、Grok 与任务、教学业务 M01–M12、材料交付（含 CR-001 三类五文件，落 G05–G07）、审查与修改、反馈与纠正、备份恢复、升级性能、发布验收，均未开始。界面相应页面标注"后续版本开放"。
 
 ## 下一步
 
