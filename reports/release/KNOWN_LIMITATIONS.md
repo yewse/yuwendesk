@@ -1,6 +1,6 @@
 # 已知限制与未关闭发行门
 
-当前发行判定：`BLOCKED`（`RELEASE_ARTIFACT_MISSING`）。
+当前发行判定：`BLOCKED`（`RELEASE_SOURCE_DIRTY`）。
 
 校验清单：`reports/release/SHA256SUMS.txt`。本文件不嵌入该清单自身的哈希。
 
@@ -62,14 +62,6 @@
 - 外部输入：EXT03
 - 安全下一步：通过秘密管理/图形设置配置，禁止贴进仓库
 
-## CURRENT_CANDIDATE_MISSING
-
-- 阻断码：`RELEASE_ARTIFACT_MISSING`
-- 范围：apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe
-- 状态：BLOCKED
-- 外部输入：无
-- 安全下一步：在锁定构建环境从当前源码生成候选；不得复用历史安装包或哈希。
-
 ## DEFECT_AUDIT_NOT_COMPLETE
 
 - 阻断码：`RELEASE_DEFECT_AUDIT_REQUIRED`
@@ -93,6 +85,14 @@
 - 状态：NOT_RUN
 - 外部输入：无
 - 安全下一步：在对应证据层级创建新的追加验收运行；不得改写历史 NOT_RUN。
+
+## SUPPLY_CHAIN_SIGNATURE_MISSING
+
+- 阻断码：`RELEASE_SIGNATURE_MISSING`
+- 范围：reports/release/signing-status.json
+- 状态：BLOCKED
+- 外部输入：无
+- 安全下一步：由获授权的发布身份签名固定候选并加入可信时间戳，再重新检查。
 
 ## SOURCE_RUN_DIRTY
 

@@ -277,6 +277,13 @@
 - **发行证据刷新**：候选保持隔离时按规定执行 `release:evidence → release:sbom → release:verify`，前两项退出 0，最终验证按预期退出 2；仍为 `BLOCKED / RELEASE_ARTIFACT_MISSING`，正式环境、签名、干净 Windows、分发与缺陷审计门未关闭。外部缺口因真实登记由 15 降至 12，不等于案例已通过。
 - **E04 验证**：全量 Vitest **629 passed / 1 skipped（630 total，68 files）**，合同与 `git diff --check` 退出 0；既有 pdfjs/canvas/字体告警和环境跳过项保持原样。
 
+## G11-E05 候选绑定追加运行与精确证据白名单 — 运行已追加，白名单修复待提交
+
+- [x] **新候选与追加运行**：`e126a1a82c88420cfe26395c0ffd00496f5b8639` clean tree 通过 `build:candidate` 生成固定未签名候选（**131,024,555 bytes**，SHA-256 `0f0b5ba1f980fa37791ca144b0e2b36bad611701fa2248c7fabf1be82136d6e9`），来源记录逐字节复核通过。追加运行 `run-20260920-e126a1a-01` 在开始时 `repositoryDirty=false`，候选盘点为 `UNSIGNED_TEST_BUILD`，结果 **6 PASS / 0 FAIL / 38 BLOCKED / 126 NOT_RUN**；未执行的 WPS/API/隐私案例没有因 EXT04/10/11 已提供而自动提升。
+- [x] **本轮证据精确白名单**：发行聚合此前把新追加运行的 Vitest JSON 误当成源代码脏文件。新增 `collectAcceptanceEvidencePaths`，只从已通过 `AcceptanceRun` 校验的 `results[].evidence[].path` 收集 `reports/acceptance-runs/` 下精确文件；去重排序，拒绝绝对/穿越/非验收目录路径。未声明的相邻文件继续使 `relevantTreeClean=false`，不放宽整个目录。
+- **当前发行状态**：基于 e126a1a 运行生成的供应链记录确认候选 `UNSIGNED`，正式环境不匹配，签名、干净 Windows、分发和缺陷审计仍阻断。E05 源码修复本身使当前工作树真实为 dirty；提交后必须重建候选并创建下一轮追加运行，才能验证 `RELEASE_SOURCE_DIRTY` 已由白名单修复而消失。
+- **E05 验证**：白名单回归先 2 项失败后 GREEN；全量 Vitest **630 passed / 1 skipped（631 total，68 files）**，typecheck、lint、合同、desktop build、Node 语法与 diff 均通过。
+
 ## 下一步
 
 见 `HANDOFF.md`。G10 与 G11 四个本地工程包均已完成，不重做 G00–G11 或篡改冻结定义。下一步是外部门闭环：在锁定环境生成新候选，并补齐干净 Win11 8GB/SSD、正式签名/时间戳、可信分发身份、Office/WPS、真实 API/预算、学生资料隐私授权/逐次外发许可、缺陷审计和教学专业复核。缺输入继续标 `BLOCKED_EXTERNAL`；完成后创建绑定同一候选 commit 的追加验收运行，不覆盖本次 BLOCKED/NOT_RUN 记录。

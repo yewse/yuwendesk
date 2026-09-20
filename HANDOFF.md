@@ -45,6 +45,9 @@
 - **E04 仍阻断**：EXT02/03/05/06/07/08/09 继续 NOT_PROVIDED；DeepSeek 不满足冻结 AI-001 的 Grok 定义，GPT 合成材料/自审不满足合法现用教材/真人教师专业复核，当前主机不冒充干净标准用户 VM。
 - **E04 发行链已刷新**：隔离候选后 `release:evidence`/`release:sbom` 退出 0，`release:verify` 按预期退出 2；状态仍为 `BLOCKED / RELEASE_ARTIFACT_MISSING`，缺口 12。EXT04/10/11 的登记只减少外部输入缺口，没有把任何未执行案例改成 PASS。
 - **E04 验证**：全量 **629 passed / 1 skipped（630 total，68 files）**，合同与 diff 通过；既有告警/跳过项未改写。
+- **G11-E05 已追加一轮候选绑定验收**：`run-20260920-e126a1a-01` 绑定 clean commit `e126a1a82c88420cfe26395c0ffd00496f5b8639` 和 131,024,555-byte 未签名候选（SHA-256 `0f0b5ba1f980fa37791ca144b0e2b36bad611701fa2248c7fabf1be82136d6e9`），结果 6 PASS / 0 FAIL / 38 BLOCKED / 126 NOT_RUN。EXT04/10/11 已提供但外部案例未执行，未自动提升。
+- **E05 精确白名单修复待提交**：发行聚合遗漏本轮 `vitest-run-*.json`，导致误报 SOURCE_DIRTY；现只允许已验证 AcceptanceRun 精确引用的 `reports/acceptance-runs/` 证据路径，仍拒绝未声明邻接文件/绝对/穿越路径。提交后需重建候选并追加下一轮，以验证 clean source 聚合。
+- **E05 验证**：白名单回归先 RED 后 GREEN；全量 **630 passed / 1 skipped（631 total，68 files）**，typecheck/lint/contracts/build/Node 语法/diff 全通过。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。

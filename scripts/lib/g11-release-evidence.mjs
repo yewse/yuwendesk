@@ -120,6 +120,22 @@ export function inspectRepositoryProvenance({ root, sourceCommit, allowedDirtyPa
   };
 }
 
+export function collectAcceptanceEvidencePaths(run) {
+  if (!Array.isArray(run?.results)) fail('RELEASE_ACCEPTANCE_EVIDENCE_PATH_REJECTED', 'results');
+  const paths = new Set();
+  for (const result of run.results) {
+    if (!Array.isArray(result?.evidence)) fail('RELEASE_ACCEPTANCE_EVIDENCE_PATH_REJECTED', 'evidence');
+    for (const descriptor of result.evidence) {
+      const path = descriptor?.path;
+      if (normalizeInputPath(path) === null || !path.startsWith('reports/acceptance-runs/')) {
+        fail('RELEASE_ACCEPTANCE_EVIDENCE_PATH_REJECTED', path ?? '');
+      }
+      paths.add(path);
+    }
+  }
+  return [...paths].sort((left, right) => left.localeCompare(right, 'en'));
+}
+
 function normalizeInputPath(value) {
   if (!isNonEmptyString(value) || isAbsolute(value) || value.includes(':') || value.includes('\\')) return null;
   const segments = value.split('/');
@@ -954,7 +970,8 @@ export function loadReleaseAggregationInputs({ root, releaseInput, generatedAt }
     ...G11_GENERATED_OUTPUT_PATHS,
     runPath,
     candidatePath,
-    'reports/release/defect-audit.json'
+    'reports/release/defect-audit.json',
+    ...collectAcceptanceEvidencePaths(acceptanceRun)
   ];
   if (candidateArtifact.artifactPresent) allowedDirtyPaths.push(candidateArtifact.expectedPath);
   const repositoryProvenance = inspectRepositoryProvenance({

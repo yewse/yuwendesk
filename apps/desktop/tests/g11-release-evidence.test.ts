@@ -16,6 +16,7 @@ import {
 import {
   aggregateReleaseEvidence,
   buildRequirementCoverage,
+  collectAcceptanceEvidencePaths,
   decideReleaseDisposition,
   G11_GENERATED_OUTPUT_PATHS,
   inspectRepositoryProvenance,
@@ -224,12 +225,45 @@ describe('G11-T02 release aggregation boundary', () => {
       allowedDirtyPaths: G11_GENERATED_OUTPUT_PATHS
     }).relevantTreeClean).toBe(true);
 
+    mkdirSync(join(fixtureRoot, 'reports', 'acceptance-runs'), { recursive: true });
+    writeFileSync(join(fixtureRoot, 'reports', 'acceptance-runs', 'vitest-current.json'), '{}\n', 'utf8');
+    const evidencePaths = collectAcceptanceEvidencePaths({
+      results: [{
+        evidence: [{ path: 'reports/acceptance-runs/vitest-current.json' }],
+        artifactHashes: []
+      }]
+    });
+    expect(inspectRepositoryProvenance({
+      root: fixtureRoot,
+      sourceCommit: head,
+      allowedDirtyPaths: [...G11_GENERATED_OUTPUT_PATHS, ...evidencePaths]
+    }).relevantTreeClean).toBe(true);
+
+    writeFileSync(join(fixtureRoot, 'reports', 'acceptance-runs', 'undeclared.json'), '{}\n', 'utf8');
+    expect(inspectRepositoryProvenance({
+      root: fixtureRoot,
+      sourceCommit: head,
+      allowedDirtyPaths: [...G11_GENERATED_OUTPUT_PATHS, ...evidencePaths]
+    }).relevantTreeClean).toBe(false);
+
     writeFileSync(join(fixtureRoot, 'scripts', 'verify.mjs'), 'export const ok = false;\n', 'utf8');
     expect(inspectRepositoryProvenance({
       root: fixtureRoot,
       sourceCommit: head,
       allowedDirtyPaths: ['reports/release/release-evidence.json']
     }).relevantTreeClean).toBe(false);
+  });
+
+  it('rejects unsafe paths while deduplicating exact acceptance evidence files', () => {
+    expect(collectAcceptanceEvidencePaths({
+      results: [
+        { evidence: [{ path: 'reports/acceptance-runs/vitest-run.json' }], artifactHashes: [] },
+        { evidence: [{ path: 'reports/acceptance-runs/vitest-run.json' }], artifactHashes: [] }
+      ]
+    })).toEqual(['reports/acceptance-runs/vitest-run.json']);
+    expect(() => collectAcceptanceEvidencePaths({
+      results: [{ evidence: [{ path: '../borrowed.json' }], artifactHashes: [] }]
+    })).toThrow(/RELEASE_ACCEPTANCE_EVIDENCE_PATH_REJECTED/);
   });
 
   it('keeps software, resource, teaching, artifact, and release dimensions separate', () => {

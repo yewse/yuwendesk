@@ -1,31 +1,31 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T18:36:02.503Z",
-  "sourceCommit": "b5dba42579cbb325e1b3cbeadc582865256f88e4",
+  "generatedAt": "2026-09-20T18:40:39.654Z",
+  "sourceCommit": "e126a1a82c88420cfe26395c0ffd00496f5b8639",
   "acceptanceRun": {
-    "runId": "run-20260920-b5dba42-01",
-    "path": "reports/acceptance-runs/run-20260920-b5dba42-01.json",
-    "sha256": "8d990fa3b72792d31c9c19b5357e181b59f7c71e01e1599f4d3e621b662be0d6",
-    "sizeBytes": 78288,
-    "repositoryDirty": true
+    "runId": "run-20260920-e126a1a-01",
+    "path": "reports/acceptance-runs/run-20260920-e126a1a-01.json",
+    "sha256": "8f3b9dd23f3ff97768ae6ec0a8e811551f7591501e5e5c7fd0427ebd2fc06e19",
+    "sizeBytes": 78289,
+    "repositoryDirty": false
   },
   "candidate": {
     "inventoryPath": "reports/release/candidate-artifact.json",
-    "inventorySha256": "57c7e0f2fc891435d4949b3babaae8fde21dc4989179a5b4b7c590e2f59f8960",
-    "inventorySizeBytes": 348,
+    "inventorySha256": "6abf2c9990a141ceab4cd92203d5020d2be4293fcfdbb883f803cfb62b3c97c9",
+    "inventorySizeBytes": 563,
     "expectedPath": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
-    "artifactPresent": false,
-    "artifactClass": "NONE",
-    "sha256": null,
-    "sizeBytes": null
+    "artifactPresent": true,
+    "artifactClass": "UNSIGNED_TEST_BUILD",
+    "sha256": "0f0b5ba1f980fa37791ca144b0e2b36bad611701fa2248c7fabf1be82136d6e9",
+    "sizeBytes": 131024555
   },
   "statuses": {
     "softwareStatus": "BLOCKED",
     "resourceCoverageStatus": "BLOCKED",
     "teachingValidationStatus": "NOT_REVIEWED",
-    "artifactClass": "NONE",
+    "artifactClass": "UNSIGNED_TEST_BUILD",
     "releaseDisposition": "BLOCKED",
-    "reasonCode": "RELEASE_ARTIFACT_MISSING"
+    "reasonCode": "RELEASE_SOURCE_DIRTY"
   },
   "gates": {
     "sourceTreeClean": false,
@@ -1975,7 +1975,7 @@
   "deliverables": [
     {
       "id": "acceptance_run",
-      "path": "reports/acceptance-runs/run-20260920-b5dba42-01.json",
+      "path": "reports/acceptance-runs/run-20260920-e126a1a-01.json",
       "status": "PRESENT"
     },
     {
@@ -1986,7 +1986,7 @@
     {
       "id": "candidate_installer",
       "path": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
-      "status": "MISSING"
+      "status": "PRESENT"
     },
     {
       "id": "release_evidence",
@@ -2142,7 +2142,7 @@
   "supplyChain": {
     "sbomStatus": "PASS",
     "checksumStatus": "PASS",
-    "signatureStatus": "NOT_RUN",
+    "signatureStatus": "UNSIGNED",
     "sbomPath": "reports/release/yuwendesk.cdx.json",
     "checksumPath": "reports/release/SHA256SUMS.txt",
     "signingStatusPath": "reports/release/signing-status.json",
@@ -2160,6 +2160,11 @@
       "path": "acceptance/cases.json",
       "sha256": "cb215e1ff2da5f6c2a1495b6e14da2e9f0e1e4a7b179031dd08baffc6745eed5",
       "sizeBytes": 98324
+    },
+    {
+      "path": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
+      "sha256": "0f0b5ba1f980fa37791ca144b0e2b36bad611701fa2248c7fabf1be82136d6e9",
+      "sizeBytes": 131024555
     },
     {
       "path": "planning/changes/CR001/traceability.json",
@@ -2182,14 +2187,14 @@
       "sizeBytes": 27957
     },
     {
-      "path": "reports/acceptance-runs/run-20260920-b5dba42-01.json",
-      "sha256": "8d990fa3b72792d31c9c19b5357e181b59f7c71e01e1599f4d3e621b662be0d6",
-      "sizeBytes": 78288
+      "path": "reports/acceptance-runs/run-20260920-e126a1a-01.json",
+      "sha256": "8f3b9dd23f3ff97768ae6ec0a8e811551f7591501e5e5c7fd0427ebd2fc06e19",
+      "sizeBytes": 78289
     },
     {
       "path": "reports/release/candidate-artifact.json",
-      "sha256": "57c7e0f2fc891435d4949b3babaae8fde21dc4989179a5b4b7c590e2f59f8960",
-      "sizeBytes": 348
+      "sha256": "6abf2c9990a141ceab4cd92203d5020d2be4293fcfdbb883f803cfb62b3c97c9",
+      "sizeBytes": 563
     },
     {
       "path": "reports/release/defect-audit.json",
@@ -2198,14 +2203,6 @@
     }
   ],
   "knownGaps": [
-    {
-      "gapId": "CURRENT_CANDIDATE_MISSING",
-      "scope": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
-      "status": "BLOCKED",
-      "blockerCode": "RELEASE_ARTIFACT_MISSING",
-      "externalInputIds": [],
-      "safeAction": "在锁定构建环境从当前源码生成候选；不得复用历史安装包或哈希。"
-    },
     {
       "gapId": "DEFECT_AUDIT_NOT_COMPLETE",
       "scope": "P0/P1 已知缺陷审计",
@@ -2307,6 +2304,14 @@
       "blockerCode": "RELEASE_FORMAL_ENVIRONMENT_MISMATCH",
       "externalInputIds": [],
       "safeAction": "在 ENV_LOCK.json 锁定的 Node/npm 环境重新生成供应链证据；当前 SBOM 仅作工程证据。"
+    },
+    {
+      "gapId": "SUPPLY_CHAIN_SIGNATURE_MISSING",
+      "scope": "reports/release/signing-status.json",
+      "status": "BLOCKED",
+      "blockerCode": "RELEASE_SIGNATURE_MISSING",
+      "externalInputIds": [],
+      "safeAction": "由获授权的发布身份签名固定候选并加入可信时间戳，再重新检查。"
     }
   ]
 }
