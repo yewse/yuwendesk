@@ -1,0 +1,540 @@
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { afterEach, describe, expect, it } from 'vitest';
+
+// @ts-expect-error pure root ESM module
+import {
+  buildAcceptanceRun,
+  inspectCandidateArtifact,
+  loadAcceptanceDefinitions,
+  npmCliPathForNodeExecutable,
+  recoverJsonSetAtomic,
+  validateAcceptanceMap,
+  validateAcceptanceRun,
+  writeJsonAtomic,
+  writeJsonSetAtomic
+} from '../../../scripts/lib/g11-acceptance.mjs';
+
+const root = fileURLToPath(new URL('../../../', import.meta.url));
+const fixtureRoots: string[] = [];
+
+function makeFixtureRoot() {
+  const fixtureRoot = join(root, 'reports', `.g11-test-${process.pid}-${Date.now()}-${fixtureRoots.length}`);
+  mkdirSync(fixtureRoot, { recursive: true });
+  fixtureRoots.push(fixtureRoot);
+  return fixtureRoot;
+}
+
+function baseRun(results: unknown[]) {
+  return {
+    schemaVersion: 1,
+    runId: 'run-20260920-abcdef0-01',
+    sourceCommit: 'abcdef0123456789',
+    repositoryDirty: true,
+    startedAt: '2026-09-20T00:00:00.000Z',
+    completedAt: '2026-09-20T00:01:00.000Z',
+    environment: { os: 'win32', release: 'test', arch: 'x64', node: 'v24.15.0', npm: '11.12.1' },
+    definitionSources: [],
+    results
+  };
+}
+
+function result(overrides: Record<string, unknown>) {
+  return {
+    caseId: 'CASE-A',
+    status: 'NOT_RUN',
+    evidenceLevel: null,
+    command: null,
+    exitCode: null,
+    executedAt: null,
+    environment: 'fixture',
+    evidence: [],
+    artifactHashes: [],
+    blockerCode: null,
+    externalInputIds: [],
+    observedResult: 'not run',
+    ...overrides
+  };
+}
+
+afterEach(() => {
+  for (const path of fixtureRoots.splice(0)) rmSync(path, { recursive: true, force: true });
+});
+
+describe('G11-T01 acceptance definition and map boundary', () => {
+  it('invokes npm through its JavaScript CLI without a Windows command shell', () => {
+    const outcome = spawnSync(process.execPath, [npmCliPathForNodeExecutable(process.execPath), '--version'], {
+      encoding: 'utf8',
+      shell: false
+    });
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.status).toBe(0);
+    expect(outcome.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('loads 130 frozen plus 40 addendum cases while definitions stay NOT_RUN', () => {
+    const loaded = loadAcceptanceDefinitions(root);
+    expect(loaded.definitions).toHaveLength(170);
+    expect(new Set(loaded.definitions.map((item: { id: string }) => item.id)).size).toBe(170);
+    expect(loaded.definitions.every((item: { status: string }) => item.status === 'NOT_RUN')).toBe(true);
+  });
+
+  it('rejects a same-count acceptance definition whose frozen bytes changed', () => {
+    const fixtureRoot = makeFixtureRoot();
+    mkdirSync(join(fixtureRoot, 'acceptance', 'addenda'), { recursive: true });
+    const base = readFileSync(join(root, 'acceptance', 'cases.json'), 'utf8').replace('任务以实际备课为中心', '任务以任意文案为中心');
+    writeFileSync(join(fixtureRoot, 'acceptance', 'cases.json'), base, 'utf8');
+    writeFileSync(
+      join(fixtureRoot, 'acceptance', 'addenda', 'classroom-delivery.cases.json'),
+      readFileSync(join(root, 'acceptance', 'addenda', 'classroom-delivery.cases.json'))
+    );
+    expect(() => loadAcceptanceDefinitions(fixtureRoot)).toThrow(/ACCEPTANCE_DEFINITION_HASH_MISMATCH/);
+  });
+
+  it('requires every definition exactly once and rejects unknown cases', () => {
+    const validation = validateAcceptanceMap({
+      definitionIds: ['CASE-A', 'CASE-B'],
+      map: {
+        schemaVersion: 1,
+        cases: [
+          { caseId: 'CASE-A', mode: 'not_run', requiredEvidenceLevel: 'engineering_automation', reasonCode: 'FORMAL_CASE_NOT_EXECUTED' },
+          { caseId: 'CASE-A', mode: 'not_run', requiredEvidenceLevel: 'engineering_automation', reasonCode: 'FORMAL_CASE_NOT_EXECUTED' },
+          { caseId: 'CASE-X', mode: 'not_run', requiredEvidenceLevel: 'engineering_automation', reasonCode: 'FORMAL_CASE_NOT_EXECUTED' }
+        ]
+      }
+    });
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.map((error: { code: string }) => error.code)).toEqual(
+      expect.arrayContaining(['ACCEPTANCE_MAP_DUPLICATE', 'ACCEPTANCE_MAP_MISSING', 'ACCEPTANCE_MAP_UNKNOWN'])
+    );
+  });
+
+  it('rejects malformed map modes and evidence levels', () => {
+    const validation = validateAcceptanceMap({
+      definitionIds: ['CASE-A', 'CASE-B'],
+      map: {
+        schemaVersion: 1,
+        cases: [
+          { caseId: 'CASE-A', mode: 'automation', requiredEvidenceLevel: 'unknown', commandGroup: 'desktop-unit' },
+          { caseId: 'CASE-B', mode: 'external', requiredEvidenceLevel: 'office_wps', blockerCode: 'BLOCKED_EXTERNAL_OFFICE', externalInputIds: [] }
+        ]
+      }
+    });
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.map((error: { code: string }) => error.code)).toEqual(
+      expect.arrayContaining(['ACCEPTANCE_MAP_ENTRY_INVALID'])
+    );
+  });
+
+  it('rejects blocker references to undeclared external inputs', () => {
+    const validation = validateAcceptanceMap({
+      definitionIds: ['CASE-A'],
+      knownExternalInputIds: ['EXT02'],
+      map: {
+        schemaVersion: 1,
+        cases: [{
+          caseId: 'CASE-A', mode: 'external', requiredEvidenceLevel: 'clean_windows_standard_user',
+          blockerCode: 'BLOCKED_EXTERNAL_WINDOWS', externalInputIds: ['EXT99']
+        }]
+      }
+    });
+    expect(validation.errors.map((error: { code: string }) => error.code)).toContain('ACCEPTANCE_MAP_EXTERNAL_INPUT_UNKNOWN');
+  });
+});
+
+describe('G11-T01 acceptance run invariants', () => {
+  it('creates a missing fixed parent directory before an atomic JSON publication', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const targetPath = join(fixtureRoot, 'nested', 'result.json');
+    writeJsonAtomic({
+      targetPath,
+      value: { ok: true },
+      validate: (value: { ok?: boolean }) => value.ok === true
+    });
+    expect(JSON.parse(readFileSync(targetPath, 'utf8'))).toEqual({ ok: true });
+  });
+
+  it('does not promote an individually passed assertion when its command group failed', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const evidencePath = relative(root, join(fixtureRoot, 'vitest.json')).replaceAll('\\', '/');
+    writeFileSync(join(fixtureRoot, 'vitest.json'), '{"success":false}\n', 'utf8');
+    const run = buildAcceptanceRun({
+      root,
+      definitions: [{ id: 'CASE-A' }],
+      definitionSources: [],
+      map: { cases: [{
+        caseId: 'CASE-A', mode: 'automation', requiredEvidenceLevel: 'engineering_automation',
+        commandGroup: 'desktop-unit', testFile: 'tests/example.test.ts', testName: 'exact test'
+      }] },
+      automationReport: {
+        success: false,
+        exitCode: 1,
+        command: 'node vitest run',
+        assertions: [{ testFile: 'tests/example.test.ts', testName: 'exact test', status: 'passed' }]
+      },
+      sourceCommit: 'abcdef0123456789', repositoryDirty: true, runId: 'run-20260920-abcdef0-01',
+      startedAt: '2026-09-20T00:00:00.000Z', completedAt: '2026-09-20T00:01:00.000Z',
+      environment: { os: 'win32', release: 'test', arch: 'x64', node: 'v24.15.0', npm: '11.12.1' },
+      evidencePath
+    });
+    expect(run.results[0].status).toBe('FAIL');
+    expect(run.results[0].exitCode).toBe(1);
+  });
+
+  it('matches the full Vitest name instead of an ambiguous title', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const evidencePath = relative(root, join(fixtureRoot, 'vitest.json')).replaceAll('\\', '/');
+    writeFileSync(join(fixtureRoot, 'vitest.json'), '{"success":true}\n', 'utf8');
+    const run = buildAcceptanceRun({
+      root,
+      definitions: [{ id: 'CASE-A' }], definitionSources: [],
+      map: { cases: [{
+        caseId: 'CASE-A', mode: 'automation', requiredEvidenceLevel: 'engineering_automation',
+        commandGroup: 'desktop-unit', testFile: 'tests/example.test.ts', testName: 'suite B duplicate'
+      }] },
+      automationReport: {
+        success: true, exitCode: 0, command: 'node vitest run',
+        assertions: [
+          { testFile: 'tests/example.test.ts', testName: 'duplicate', fullName: 'suite A duplicate', status: 'failed' },
+          { testFile: 'tests/example.test.ts', testName: 'duplicate', fullName: 'suite B duplicate', status: 'passed' }
+        ]
+      },
+      sourceCommit: 'abcdef0123456789', repositoryDirty: true, runId: 'run-20260920-abcdef0-01',
+      startedAt: '2026-09-20T00:00:00.000Z', completedAt: '2026-09-20T00:01:00.000Z',
+      environment: { os: 'win32', release: 'test', arch: 'x64', node: 'v24.15.0', npm: '11.12.1' },
+      evidencePath
+    });
+    expect(run.results[0].status).toBe('PASS');
+  });
+
+  it('rejects PASS without a declared evidence level', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const path = join(fixtureRoot, 'evidence.txt');
+    writeFileSync(path, 'evidence', 'utf8');
+    const data = readFileSync(path);
+    const relativePath = relative(root, path).replaceAll('\\', '/');
+    const validation = validateAcceptanceRun({
+      root,
+      definitionIds: ['CASE-A'],
+      run: baseRun([result({
+        status: 'PASS', evidenceLevel: null, command: 'vitest', exitCode: 0,
+        executedAt: '2026-09-20T00:00:10.000Z',
+        evidence: [{ path: relativePath, sha256: createHash('sha256').update(data).digest('hex'), sizeBytes: data.byteLength }],
+        observedResult: 'missing evidence level'
+      })])
+    });
+    expect(validation.errors.map((error: { code: string }) => error.code)).toContain('ACCEPTANCE_PASS_INVALID');
+  });
+
+  it('rejects a PASS that contradicts its map mode, time window, and frozen sources', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const path = join(fixtureRoot, 'evidence.txt');
+    writeFileSync(path, 'unrelated evidence', 'utf8');
+    const data = readFileSync(path);
+    const validation = validateAcceptanceRun({
+      root,
+      definitionIds: ['CASE-A'],
+      map: { schemaVersion: 1, cases: [{
+        caseId: 'CASE-A', mode: 'not_run', requiredEvidenceLevel: 'teacher_professional_review',
+        reasonCode: 'FORMAL_CASE_NOT_EXECUTED'
+      }] },
+      run: baseRun([result({
+        status: 'PASS', evidenceLevel: 'engineering_automation', command: null, exitCode: 0,
+        executedAt: '2020-01-01T00:00:00.000Z',
+        evidence: [{
+          path: relative(root, path).replaceAll('\\', '/'),
+          sha256: createHash('sha256').update(data).digest('hex'), sizeBytes: data.byteLength
+        }],
+        observedResult: 'counterfeit pass'
+      })])
+    });
+    expect(validation.errors.map((error: { code: string }) => error.code)).toEqual(expect.arrayContaining([
+      'ACCEPTANCE_PASS_INVALID',
+      'ACCEPTANCE_RESULT_MAP_MISMATCH',
+      'ACCEPTANCE_EXECUTION_TIME_INVALID',
+      'ACCEPTANCE_DEFINITION_SOURCE_INVALID'
+    ]));
+  });
+
+  it('rejects automation evidence borrowed from another source commit or run', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const reportPath = join(fixtureRoot, 'vitest.json');
+    const relativePath = relative(root, reportPath).replaceAll('\\', '/');
+    const command = 'node vitest run';
+    writeFileSync(reportPath, `${JSON.stringify({
+      schemaVersion: 1,
+      runId: 'run-20260920-deadbee-01',
+      sourceCommit: 'deadbeefdeadbeef',
+      repositoryDirty: true,
+      startedAt: '2026-09-20T00:00:01.000Z',
+      completedAt: '2026-09-20T00:00:10.000Z',
+      command,
+      exitCode: 0,
+      success: true,
+      assertions: [{ testFile: 'tests/example.test.ts', fullName: 'suite exact test', status: 'passed' }]
+    })}\n`, 'utf8');
+    const data = readFileSync(reportPath);
+    const loaded = loadAcceptanceDefinitions(root);
+    const validation = validateAcceptanceRun({
+      root,
+      definitionIds: ['CASE-A'],
+      map: { schemaVersion: 1, cases: [{
+        caseId: 'CASE-A', mode: 'automation', requiredEvidenceLevel: 'engineering_automation',
+        commandGroup: 'desktop-unit', testFile: 'tests/example.test.ts', testName: 'suite exact test'
+      }] },
+      run: {
+        ...baseRun([result({
+          status: 'PASS', evidenceLevel: 'engineering_automation', command, exitCode: 0,
+          executedAt: '2026-09-20T00:00:10.000Z',
+          evidence: [{ path: relativePath, sha256: createHash('sha256').update(data).digest('hex'), sizeBytes: data.byteLength }],
+          observedResult: 'borrowed evidence'
+        })]),
+        definitionSources: loaded.definitionSources
+      }
+    });
+    expect(validation.errors.map((error: { code: string }) => error.code))
+      .toContain('ACCEPTANCE_AUTOMATION_EVIDENCE_INVALID');
+  });
+
+  it('rejects automation evidence whose report time runs backwards', () => {
+    const fixtureRoot = makeFixtureRoot();
+    mkdirSync(join(fixtureRoot, 'acceptance', 'addenda'), { recursive: true });
+    mkdirSync(join(fixtureRoot, 'reports', 'acceptance-runs'), { recursive: true });
+    writeFileSync(
+      join(fixtureRoot, 'acceptance', 'cases.json'),
+      readFileSync(join(root, 'acceptance', 'cases.json'))
+    );
+    writeFileSync(
+      join(fixtureRoot, 'acceptance', 'addenda', 'classroom-delivery.cases.json'),
+      readFileSync(join(root, 'acceptance', 'addenda', 'classroom-delivery.cases.json'))
+    );
+    const evidencePath = 'reports/acceptance-runs/vitest-run-20260920-abcdef0-01.json';
+    const reportPath = join(fixtureRoot, ...evidencePath.split('/'));
+    const command = 'node vitest run';
+    writeFileSync(reportPath, `${JSON.stringify({
+      schemaVersion: 1,
+      runId: 'run-20260920-abcdef0-01',
+      sourceCommit: 'abcdef0123456789',
+      repositoryDirty: true,
+      startedAt: '2026-09-20T00:00:20.000Z',
+      completedAt: '2026-09-20T00:00:10.000Z',
+      command,
+      exitCode: 0,
+      success: true,
+      assertions: [{ testFile: 'tests/example.test.ts', fullName: 'suite exact test', status: 'passed' }]
+    })}\n`, 'utf8');
+    const data = readFileSync(reportPath);
+    const loaded = loadAcceptanceDefinitions(fixtureRoot);
+    const validation = validateAcceptanceRun({
+      root: fixtureRoot,
+      definitionIds: ['CASE-A'],
+      map: { schemaVersion: 1, cases: [{
+        caseId: 'CASE-A', mode: 'automation', requiredEvidenceLevel: 'engineering_automation',
+        commandGroup: 'desktop-unit', testFile: 'tests/example.test.ts', testName: 'suite exact test'
+      }] },
+      run: {
+        ...baseRun([result({
+          status: 'PASS', evidenceLevel: 'engineering_automation', command, exitCode: 0,
+          executedAt: '2026-09-20T00:00:10.000Z',
+          evidence: [{
+            path: evidencePath,
+            sha256: createHash('sha256').update(data).digest('hex'),
+            sizeBytes: data.byteLength
+          }],
+          observedResult: 'impossible time order'
+        })]),
+        definitionSources: loaded.definitionSources
+      }
+    });
+    expect(validation.errors.map((error: { code: string }) => error.code))
+      .toContain('ACCEPTANCE_AUTOMATION_EVIDENCE_INVALID');
+  });
+
+  it('rejects PASS without zero exit and evidence, BLOCKED without external IDs, and NOT_RUN with a command', () => {
+    const validation = validateAcceptanceRun({
+      root,
+      definitionIds: ['PASS-A', 'BLOCK-A', 'WAIT-A'],
+      run: baseRun([
+        result({ caseId: 'PASS-A', status: 'PASS', evidenceLevel: 'engineering_automation', command: 'vitest', exitCode: 1, executedAt: '2026-09-20T00:00:10.000Z', observedResult: 'bad pass' }),
+        result({ caseId: 'BLOCK-A', status: 'BLOCKED', blockerCode: 'BLOCKED_EXTERNAL_WINDOWS', observedResult: 'missing ids' }),
+        result({ caseId: 'WAIT-A', command: 'vitest' })
+      ])
+    });
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.map((error: { code: string }) => error.code)).toEqual(
+      expect.arrayContaining(['ACCEPTANCE_PASS_INVALID', 'ACCEPTANCE_BLOCKER_INVALID', 'ACCEPTANCE_NOT_RUN_INVALID'])
+    );
+  });
+
+  it('rejects traversal and absolute evidence paths', () => {
+    const validation = validateAcceptanceRun({
+      root,
+      definitionIds: ['CASE-A'],
+      run: baseRun([result({
+        status: 'FAIL',
+        evidenceLevel: 'engineering_automation',
+        command: 'vitest',
+        exitCode: 1,
+        executedAt: '2026-09-20T00:00:10.000Z',
+        evidence: [
+          { path: '../outside.log', sha256: '0'.repeat(64), sizeBytes: 1 },
+          { path: 'C:/outside.log', sha256: '0'.repeat(64), sizeBytes: 1 },
+          { path: 'reports/evidence.txt:secret', sha256: '0'.repeat(64), sizeBytes: 1 }
+        ],
+        observedResult: 'unsafe evidence'
+      })])
+    });
+    expect(validation.errors.filter((error: { code: string }) => error.code === 'EVIDENCE_PATH_REJECTED')).toHaveLength(3);
+  });
+
+  it('re-reads allowed evidence and rejects a wrong SHA-256', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const path = join(fixtureRoot, 'evidence.txt');
+    writeFileSync(path, 'real evidence', 'utf8');
+    const relativePath = relative(root, path).replaceAll('\\', '/');
+    const validation = validateAcceptanceRun({
+      root,
+      definitionIds: ['CASE-A'],
+      run: baseRun([result({
+        status: 'FAIL', evidenceLevel: 'engineering_automation', command: 'vitest', exitCode: 1,
+        executedAt: '2026-09-20T00:00:10.000Z',
+        evidence: [{ path: relativePath, sha256: '0'.repeat(64), sizeBytes: readFileSync(path).byteLength }],
+        observedResult: 'hash mismatch'
+      })])
+    });
+    expect(validation.errors.map((error: { code: string }) => error.code)).toContain('EVIDENCE_HASH_MISMATCH');
+  });
+
+  it('rejects an allowed-looking symlink that escapes the repository', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const outside = join(tmpdir(), `g11-outside-${process.pid}-${Date.now()}`);
+    const outsideFile = join(outside, 'evidence.txt');
+    const link = join(fixtureRoot, 'escape');
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(outsideFile, 'outside', 'utf8');
+    try {
+      symlinkSync(outside, link, 'junction');
+      const relativePath = relative(root, join(link, 'evidence.txt')).replaceAll('\\', '/');
+      const sha256 = createHash('sha256').update(readFileSync(outsideFile)).digest('hex');
+      const validation = validateAcceptanceRun({
+        root,
+        definitionIds: ['CASE-A'],
+        run: baseRun([result({
+          status: 'FAIL', evidenceLevel: 'engineering_automation', command: 'vitest', exitCode: 1,
+          executedAt: '2026-09-20T00:00:10.000Z',
+          evidence: [{ path: relativePath, sha256, sizeBytes: readFileSync(outsideFile).byteLength }],
+          observedResult: 'symlink escape'
+        })])
+      });
+      expect(validation.errors.map((error: { code: string }) => error.code)).toContain('EVIDENCE_SYMLINK_ESCAPE');
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('records a missing fixed installer without borrowing a historical hash', () => {
+    const inventory = inspectCandidateArtifact({ root, sourceCommit: 'abcdef0123456789' });
+    if (!inventory.artifactPresent) {
+      expect(inventory.sha256).toBeNull();
+      expect(inventory.sizeBytes).toBeNull();
+      expect(inventory.artifactClass).toBe('NONE');
+      expect(inventory.buildCommand).toBeNull();
+      expect(inventory.buildEnvironment).toBeNull();
+    }
+  });
+
+  it('rejects a fixed candidate path that resolves outside the repository', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const outside = join(tmpdir(), `g11-candidate-${process.pid}-${Date.now()}`);
+    mkdirSync(join(fixtureRoot, 'apps', 'desktop'), { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(outside, 'YuwenDesk-Setup-0.1.0-x64.exe'), 'not a candidate', 'utf8');
+    try {
+      symlinkSync(outside, join(fixtureRoot, 'apps', 'desktop', 'release'), 'junction');
+      expect(() => inspectCandidateArtifact({ root: fixtureRoot, sourceCommit: 'abcdef0123456789' }))
+        .toThrow(/CANDIDATE_SYMLINK_ESCAPE/);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a release junction redirected to another directory inside the repository', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const redirected = join(fixtureRoot, 'other-artifacts');
+    mkdirSync(join(fixtureRoot, 'apps', 'desktop'), { recursive: true });
+    mkdirSync(redirected, { recursive: true });
+    writeFileSync(join(redirected, 'YuwenDesk-Setup-0.1.0-x64.exe'), 'not a release build', 'utf8');
+    symlinkSync(redirected, join(fixtureRoot, 'apps', 'desktop', 'release'), 'junction');
+    expect(() => inspectCandidateArtifact({
+      root: fixtureRoot,
+      sourceCommit: 'abcdef0123456789',
+      buildCommand: 'npm run build:win',
+      buildEnvironment: { os: 'win32', release: 'test', arch: 'x64', node: 'v22.14.0', npm: '10.9.7' }
+    })).toThrow(/CANDIDATE_SYMLINK_ESCAPE/);
+  });
+
+  it('uses no-clobber publication for append-only records', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const targetPath = join(fixtureRoot, 'append-only.json');
+    writeJsonAtomic({ targetPath, value: { sequence: 1 }, validate: () => true, noClobber: true });
+    expect(() => writeJsonAtomic({
+      targetPath, value: { sequence: 2 }, validate: () => true, noClobber: true
+    })).toThrow();
+    expect(JSON.parse(readFileSync(targetPath, 'utf8'))).toEqual({ sequence: 1 });
+  });
+
+  it('never removes a partial file owned by another concurrent writer', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const targetPath = join(fixtureRoot, 'concurrent.json');
+    writeFileSync(targetPath, '{"existing":true}\n', 'utf8');
+    writeFileSync(`${targetPath}.partial`, 'other-writer-owned', 'utf8');
+    expect(() => writeJsonAtomic({
+      targetPath, value: { sequence: 1 }, validate: () => true, noClobber: true
+    })).toThrow();
+    expect(readFileSync(`${targetPath}.partial`, 'utf8')).toBe('other-writer-owned');
+  });
+
+  it('restores every prior target when an atomic JSON set publication fails', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const first = join(fixtureRoot, 'candidate.json');
+    const second = join(fixtureRoot, 'release-input.json');
+    writeFileSync(first, '{"version":"old-candidate"}\n', 'utf8');
+    writeFileSync(second, '{"version":"old-input"}\n', 'utf8');
+    expect(() => writeJsonSetAtomic({
+      transactionPath: join(fixtureRoot, '.transaction.json'),
+      entries: [
+        { targetPath: first, value: { version: 'new-candidate' }, validate: () => true },
+        { targetPath: second, value: { version: 'new-input' }, validate: () => true }
+      ],
+      beforePublish: (index: number) => { if (index === 1) throw new Error('injected'); }
+    })).toThrow(/injected/);
+    expect(JSON.parse(readFileSync(first, 'utf8'))).toEqual({ version: 'old-candidate' });
+    expect(JSON.parse(readFileSync(second, 'utf8'))).toEqual({ version: 'old-input' });
+  });
+
+  it('recovers the prior complete JSON set after an interrupted publication', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const transactionPath = join(fixtureRoot, '.transaction.json');
+    const first = join(fixtureRoot, 'candidate.json');
+    const second = join(fixtureRoot, 'release-input.json');
+    writeFileSync(first, '{"version":"old-candidate"}\n', 'utf8');
+    writeFileSync(second, '{"version":"old-input"}\n', 'utf8');
+    expect(() => writeJsonSetAtomic({
+      transactionPath,
+      recoverOnError: false,
+      entries: [
+        { targetPath: first, value: { version: 'new-candidate' }, validate: () => true },
+        { targetPath: second, value: { version: 'new-input' }, validate: () => true }
+      ],
+      beforePublish: (index: number) => { if (index === 1) throw new Error('simulated-crash'); }
+    })).toThrow(/simulated-crash/);
+    expect(() => readFileSync(transactionPath, 'utf8')).not.toThrow();
+    recoverJsonSetAtomic({ transactionPath });
+    expect(JSON.parse(readFileSync(first, 'utf8'))).toEqual({ version: 'old-candidate' });
+    expect(JSON.parse(readFileSync(second, 'utf8'))).toEqual({ version: 'old-input' });
+  });
+});

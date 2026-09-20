@@ -17,17 +17,17 @@
 
 ## 当前状态
 
-**本目录尚无正式归集的执行记录。** 需要澄清：这**不代表**此前 G01、CI 与专项测试的证据被归零——那些证据仍然有效并已分别留存，例如：
+已归集首个 G11 全量工程运行：`run-20260920-b5dba42-01.json`，绑定源码 `b5dba42579cbb325e1b3cbeadc582865256f88e4`，运行时工作树为 dirty（包含本包尚未提交的 G11-T01 实现）。运行环境为 Windows `10.0.26200` x64、Node `v24.15.0`、npm `11.12.1`。
 
-- 仓库单元/集成测试（`npm run test:unit`，70 项通过）；
-- `verify:contracts` 合同校验；
-- 原生 Windows CI 构建与工件（GitHub Actions run 35440376395，含 SHA256）；
-- 审查方独立复现（R3 5/5 + 原 11/11）与 Linux 无头运行时证据（截图/日志、`reports/G00_G01_EVIDENCE.md`、`reports/WINDOWS_BUILD.md`、`docs/reviews/`）。
+- 定义联合：170 项（冻结基线 130 + CR-001 增补 40），ID 唯一且定义状态全部仍为 `NOT_RUN`。
+- 本次结果：`PASS 6 / FAIL 0 / BLOCKED 38 / NOT_RUN 126`。
+- `PASS` 仅来自逐项语义审计后仍能由单一测试完整支撑的 6 条工程自动化映射，精确绑定测试文件和 Vitest `fullName`；原先覆盖不足的候选映射没有被保留为 PASS。归一化 Vitest 证据为 `vitest-run-20260920-b5dba42-01.json`，只保存这 6 条映射断言、全量计数和实际相对命令，不含本机绝对路径或异常栈。
+- `BLOCKED` 只用于已有明确外部输入 ID 的案例；缺少 Windows、授权来源、真实 API/预算/逐次外发授权、Office/WPS、签名或分发条件时不执行、不模拟。
+- `NOT_RUN` 表示尚无满足对应证据层级的正式执行；不能从宽泛测试通过、文件存在或文档说明推断为 `PASS`。
+- 固定候选 `apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe` 当前不存在；`reports/release/candidate-artifact.json` 记录 `artifactPresent:false`、`artifactClass:NONE`、hash/size 均为 null，不借用历史安装包哈希。
 
-验收定义中的 `NOT_RUN` 是**初始占位**（表示"该条正式验收用例尚未按本目录格式归集运行记录"），并非否定上述已有证据。**实际结果只写入本目录的运行记录**（按运行/版本另存），不回写定义、不改动上述既有证据。
-
-CR-001 的 `CLS-001–040` 与相应产品验收将在进入实现阶段（G05–G07）并真实执行后，于此归集运行记录，届时提交真实 PPTX/DOCX/PDF、角色清单、对应计划与哈希、实际渲染/打开/编辑证据；不得以截图、提纲、模型自评或文档检查替代。
+这份全量账本只证明记录结构完整和已列工程案例的实际自动化结果，**不表示 170 项全部通过，也不表示 G11 正式发行通过**。后续运行继续使用新序号追加，不覆盖本次记录。
 
 ## 记录格式
 
-见 `run-template.json`（模板，非某次真实运行）。软件/资源覆盖/教学效果三种状态分别报告，工程验收通过不代表教学有效。
+闭集合同见 `contracts/AcceptanceRun.schema.json`，显式映射见 `planning/g11-acceptance-map.json`，模板 `run-template.json` 仍仅作历史说明。软件、资源覆盖和教学效果须分别报告；工程验收通过不代表教学有效。

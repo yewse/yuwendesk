@@ -15,6 +15,7 @@
     "lint": "npm --workspace @yuwendesk/desktop run lint",
     "typecheck": "npm --workspace @yuwendesk/desktop run typecheck",
     "test:unit": "npm --workspace @yuwendesk/desktop run test:unit",
+    "acceptance:run": "node scripts/run-g11-acceptance.mjs",
     "verify:contracts": "node scripts/verify-contracts.mjs"
   },
   "engines": {

@@ -6,6 +6,8 @@ Thumbs.db
 node_modules/
 dist/
 release/
+!reports/release/
+!reports/release/**
 out/
 .idea/
 .vscode/

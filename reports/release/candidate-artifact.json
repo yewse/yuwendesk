@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "b5dba42579cbb325e1b3cbeadc582865256f88e4",
+  "checkedAt": "2026-09-20T15:32:51.044Z",
+  "expectedPath": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
+  "artifactPresent": false,
+  "artifactClass": "NONE",
+  "sha256": null,
+  "sizeBytes": null,
+  "buildCommand": null,
+  "buildEnvironment": null
+}

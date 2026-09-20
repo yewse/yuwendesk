@@ -9,6 +9,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyCr001 } from './lib/cr001-verify.mjs';
+import { loadAcceptanceDefinitions, validateAcceptanceMap } from './lib/g11-acceptance.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 let failures = 0;
@@ -72,6 +73,30 @@ try {
   log(collide.length === 0, `CR-001 与冻结用例无 ID 冲突${collide.length ? '，冲突 ' + collide.map((c) => c.id).join(',') : ''}`);
 } catch (e) {
   log(false, `CR-001 增补校验失败：${e.message}`);
+}
+
+// 2c) G11 全量验收账本：定义联合保持 170 项且全部 NOT_RUN，显式映射一项不多、一项不少。
+try {
+  const loaded = loadAcceptanceDefinitions(root);
+  const definitionIds = loaded.definitions.map((item) => item.id);
+  const uniqueIds = new Set(definitionIds);
+  log(loaded.definitions.length === 170, `G11 验收定义总数为 170（实际 ${loaded.definitions.length}）`);
+  log(uniqueIds.size === 170, `G11 验收定义 ID 唯一（实际 ${uniqueIds.size}）`);
+  const changed = loaded.definitions.filter((item) => item.status !== 'NOT_RUN');
+  log(changed.length === 0, `G11 验收定义保持 NOT_RUN${changed.length ? '，变更 ' + changed.map((item) => item.id).join(',') : ''}`);
+
+  const acceptanceMap = readJson(join(root, 'planning', 'g11-acceptance-map.json'));
+  const externalInputs = readJson(join(root, 'planning', 'EXTERNAL_INPUTS.json'));
+  const externalInputIds = (externalInputs.items ?? []).map((item) => item.id);
+  const mapValidation = validateAcceptanceMap({
+    definitionIds,
+    map: acceptanceMap,
+    knownExternalInputIds: externalInputIds
+  });
+  log(mapValidation.ok, `G11 验收映射完整且闭集${mapValidation.ok ? '' : '：\n    - ' + mapValidation.errors.map((item) => `${item.code}:${item.detail}`).join('\n    - ')}`);
+  log(acceptanceMap.cases?.length === 170, `G11 验收映射总数为 170（实际 ${acceptanceMap.cases?.length ?? 0}）`);
+} catch (e) {
+  log(false, `G11 验收账本校验失败：${e.message}`);
 }
 
 // 3) 无效示例确实无效（结构层面）

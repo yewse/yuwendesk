@@ -218,7 +218,7 @@
 - **T04 实测（Windows 11 开发主机，Node 24.15.0 / npm 11.12.1；全为合成攻击样例与伪 safeStorage）**：最终重点定向 **111/111**；全量 Vitest **458 passed / 1 skipped（459 total，54 files）**。主/渲染 typecheck、ESLint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0；首轮独立复审的 4 项 Important 全部先以新增失败测试复现再修复，第二轮复审 Critical 0 / Important 0、Ready。覆盖认证信封篡改、路径穿越/绝对路径/UNC、原始及 Windows 别名重复、尾点/设备名、symlink、local/central 元数据不一致、目录/压缩/低报大小炸弹、额外条目、manifest/hash/size/path/missing、损坏 SQLite、未来 schema、瞬时写入路径审计、越权 sender/导航、原型继承载荷、模型异常去自由文本、token 过期/重放/跨对象、提示/宏/脚本/PDF URI 被动化与敏感文件名跨存储不可搜索。既有跳过项未改为通过。
 - **T04 外部门/未覆盖**：真实学生材料隐私授权与逐次外发许可、真实 API 模型辅助归因质量、教学专业复核、生产进程监听动态证据、真实两机 Windows/DPAPI 恢复、开发态 Electron 窗口、干净 Win11 安装、Office/WPS 保真、正式签名及公开上传授权仍为 `BLOCKED_EXTERNAL`；本地威胁测试不替代这些门。
 
-## G10 升级与性能 — IN_PROGRESS（T01–T04 本地工程包已完成，外部门未闭）；G11 — NOT_STARTED
+## G10 升级与性能 — IN_PROGRESS（T01–T04 本地工程包已完成，外部门未闭）；G11 — IN_PROGRESS（T01 完成）
 
 - [x] **G10-T01 签名更新清单和离线更新（本地工程范围）**：固定 `.yuwenupdate` 容器、闭集规范 manifest、Ed25519 已安装信任锚、app/platform/arch 与严格版本单调性、package size/hash 均已落地。生产信任集当前为空并 fail-closed；测试 keypair 只在进程内生成。原生选择不接受 renderer 路径，短时单次 token 绑定 manifest/current/target；确认时按句柄限额重读复验，只写固定 `.partial`，三个文件回读再跑签名/版本/hash 后原子发布 `.ready`。损坏 ready 不列出或重放；跨 service 同请求幂等、同键异包拒绝。设置页无绕过按钮并明确“已验证并暂存，未安装；不会自动关闭或重启”。证据见 `reports/G10_UPDATE_EVIDENCE.md`。
 - **T01 测试**：55 项新增测试；重点门禁 74/74。首次全量因既有固定 IPC 白名单未登记 3 个新操作而 1 failed；独立复核首轮 Critical 0 / Important 3 / Not ready，三项以 RED 复现后改为流式整包处理、独立原子幂等 ledger、故障钩子后及 rename 后双重复验，并补严格闭集/superseded。第二轮 Critical 0 / Important 2 / Not ready 指出 ready/ledger 故障一致性与证据数字滞后；继续以 RED 覆盖发布后 ledger 丢失恢复、ledger 写入/改名失败回滚与 token 恢复、完整结果绑定和按序列化字节淘汰。第三轮复核 Critical 0 / Important 0、Ready。最终 **513 passed / 1 skipped（514 total，58 files）**；typecheck、lint、合同、build、diff 均通过。冻结 acceptance 哈希未变，状态未改为 PASS。
@@ -235,6 +235,10 @@
 - **T04 测试与复核**：固定夹具、nearest-rank 离群保留、逐样本 partial、runner 旧 PASS 替换、中断样本保留与终态归一化定向 **6/6**；完整 Vitest **550 passed / 1 skipped（551 total，63 files）**。typecheck、lint、`verify:contracts`、desktop build、`git diff --check` 均退出 0；benchmark 三份源码 SHA-256 为 `f15709bf63ed9410a9e47a0b1ec6bfbe9e529e7f8e13faa85d81c0b2fd104b27`，与 RAW/矩阵一致。独立最终复审 Critical 0 / Important 0 / Minor 0、Ready；既有跳过项未改为通过。
 - **T04 外部门/限制**：真实 Electron 冷启动 30 次、Electron 总进程空闲内存、干净 Win11 8GB/SSD、正式 10 页 DOCX/20 页课件分别导出、Office/WPS 分页/视觉保真均 `NOT_RUN/BLOCKED_EXTERNAL`。Node/Vitest RSS 和 `SqliteStore.load()` 不替代上述门；真实 API 模型辅助归因、学生资料隐私授权/逐次外发许可及教学专业复核状态不变。
 
+- [x] **G11-T01 全量验收账本与候选盘点（本地工程范围）**：新增闭集 `AcceptanceRunV1` 合同、symlink-safe 仓库相对证据路径与 SHA-256/size 回读、170 项显式映射、固定路径 runner、原子 JSON 发布和候选安装包盘点。冻结定义仍是 130 + 40 项且全部保持 `NOT_RUN`；`verify:contracts` 强制定义 ID 唯一、总数 170、状态未改以及映射无重复/遗漏/未知项。新增外部输入 `EXT10`（真实学生资料处理与逐次外发授权）和 `EXT11`（Office/WPS 兼容环境），均为 `NOT_PROVIDED`。
+- **T01 真实运行**：`reports/acceptance-runs/run-20260920-b5dba42-01.json` 绑定源码 `b5dba42579cbb325e1b3cbeadc582865256f88e4`，工作树 dirty；Windows `10.0.26200` x64、Node `v24.15.0`、npm `11.12.1`。结果为 **6 PASS / 0 FAIL / 38 BLOCKED / 126 NOT_RUN（170 total）**。提交前语义审计把 40 条“只覆盖子集或场景不一致”的自动映射降回 NOT_RUN；PASS 只保留 `SEC-009/JOB-003/JOB-006/JOB-007/DAT-005/UPD-001`，精确绑定测试文件 + Vitest `fullName`，未从宽泛 suite 继承。固定候选 EXE 不存在，故 `artifactPresent=false`、`artifactClass=NONE`、hash/size/build provenance 均为 null。T01 定向 **24/24**；runner 全量 Vitest **574 passed / 1 skipped（575 total，64 files）**；typecheck、lint、`verify:contracts`、desktop build 均退出 0。发布采用唯一临时文件、追加记录 no-clobber 与固定事务日志恢复；证据校验拒绝 NTFS ADS、路径逃逸、历史运行借证和倒序时间。
+- **T01 外部门/限制**：本账本结构完整不等于全量验收通过；干净 Windows、授权材料、真实 API/预算、真实学生资料处理与逐次外发授权、Office/WPS、签名/分发和教师专业复核仍为 `BLOCKED_EXTERNAL` 或 `NOT_RUN`。当前正式发布状态尚未由 T02–T04 聚合，不能称为发布就绪。
+
 ## 下一步
 
-见 `HANDOFF.md`。G10 四个本地工程包的实现、最终门禁与独立复审均已完成，不重做 G00–G10。要关闭发布级 G10/G11，仍需锁定 Electron 二进制、干净 Win11 8GB/SSD、正式签名/可信更新身份、Office/WPS、真实 API、学生资料隐私授权/逐次外发许可和教学专业复核。缺输入继续标 `BLOCKED_EXTERNAL`，不得拿 Node 指标替代。
+见 `HANDOFF.md`。G10 四个本地工程包和 G11-T01 已完成，不重做 G00–G10 或篡改冻结定义。下一内联包为 G11-T02 发行证据聚合；要关闭发布级 G10/G11，仍需锁定 Electron 二进制、干净 Win11 8GB/SSD、正式签名/可信更新身份、Office/WPS、真实 API、学生资料隐私授权/逐次外发许可和教学专业复核。缺输入继续标 `BLOCKED_EXTERNAL`，不得拿 Node 指标替代。

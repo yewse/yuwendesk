@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-20T15:32:51.044Z",
+  "sourceCommit": "b5dba42579cbb325e1b3cbeadc582865256f88e4",
+  "acceptanceRunPath": "reports/acceptance-runs/run-20260920-b5dba42-01.json",
+  "candidateArtifactPath": "reports/release/candidate-artifact.json"
+}

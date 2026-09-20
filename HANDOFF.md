@@ -27,7 +27,8 @@
 - **G10-T02 本地工程范围已完成**：旧 schema 先建立 SQLite Online Backup 恢复点，再在旁路副本迁移、推进数据世代、写入 job 谱系并复核 schema/完整性/`credential`+`secure_key` 指纹；空间不足、迁移失败、切换中断和失败副本均 fail-closed。严格 journal 驱动原库→rollback/候选→current 的分相切换与重启调和，完成态允许正常业务写和后续同 schema 世代升级，但缺库或谱系不符仍拒绝。G09 恢复会把旧 journal/partial/lock 与旧库一起隔离，恢复旧备份后可重新迁移。未来 schema/世代可读但拒写；缺库且恢复未决时不新建空库。IPC/UI 只显示闭集、诚实的旧版/迁移保护说明。证据见 `reports/G10_RECOVERY_EVIDENCE.md`。
 - **G10-T03 本地工程范围已完成**：Windows 开发主机真实跑通含中文、空格、组合字符和长目录的 SQLite、本机/便携备份、另一 Unicode 根下的恢复 prepare→pending→apply、离线更新 staging 与三类五文件原子发布。renderer 增加 skip link、命名区域/当前页、显式 labels、15 处异步 live message、可持久化大字模式、浅深背景双环焦点、warning 文字对比门、强制色/reduced-motion、980/700px 断点和独立主区滚动；具名 modal 支持初始聚焦、Tab 闭环、Escape 与焦点恢复。12 行布局预算矩阵覆盖两个视口 × 100/125/150% × 普通/大字。该矩阵不是实际 Windows DPI/IME/辅助技术证据，`INS-007` 仍 `NOT_RUN/BLOCKED_EXTERNAL`。证据见 `reports/G10_ACCESSIBILITY_EVIDENCE.md`。
 - **G10-T04 本地工程范围已完成**：固定种子夹具经 SQLite 真实计数为 100 plans/5000 source segments；30 次 SQLite 打开、30 次计划打开、长/短查询各 30 次和 20 次三类五文件内存生成+一致性复核均保存逐次原始毫秒值，nearest-rank 统计不删离群。计划打开 P95 3.747ms、混合搜索 P95 99.405ms；内存生成+复核 P95 1416.597ms 仅标 `ENGINEERING_CORE_WITHIN_BUDGET`，不是完整导出 PASS。逐样本 partial、闭集中途失败、runner 无报告/中断失败标记、12 分钟硬截止及 benchmark 源码 SHA-256 均有回归。正式导出 I/O、约 10 页 DOCX、Electron/目标硬件/Office-WPS 仍为 `NOT_RUN/BLOCKED_EXTERNAL`。证据见 `reports/G10_PERFORMANCE_RAW.json`、`reports/G10_COMPATIBILITY_MATRIX.md`。
-- 当前仓库完整单测 **550 passed / 1 skipped（551 total，63 files）**，T04 定向 **6/6**；Windows 11 开发主机，Node 24.15.0，全为虚构数据库/签名/正文夹具。typecheck、lint、`verify:contracts`、desktop build、`git diff --check` 均退出 0；T04 独立最终复审 Critical 0 / Important 0 / Minor 0、Ready。既有跳过项未改为通过，pdfjs 可选警告仍如实记录。G09 提交序列：`be728a2`、`3536a8e`、`0560bad`、`27cbe9e`；G10 设计/计划：`4d5ee39`、`f1b76d6`；T01：`4b542a0`；T02：`aef8bbd`；T03：`2861c68`。未签名 Windows EXE 见 `reports/WINDOWS_BUILD.md`。
+- **G11-T01 本地工程范围已完成**：`AcceptanceRunV1`、170 项显式映射、冻结 130+40 的固定 SHA-256、map/evidence-level/time-window 交叉校验、symlink-safe 路径与 SHA-256/size 回读、完整 Vitest 名匹配、追加 no-clobber、候选盘点和两份固定报告的失败回滚均已落地。首个运行 `run-20260920-b5dba42-01` 绑定源码 `b5dba42579cbb325e1b3cbeadc582865256f88e4`（运行时工作树 dirty），结果 **6 PASS / 0 FAIL / 38 BLOCKED / 126 NOT_RUN**。逐项语义审计后只保留 `SEC-009/JOB-003/JOB-006/JOB-007/DAT-005/UPD-001` 为工程 PASS；其余覆盖不足者没有冒充通过。固定候选 EXE 缺失，`artifactClass=NONE`，hash/size/build provenance 均为 null；新增 EXT10/EXT11 只登记非秘密外部条件。
+- T01 定向测试 **24/24**，runner 全量 Vitest **574 passed / 1 skipped（575 total，64 files）**；Windows 11 开发主机、Node 24.15.0/npm 11.12.1，全为虚构/工程夹具。typecheck、lint、`verify:contracts`、desktop build 均退出 0。发布路径已覆盖唯一临时文件、追加记录 no-clobber、候选/发行输入成组事务恢复，以及 NTFS ADS、symlink/junction、历史借证和倒序时间拒绝。既有跳过项没有转为通过；当前 G11 正式状态尚未由 T02–T04 聚合，不能称为发布就绪。G09 提交序列：`be728a2`、`3536a8e`、`0560bad`、`27cbe9e`；G10 设计/计划：`4d5ee39`、`f1b76d6`；T01：`4b542a0`；T02：`aef8bbd`；T03：`2861c68`；T04：`61ba230`。G11 设计/计划：`c993c9e`、`b5dba42`。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -66,13 +67,15 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 | EXT03/EXT04 Grok API 账户/密钥/费用上限 | G04 真实连通与能力探测 |
 | EXT07 发布签名身份/凭据 | 正式签名发布 |
 | EXT08 分发地址/可信更新公钥 | 在线更新发布 |
+| EXT10 真实学生资料处理授权 + 每次必要字段外发许可 | G08 真实模型辅助归因、G11 隐私验收 |
+| EXT11 实际支持版本的 Office/WPS 环境 | 成品打开/编辑/保存/分页/放映兼容性 |
 
 密钥放受控秘密环境（Cloud Agent Secrets），禁止贴进仓库或提示词。
 
 ## 下一个有界工作包建议
 
-1. 补齐锁定 Electron 二进制后执行开发态窗口走查；获得干净 Win11 8GB/SSD 后分别执行 30 次冷启动、总进程空闲内存和标准账户安装/升级/回退；获得 Office/WPS 后分别验证约定 10 页 DOCX/20 页课件的实际导出 I/O、分页和视觉保真。不要把内存生成核心改写成完整导出 PASS。
-2. 获得真实学生材料处理授权、逐次外发许可和授权云 API 后，再执行 G08 真实归因质量与隐私门；随后由有资质教师完成教学专业复核。当前测试替身和离线协议不替代这些外部门。
+1. 内联执行 G11-T02：读取显式选定的 170 项运行、候选盘点、需求追踪、外部输入与必需交付物，分别聚合软件、资源覆盖、教学验证和制品类别；当前预期诚实产出 `BLOCKED`，不能以百分比或空缺陷列表宣称通过。
+2. 随后执行 G11-T03/T04 的 SBOM、校验和、签名边界、中文教师指南和正式发行门。补齐锁定 Electron 二进制、干净 Win11、Office/WPS、签名/分发、真实 API/预算、学生资料授权/逐次外发许可和教师专业复核后，才可重跑相应外部门。
 
 ## 重要纪律
 

@@ -1,0 +1,1154 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "caseId": "BIZ-R001",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R002",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R003",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R004",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R005",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R006",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R007",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R008",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R009",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R010",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R011",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R012",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R013",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R014",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R015",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R016",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R017",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R018",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R019",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R020",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R021",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R022",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R023",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R024",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R025",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R026",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R027",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R028",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R029",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R030",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R031",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R032",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R033",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R034",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R035",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R036",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R037",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R038",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R039",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R040",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R041",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R042",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R043",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R044",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R045",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R046",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R047",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R048",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R049",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R050",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R051",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R052",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R053",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R054",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R055",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R056",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R057",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R058",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R059",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "BIZ-R060",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "INS-001",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-002",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-003",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-004",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-005",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-006",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-007",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-008",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "SEC-001",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "SEC-002",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "SEC-003",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "SEC-004",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "SEC-005",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "SEC-006",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "SEC-007",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "SEC-008",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "SEC-009",
+      "mode": "automation",
+      "requiredEvidenceLevel": "engineering_automation",
+      "commandGroup": "desktop-unit",
+      "testFile": "tests/g09-threat-boundaries.test.ts",
+      "testName": "G09-T04 content and privacy attack fixtures stay passive removes a fictitious student-name filename from DB bytes, diagnostics, manifests, and archive paths after promotion"
+    },
+    {
+      "caseId": "SEC-010",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "SRC-001",
+      "mode": "external",
+      "requiredEvidenceLevel": "privacy_authorized_material",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-002",
+      "mode": "external",
+      "requiredEvidenceLevel": "privacy_authorized_material",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-003",
+      "mode": "external",
+      "requiredEvidenceLevel": "privacy_authorized_material",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-004",
+      "mode": "external",
+      "requiredEvidenceLevel": "privacy_authorized_material",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-005",
+      "mode": "external",
+      "requiredEvidenceLevel": "privacy_authorized_material",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-006",
+      "mode": "external",
+      "requiredEvidenceLevel": "privacy_authorized_material",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-007",
+      "mode": "external",
+      "requiredEvidenceLevel": "privacy_authorized_material",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-008",
+      "mode": "external",
+      "requiredEvidenceLevel": "privacy_authorized_material",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "AI-001",
+      "mode": "external",
+      "requiredEvidenceLevel": "live_api_authorized",
+      "blockerCode": "BLOCKED_EXTERNAL_LIVE_API_AND_BUDGET",
+      "externalInputIds": [
+        "EXT03",
+        "EXT04",
+        "EXT10"
+      ]
+    },
+    {
+      "caseId": "AI-002",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "AI-003",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "AI-004",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "AI-005",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "AI-006",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "AI-007",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "AI-008",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "AI-009",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "AI-010",
+      "mode": "external",
+      "requiredEvidenceLevel": "privacy_authorized_material",
+      "blockerCode": "BLOCKED_EXTERNAL_PRIVACY_AUTHORIZATION",
+      "externalInputIds": [
+        "EXT10"
+      ]
+    },
+    {
+      "caseId": "JOB-001",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "JOB-002",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "JOB-003",
+      "mode": "automation",
+      "requiredEvidenceLevel": "engineering_automation",
+      "commandGroup": "desktop-unit",
+      "testFile": "tests/g07-change-sqlite.test.ts",
+      "testName": "G07-T02 real SQLite lesson change commit allows exactly one of two keys against the same base revision to commit"
+    },
+    {
+      "caseId": "JOB-004",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "JOB-005",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "JOB-006",
+      "mode": "automation",
+      "requiredEvidenceLevel": "engineering_automation",
+      "commandGroup": "desktop-unit",
+      "testFile": "tests/g07-change-sqlite.test.ts",
+      "testName": "G07-T02 real SQLite lesson change commit replays the original success after reopen and rejects same-key different payload"
+    },
+    {
+      "caseId": "JOB-007",
+      "mode": "automation",
+      "requiredEvidenceLevel": "engineering_automation",
+      "commandGroup": "desktop-unit",
+      "testFile": "tests/g07-bundle-failure.test.ts",
+      "testName": "G07-T04 persistent retry cutoff and legacy generation path 同一请求前三次失败被持久计数，第四次直接返回 failed_final 且不再生成或写文件"
+    },
+    {
+      "caseId": "JOB-008",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "EXP-001",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "EXP-002",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "EXP-003",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_RENDERING",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "EXP-004",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_CLASSROOM_VIEW",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "EXP-005",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "EXP-006",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "DAT-001",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "DAT-002",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "DAT-003",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "DAT-004",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "DAT-005",
+      "mode": "automation",
+      "requiredEvidenceLevel": "engineering_automation",
+      "commandGroup": "desktop-unit",
+      "testFile": "tests/g09-source-delete-flow.test.ts",
+      "testName": "G09 permanent source deletion transaction removes every version/plaintext/ciphertext/cache and leaves one content-free tombstone"
+    },
+    {
+      "caseId": "DAT-006",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "UPD-001",
+      "mode": "automation",
+      "requiredEvidenceLevel": "engineering_automation",
+      "commandGroup": "desktop-unit",
+      "testFile": "tests/update-manifest.test.ts",
+      "testName": "signed update manifest and fixed container rejects a hash-correct package signed by an untrusted private key"
+    },
+    {
+      "caseId": "UPD-002",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "UPD-003",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "UPD-004",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "UPD-005",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_SIGNING_IDENTITY",
+      "externalInputIds": [
+        "EXT07"
+      ]
+    },
+    {
+      "caseId": "UPD-006",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_DISTRIBUTION_TARGET",
+      "externalInputIds": [
+        "EXT02",
+        "EXT08"
+      ]
+    },
+    {
+      "caseId": "PED-001",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "PED-002",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "PED-003",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "PED-004",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "PED-005",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "PED-006",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "PED-007",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "PED-008",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-001",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-002",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-003",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-004",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-005",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-006",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-007",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-008",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-009",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-010",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-011",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-012",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-013",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-014",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-015",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-016",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-017",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-018",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-019",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-020",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-021",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-022",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-023",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-024",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-025",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-026",
+      "mode": "external",
+      "requiredEvidenceLevel": "clean_windows_standard_user",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_OFFLINE_CLASSROOM",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "CLS-027",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-028",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-029",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-030",
+      "mode": "external",
+      "requiredEvidenceLevel": "office_wps",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-031",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-032",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-033",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-034",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-035",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-036",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "teacher_professional_review",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-037",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-038",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-039",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    },
+    {
+      "caseId": "CLS-040",
+      "mode": "not_run",
+      "requiredEvidenceLevel": "engineering_automation",
+      "reasonCode": "FORMAL_CASE_NOT_EXECUTED"
+    }
+  ]
+}
