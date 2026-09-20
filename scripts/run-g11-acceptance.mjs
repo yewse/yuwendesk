@@ -24,7 +24,10 @@ const desktopRoot = resolve(root, 'apps', 'desktop');
 const reportsRoot = resolve(root, 'reports', 'acceptance-runs');
 const releaseTransactionPath = resolve(root, 'reports', 'release', '.g11-release-set-transaction.json');
 mkdirSync(reportsRoot, { recursive: true });
-recoverJsonSetAtomic({ transactionPath: releaseTransactionPath });
+recoverJsonSetAtomic({
+  transactionPath: releaseTransactionPath,
+  expectedTargetNames: ['candidate-artifact.json', 'release-input.json']
+});
 
 function run(command, args, options = {}) {
   const outcome = spawnSync(command, args, {

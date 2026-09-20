@@ -16,6 +16,7 @@
     "typecheck": "npm --workspace @yuwendesk/desktop run typecheck",
     "test:unit": "npm --workspace @yuwendesk/desktop run test:unit",
     "acceptance:run": "node scripts/run-g11-acceptance.mjs",
+    "release:evidence": "node scripts/generate-g11-release-evidence.mjs",
     "verify:contracts": "node scripts/verify-contracts.mjs"
   },
   "engines": {

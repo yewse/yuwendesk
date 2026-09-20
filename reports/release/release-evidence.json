@@ -1,0 +1,2360 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-20T16:04:44.042Z",
+  "sourceCommit": "b5dba42579cbb325e1b3cbeadc582865256f88e4",
+  "acceptanceRun": {
+    "runId": "run-20260920-b5dba42-01",
+    "path": "reports/acceptance-runs/run-20260920-b5dba42-01.json",
+    "sha256": "8d990fa3b72792d31c9c19b5357e181b59f7c71e01e1599f4d3e621b662be0d6",
+    "sizeBytes": 78288,
+    "repositoryDirty": true
+  },
+  "candidate": {
+    "inventoryPath": "reports/release/candidate-artifact.json",
+    "inventorySha256": "57c7e0f2fc891435d4949b3babaae8fde21dc4989179a5b4b7c590e2f59f8960",
+    "inventorySizeBytes": 348,
+    "expectedPath": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
+    "artifactPresent": false,
+    "artifactClass": "NONE",
+    "sha256": null,
+    "sizeBytes": null
+  },
+  "statuses": {
+    "softwareStatus": "BLOCKED",
+    "resourceCoverageStatus": "BLOCKED",
+    "teachingValidationStatus": "NOT_REVIEWED",
+    "artifactClass": "NONE",
+    "releaseDisposition": "BLOCKED",
+    "reasonCode": "RELEASE_ARTIFACT_MISSING"
+  },
+  "gates": {
+    "sourceTreeClean": false,
+    "cleanWindowsPassed": false,
+    "artifactSigned": false,
+    "distributionAuthorized": false,
+    "controlledTrialAuthorized": false,
+    "dataBoundaryApproved": false,
+    "costBoundaryApproved": false,
+    "defectAuditStatus": "NOT_RUN"
+  },
+  "caseSummary": {
+    "PASS": 6,
+    "FAIL": 0,
+    "BLOCKED": 38,
+    "NOT_RUN": 126
+  },
+  "cases": [
+    {
+      "caseId": "AI-001",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_LIVE_API_AND_BUDGET",
+      "externalInputIds": [
+        "EXT03",
+        "EXT04",
+        "EXT10"
+      ]
+    },
+    {
+      "caseId": "AI-002",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "AI-003",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "AI-004",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "AI-005",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "AI-006",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "AI-007",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "AI-008",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "AI-009",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "AI-010",
+      "severity": "P0",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_PRIVACY_AUTHORIZATION",
+      "externalInputIds": [
+        "EXT10"
+      ]
+    },
+    {
+      "caseId": "BIZ-R001",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R002",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R003",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R004",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R005",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R006",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R007",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R008",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R009",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R010",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R011",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R012",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R013",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R014",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R015",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R016",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R017",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R018",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R019",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R020",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R021",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R022",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R023",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R024",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R025",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R026",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R027",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R028",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R029",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R030",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R031",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R032",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R033",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R034",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R035",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R036",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R037",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R038",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R039",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R040",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R041",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R042",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R043",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R044",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R045",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R046",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R047",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R048",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R049",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R050",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R051",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R052",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R053",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R054",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R055",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R056",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R057",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R058",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R059",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "BIZ-R060",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-001",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-002",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-003",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-004",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-005",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-006",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-007",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-008",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-009",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-010",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-011",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-012",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-013",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-014",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-015",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-016",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-017",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-018",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-019",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-020",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-021",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-022",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-023",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-024",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-025",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-026",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_OFFLINE_CLASSROOM",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "CLS-027",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-028",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-029",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-030",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "CLS-031",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-032",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-033",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-034",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-035",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-036",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-037",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-038",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-039",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "CLS-040",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "DAT-001",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "DAT-002",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "DAT-003",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "DAT-004",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "DAT-005",
+      "severity": "P1",
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "DAT-006",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "EXP-001",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "EXP-002",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "EXP-003",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_RENDERING",
+      "externalInputIds": [
+        "EXT11"
+      ]
+    },
+    {
+      "caseId": "EXP-004",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_CLASSROOM_VIEW",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "EXP-005",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "EXP-006",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "INS-001",
+      "severity": "P0",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-002",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-003",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-004",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-005",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-006",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-007",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "INS-008",
+      "severity": "P0",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_WINDOWS_ACCEPTANCE",
+      "externalInputIds": [
+        "EXT02"
+      ]
+    },
+    {
+      "caseId": "JOB-001",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "JOB-002",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "JOB-003",
+      "severity": "P1",
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "JOB-004",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "JOB-005",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "JOB-006",
+      "severity": "P1",
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "JOB-007",
+      "severity": "P1",
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "JOB-008",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "PED-001",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "PED-002",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "PED-003",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "PED-004",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "PED-005",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "PED-006",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "PED-007",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "PED-008",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "SEC-001",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "SEC-002",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "SEC-003",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "SEC-004",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "SEC-005",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "SEC-006",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "SEC-007",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "SEC-008",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "SEC-009",
+      "severity": "P0",
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "SEC-010",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "SRC-001",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-002",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-003",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-004",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-005",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-006",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-007",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "SRC-008",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_AUTHORIZED_SOURCE_MATERIAL",
+      "externalInputIds": [
+        "EXT05"
+      ]
+    },
+    {
+      "caseId": "UPD-001",
+      "severity": "P0",
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "UPD-002",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "UPD-003",
+      "severity": "P0",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "UPD-004",
+      "severity": "P1",
+      "status": "NOT_RUN",
+      "blockerCode": null,
+      "externalInputIds": []
+    },
+    {
+      "caseId": "UPD-005",
+      "severity": "P0",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_SIGNING_IDENTITY",
+      "externalInputIds": [
+        "EXT07"
+      ]
+    },
+    {
+      "caseId": "UPD-006",
+      "severity": "P1",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_DISTRIBUTION_TARGET",
+      "externalInputIds": [
+        "EXT02",
+        "EXT08"
+      ]
+    }
+  ],
+  "requirements": {
+    "base": [
+      {
+        "requirementId": "R001",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R001"
+        ]
+      },
+      {
+        "requirementId": "R002",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R002"
+        ]
+      },
+      {
+        "requirementId": "R003",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R003"
+        ]
+      },
+      {
+        "requirementId": "R004",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R004"
+        ]
+      },
+      {
+        "requirementId": "R005",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R005"
+        ]
+      },
+      {
+        "requirementId": "R006",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R006"
+        ]
+      },
+      {
+        "requirementId": "R007",
+        "priority": "P2",
+        "caseIds": [
+          "BIZ-R007"
+        ]
+      },
+      {
+        "requirementId": "R008",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R008"
+        ]
+      },
+      {
+        "requirementId": "R009",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R009"
+        ]
+      },
+      {
+        "requirementId": "R010",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R010"
+        ]
+      },
+      {
+        "requirementId": "R011",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R011"
+        ]
+      },
+      {
+        "requirementId": "R012",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R012"
+        ]
+      },
+      {
+        "requirementId": "R013",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R013"
+        ]
+      },
+      {
+        "requirementId": "R014",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R014"
+        ]
+      },
+      {
+        "requirementId": "R015",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R015"
+        ]
+      },
+      {
+        "requirementId": "R016",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R016"
+        ]
+      },
+      {
+        "requirementId": "R017",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R017"
+        ]
+      },
+      {
+        "requirementId": "R018",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R018"
+        ]
+      },
+      {
+        "requirementId": "R019",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R019"
+        ]
+      },
+      {
+        "requirementId": "R020",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R020"
+        ]
+      },
+      {
+        "requirementId": "R021",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R021"
+        ]
+      },
+      {
+        "requirementId": "R022",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R022"
+        ]
+      },
+      {
+        "requirementId": "R023",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R023"
+        ]
+      },
+      {
+        "requirementId": "R024",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R024"
+        ]
+      },
+      {
+        "requirementId": "R025",
+        "priority": "P2",
+        "caseIds": [
+          "BIZ-R025"
+        ]
+      },
+      {
+        "requirementId": "R026",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R026"
+        ]
+      },
+      {
+        "requirementId": "R027",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R027"
+        ]
+      },
+      {
+        "requirementId": "R028",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R028"
+        ]
+      },
+      {
+        "requirementId": "R029",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R029"
+        ]
+      },
+      {
+        "requirementId": "R030",
+        "priority": "P2",
+        "caseIds": [
+          "BIZ-R030"
+        ]
+      },
+      {
+        "requirementId": "R031",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R031"
+        ]
+      },
+      {
+        "requirementId": "R032",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R032"
+        ]
+      },
+      {
+        "requirementId": "R033",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R033"
+        ]
+      },
+      {
+        "requirementId": "R034",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R034"
+        ]
+      },
+      {
+        "requirementId": "R035",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R035"
+        ]
+      },
+      {
+        "requirementId": "R036",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R036"
+        ]
+      },
+      {
+        "requirementId": "R037",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R037"
+        ]
+      },
+      {
+        "requirementId": "R038",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R038"
+        ]
+      },
+      {
+        "requirementId": "R039",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R039"
+        ]
+      },
+      {
+        "requirementId": "R040",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R040"
+        ]
+      },
+      {
+        "requirementId": "R041",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R041"
+        ]
+      },
+      {
+        "requirementId": "R042",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R042"
+        ]
+      },
+      {
+        "requirementId": "R043",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R043"
+        ]
+      },
+      {
+        "requirementId": "R044",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R044"
+        ]
+      },
+      {
+        "requirementId": "R045",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R045"
+        ]
+      },
+      {
+        "requirementId": "R046",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R046"
+        ]
+      },
+      {
+        "requirementId": "R047",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R047"
+        ]
+      },
+      {
+        "requirementId": "R048",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R048"
+        ]
+      },
+      {
+        "requirementId": "R049",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R049"
+        ]
+      },
+      {
+        "requirementId": "R050",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R050"
+        ]
+      },
+      {
+        "requirementId": "R051",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R051"
+        ]
+      },
+      {
+        "requirementId": "R052",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R052"
+        ]
+      },
+      {
+        "requirementId": "R053",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R053"
+        ]
+      },
+      {
+        "requirementId": "R054",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R054"
+        ]
+      },
+      {
+        "requirementId": "R055",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R055"
+        ]
+      },
+      {
+        "requirementId": "R056",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R056"
+        ]
+      },
+      {
+        "requirementId": "R057",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R057"
+        ]
+      },
+      {
+        "requirementId": "R058",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R058"
+        ]
+      },
+      {
+        "requirementId": "R059",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R059"
+        ]
+      },
+      {
+        "requirementId": "R060",
+        "priority": "P1",
+        "caseIds": [
+          "BIZ-R060"
+        ]
+      }
+    ],
+    "cr001": [
+      {
+        "requirementId": "CR001-R01",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-001",
+          "CLS-002",
+          "CLS-032"
+        ]
+      },
+      {
+        "requirementId": "CR001-R02",
+        "priority": "P0",
+        "caseIds": [
+          "CLS-001",
+          "CLS-003",
+          "CLS-028",
+          "CLS-037",
+          "CLS-040"
+        ]
+      },
+      {
+        "requirementId": "CR001-R03",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-004",
+          "CLS-022",
+          "CLS-029",
+          "CLS-037",
+          "CLS-038"
+        ]
+      },
+      {
+        "requirementId": "CR001-R04",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-004",
+          "CLS-005",
+          "CLS-017",
+          "CLS-022"
+        ]
+      },
+      {
+        "requirementId": "CR001-R05",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-002",
+          "CLS-006"
+        ]
+      },
+      {
+        "requirementId": "CR001-R06",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-007",
+          "CLS-008",
+          "CLS-030",
+          "CLS-038"
+        ]
+      },
+      {
+        "requirementId": "CR001-R07",
+        "priority": "P0",
+        "caseIds": [
+          "CLS-009",
+          "CLS-010",
+          "CLS-011"
+        ]
+      },
+      {
+        "requirementId": "CR001-R08",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-011",
+          "CLS-012",
+          "CLS-013"
+        ]
+      },
+      {
+        "requirementId": "CR001-R09",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-005",
+          "CLS-014"
+        ]
+      },
+      {
+        "requirementId": "CR001-R10",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-007",
+          "CLS-012",
+          "CLS-013",
+          "CLS-015",
+          "CLS-030"
+        ]
+      },
+      {
+        "requirementId": "CR001-R11",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-016",
+          "CLS-032"
+        ]
+      },
+      {
+        "requirementId": "CR001-R12",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-016",
+          "CLS-017",
+          "CLS-023"
+        ]
+      },
+      {
+        "requirementId": "CR001-R13",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-018",
+          "CLS-021"
+        ]
+      },
+      {
+        "requirementId": "CR001-R14",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-019",
+          "CLS-036"
+        ]
+      },
+      {
+        "requirementId": "CR001-R15",
+        "priority": "P0",
+        "caseIds": [
+          "CLS-018",
+          "CLS-020",
+          "CLS-035"
+        ]
+      },
+      {
+        "requirementId": "CR001-R16",
+        "priority": "P0",
+        "caseIds": [
+          "CLS-003",
+          "CLS-009",
+          "CLS-010",
+          "CLS-011",
+          "CLS-035",
+          "CLS-040"
+        ]
+      },
+      {
+        "requirementId": "CR001-R17",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-021",
+          "CLS-022",
+          "CLS-023",
+          "CLS-027",
+          "CLS-031",
+          "CLS-038",
+          "CLS-039"
+        ]
+      },
+      {
+        "requirementId": "CR001-R18",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-024",
+          "CLS-025",
+          "CLS-029"
+        ]
+      },
+      {
+        "requirementId": "CR001-R19",
+        "priority": "P0",
+        "caseIds": [
+          "CLS-026",
+          "CLS-040"
+        ]
+      },
+      {
+        "requirementId": "CR001-R20",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-003",
+          "CLS-016",
+          "CLS-027",
+          "CLS-028"
+        ]
+      },
+      {
+        "requirementId": "CR001-R21",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-002",
+          "CLS-007",
+          "CLS-008",
+          "CLS-015",
+          "CLS-029",
+          "CLS-030",
+          "CLS-036"
+        ]
+      },
+      {
+        "requirementId": "CR001-R22",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-030",
+          "CLS-031",
+          "CLS-039"
+        ]
+      },
+      {
+        "requirementId": "CR001-R23",
+        "priority": "P1",
+        "caseIds": [
+          "CLS-033",
+          "CLS-034",
+          "CLS-037"
+        ]
+      },
+      {
+        "requirementId": "CR001-R24",
+        "priority": "P0",
+        "caseIds": [
+          "CLS-001",
+          "CLS-020",
+          "CLS-032",
+          "CLS-034",
+          "CLS-035"
+        ]
+      }
+    ]
+  },
+  "deliverables": [
+    {
+      "id": "acceptance_run",
+      "path": "reports/acceptance-runs/run-20260920-b5dba42-01.json",
+      "status": "PRESENT"
+    },
+    {
+      "id": "candidate_inventory",
+      "path": "reports/release/candidate-artifact.json",
+      "status": "PRESENT"
+    },
+    {
+      "id": "candidate_installer",
+      "path": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
+      "status": "MISSING"
+    },
+    {
+      "id": "release_evidence",
+      "path": "reports/release/release-evidence.json",
+      "status": "GENERATED"
+    },
+    {
+      "id": "defect_audit",
+      "path": "reports/release/defect-audit.json",
+      "status": "PRESENT"
+    },
+    {
+      "id": "known_limitations",
+      "path": "reports/release/KNOWN_LIMITATIONS.md",
+      "status": "GENERATED"
+    },
+    {
+      "id": "cyclonedx_sbom",
+      "path": "reports/release/yuwendesk.cdx.json",
+      "status": "MISSING"
+    },
+    {
+      "id": "checksum_manifest",
+      "path": "reports/release/SHA256SUMS.txt",
+      "status": "MISSING"
+    },
+    {
+      "id": "signing_status",
+      "path": "reports/release/signing-status.json",
+      "status": "MISSING"
+    },
+    {
+      "id": "teacher_guide",
+      "path": "docs/TEACHER_QUICK_GUIDE.md",
+      "status": "PRESENT"
+    },
+    {
+      "id": "final_status",
+      "path": "reports/release/FINAL_STATUS.md",
+      "status": "MISSING"
+    }
+  ],
+  "externalInputs": [
+    {
+      "id": "EXT01",
+      "status": "PROVIDED",
+      "description": "获授权代码工作区与编码代理运行能力（Linux 终端/文件/Git，可安装开发依赖、构建、运行测试）",
+      "ownerAction": "已在 Cloud Agent 环境提供；G00/G01 已在此环境执行真实构建与本地运行",
+      "blocks": []
+    },
+    {
+      "id": "EXT02",
+      "status": "NOT_PROVIDED",
+      "description": "Win11 x64干净VM和桌面自动化能力",
+      "ownerAction": "提供或批准Windows执行环境",
+      "blocks": [
+        "G01安装门",
+        "G11"
+      ]
+    },
+    {
+      "id": "EXT03",
+      "status": "NOT_PROVIDED",
+      "description": "Grok API账户权限与密钥",
+      "ownerAction": "通过秘密管理/图形设置配置，禁止贴进仓库",
+      "blocks": [
+        "G04真实联网"
+      ]
+    },
+    {
+      "id": "EXT04",
+      "status": "NOT_PROVIDED",
+      "description": "开发、真实测试与运行费用上限",
+      "ownerAction": "确认明确金额与币种",
+      "blocks": [
+        "付费网络调用"
+      ]
+    },
+    {
+      "id": "EXT05",
+      "status": "NOT_PROVIDED",
+      "description": "合法现用教材、课标、评分资料",
+      "ownerAction": "提供合法文件或授权来源",
+      "blocks": [
+        "真实内容覆盖"
+      ]
+    },
+    {
+      "id": "EXT06",
+      "status": "NOT_PROVIDED",
+      "description": "真实课长、设备、进度",
+      "ownerAction": "一次确认或从现有材料核对",
+      "blocks": [
+        "本班精确适配"
+      ]
+    },
+    {
+      "id": "EXT07",
+      "status": "NOT_PROVIDED",
+      "description": "发布身份与签名服务",
+      "ownerAction": "由持有人控制凭据或签名服务",
+      "blocks": [
+        "正式签名发布"
+      ]
+    },
+    {
+      "id": "EXT08",
+      "status": "NOT_PROVIDED",
+      "description": "分发位置和可信更新地址",
+      "ownerAction": "仅在授权后配置，不生成虚假地址",
+      "blocks": [
+        "在线更新发布"
+      ]
+    },
+    {
+      "id": "EXT09",
+      "status": "NOT_PROVIDED",
+      "description": "实际教师审阅与教学使用证据",
+      "ownerAction": "正常教学中的必要判断，不要求日常填表",
+      "blocks": [
+        "教学适配/效果声明"
+      ]
+    },
+    {
+      "id": "EXT10",
+      "status": "NOT_PROVIDED",
+      "description": "真实学生资料处理授权与每次必要字段外发许可",
+      "ownerAction": "由资料责任方明确本地处理范围；每次云端外发前确认必要字段，禁止把真实正文贴入仓库或提示词",
+      "blocks": [
+        "G08真实模型辅助归因",
+        "G11隐私验收"
+      ]
+    },
+    {
+      "id": "EXT11",
+      "status": "NOT_PROVIDED",
+      "description": "实际支持版本的 Microsoft Office 与 WPS 兼容性环境",
+      "ownerAction": "提供受控测试环境，分别执行打开、编辑、保存、分页和放映验证",
+      "blocks": [
+        "G06真实成品保真",
+        "G10正式导出性能",
+        "G11兼容性验收"
+      ]
+    }
+  ],
+  "defectAudit": {
+    "status": "NOT_RUN",
+    "assessedCommit": null,
+    "executedAt": null,
+    "blockerCode": "RELEASE_DEFECT_AUDIT_REQUIRED",
+    "items": []
+  },
+  "supplyChain": {
+    "sbomStatus": "NOT_RUN",
+    "checksumStatus": "NOT_RUN",
+    "signatureStatus": "NOT_RUN"
+  },
+  "inputFiles": [
+    {
+      "path": "acceptance/addenda/classroom-delivery.cases.json",
+      "sha256": "f7238e8f927d0c6968d8d6bba1a8cadb1e7fd3f54c37a94fc0d07038c9c5fd06",
+      "sizeBytes": 39215
+    },
+    {
+      "path": "acceptance/cases.json",
+      "sha256": "cb215e1ff2da5f6c2a1495b6e14da2e9f0e1e4a7b179031dd08baffc6745eed5",
+      "sizeBytes": 98324
+    },
+    {
+      "path": "planning/changes/CR001/traceability.json",
+      "sha256": "d9ec32f391a073ba980b40147a6b1bd24b3cb07fb257901493f3eced446f6c01",
+      "sizeBytes": 9248
+    },
+    {
+      "path": "planning/EXTERNAL_INPUTS.json",
+      "sha256": "b21cb1eea71a068b113aadc155e33cffb08ad6f1cced25568caea71fa7381fd3",
+      "sizeBytes": 3581
+    },
+    {
+      "path": "planning/g11-acceptance-map.json",
+      "sha256": "605b46588abd82c5e649144bea96bcf24d33f10dc6ada88c1721db7323121a84",
+      "sizeBytes": 33044
+    },
+    {
+      "path": "planning/requirements-traceability.json",
+      "sha256": "2cfd1ed12d74e97c4f9b29e6d782b63acd86c9507209aee877b6d417cd640234",
+      "sizeBytes": 27957
+    },
+    {
+      "path": "reports/acceptance-runs/run-20260920-b5dba42-01.json",
+      "sha256": "8d990fa3b72792d31c9c19b5357e181b59f7c71e01e1599f4d3e621b662be0d6",
+      "sizeBytes": 78288
+    },
+    {
+      "path": "reports/release/candidate-artifact.json",
+      "sha256": "57c7e0f2fc891435d4949b3babaae8fde21dc4989179a5b4b7c590e2f59f8960",
+      "sizeBytes": 348
+    },
+    {
+      "path": "reports/release/defect-audit.json",
+      "sha256": "1627038d980b55a36bd3185543ef17e03f77101d094b323544801deee64f6410",
+      "sizeBytes": 161
+    }
+  ],
+  "knownGaps": [
+    {
+      "gapId": "CURRENT_CANDIDATE_MISSING",
+      "scope": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
+      "status": "BLOCKED",
+      "blockerCode": "RELEASE_ARTIFACT_MISSING",
+      "externalInputIds": [],
+      "safeAction": "在锁定构建环境从当前源码生成候选；不得复用历史安装包或哈希。"
+    },
+    {
+      "gapId": "DEFECT_AUDIT_NOT_COMPLETE",
+      "scope": "P0/P1 已知缺陷审计",
+      "status": "NOT_RUN",
+      "blockerCode": "RELEASE_DEFECT_AUDIT_REQUIRED",
+      "externalInputIds": [],
+      "safeAction": "在候选 commit 上完成缺陷审计；空 items 只有在 COMPLETE 时才表示未发现已知缺陷。"
+    },
+    {
+      "gapId": "DELIVERABLE_CHECKSUM_MANIFEST_MISSING",
+      "scope": "reports/release/SHA256SUMS.txt",
+      "status": "NOT_RUN",
+      "blockerCode": "RELEASE_REQUIRED_DELIVERABLE_MISSING",
+      "externalInputIds": [],
+      "safeAction": "执行负责该固定交付物的后续 G11 工作包，并在生成后重新归集证据。"
+    },
+    {
+      "gapId": "DELIVERABLE_CYCLONEDX_SBOM_MISSING",
+      "scope": "reports/release/yuwendesk.cdx.json",
+      "status": "NOT_RUN",
+      "blockerCode": "RELEASE_REQUIRED_DELIVERABLE_MISSING",
+      "externalInputIds": [],
+      "safeAction": "执行负责该固定交付物的后续 G11 工作包，并在生成后重新归集证据。"
+    },
+    {
+      "gapId": "DELIVERABLE_FINAL_STATUS_MISSING",
+      "scope": "reports/release/FINAL_STATUS.md",
+      "status": "NOT_RUN",
+      "blockerCode": "RELEASE_REQUIRED_DELIVERABLE_MISSING",
+      "externalInputIds": [],
+      "safeAction": "执行负责该固定交付物的后续 G11 工作包，并在生成后重新归集证据。"
+    },
+    {
+      "gapId": "DELIVERABLE_SIGNING_STATUS_MISSING",
+      "scope": "reports/release/signing-status.json",
+      "status": "NOT_RUN",
+      "blockerCode": "RELEASE_REQUIRED_DELIVERABLE_MISSING",
+      "externalInputIds": [],
+      "safeAction": "执行负责该固定交付物的后续 G11 工作包，并在生成后重新归集证据。"
+    },
+    {
+      "gapId": "EXTERNAL_EXT02",
+      "scope": "G01安装门；G11",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
+      "externalInputIds": [
+        "EXT02"
+      ],
+      "safeAction": "提供或批准Windows执行环境"
+    },
+    {
+      "gapId": "EXTERNAL_EXT03",
+      "scope": "G04真实联网",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
+      "externalInputIds": [
+        "EXT03"
+      ],
+      "safeAction": "通过秘密管理/图形设置配置，禁止贴进仓库"
+    },
+    {
+      "gapId": "EXTERNAL_EXT04",
+      "scope": "付费网络调用",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
+      "externalInputIds": [
+        "EXT04"
+      ],
+      "safeAction": "确认明确金额与币种"
+    },
+    {
+      "gapId": "EXTERNAL_EXT05",
+      "scope": "真实内容覆盖",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
+      "externalInputIds": [
+        "EXT05"
+      ],
+      "safeAction": "提供合法文件或授权来源"
+    },
+    {
+      "gapId": "EXTERNAL_EXT06",
+      "scope": "本班精确适配",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
+      "externalInputIds": [
+        "EXT06"
+      ],
+      "safeAction": "一次确认或从现有材料核对"
+    },
+    {
+      "gapId": "EXTERNAL_EXT07",
+      "scope": "正式签名发布",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
+      "externalInputIds": [
+        "EXT07"
+      ],
+      "safeAction": "由持有人控制凭据或签名服务"
+    },
+    {
+      "gapId": "EXTERNAL_EXT08",
+      "scope": "在线更新发布",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
+      "externalInputIds": [
+        "EXT08"
+      ],
+      "safeAction": "仅在授权后配置，不生成虚假地址"
+    },
+    {
+      "gapId": "EXTERNAL_EXT09",
+      "scope": "教学适配/效果声明",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
+      "externalInputIds": [
+        "EXT09"
+      ],
+      "safeAction": "正常教学中的必要判断，不要求日常填表"
+    },
+    {
+      "gapId": "EXTERNAL_EXT10",
+      "scope": "G08真实模型辅助归因；G11隐私验收",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
+      "externalInputIds": [
+        "EXT10"
+      ],
+      "safeAction": "由资料责任方明确本地处理范围；每次云端外发前确认必要字段，禁止把真实正文贴入仓库或提示词"
+    },
+    {
+      "gapId": "EXTERNAL_EXT11",
+      "scope": "G06真实成品保真；G10正式导出性能；G11兼容性验收",
+      "status": "BLOCKED",
+      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
+      "externalInputIds": [
+        "EXT11"
+      ],
+      "safeAction": "提供受控测试环境，分别执行打开、编辑、保存、分页和放映验证"
+    },
+    {
+      "gapId": "FORMAL_CASES_NOT_RUN",
+      "scope": "尚未执行的正式验收案例",
+      "status": "NOT_RUN",
+      "blockerCode": "RELEASE_REQUIRED_GATE_OPEN",
+      "externalInputIds": [],
+      "safeAction": "在对应证据层级创建新的追加验收运行；不得改写历史 NOT_RUN。"
+    },
+    {
+      "gapId": "SOURCE_RUN_DIRTY",
+      "scope": "验收运行无法唯一绑定 sourceCommit",
+      "status": "BLOCKED",
+      "blockerCode": "RELEASE_SOURCE_DIRTY",
+      "externalInputIds": [],
+      "safeAction": "在干净工作树对同一候选 commit 创建新的追加验收运行；不得改写本次 dirty 运行。"
+    }
+  ]
+}

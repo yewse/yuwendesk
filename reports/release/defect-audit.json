@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "status": "NOT_RUN",
+  "assessedCommit": null,
+  "executedAt": null,
+  "items": [],
+  "blockerCode": "RELEASE_DEFECT_AUDIT_REQUIRED"
+}

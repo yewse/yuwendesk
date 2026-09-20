@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yuwendesk.local/contracts/G11ReleaseEvidence.schema.json",
+  "title": "G11ReleaseEvidenceV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "generatedAt", "sourceCommit", "acceptanceRun", "candidate", "statuses", "gates",
+    "caseSummary", "cases", "requirements", "deliverables", "externalInputs", "defectAudit", "supplyChain",
+    "inputFiles", "knownGaps"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "sourceCommit": { "type": "string", "pattern": "^[a-f0-9]{7,64}$" },
+    "acceptanceRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId", "path", "sha256", "sizeBytes", "repositoryDirty"],
+      "properties": {
+        "runId": { "type": "string", "pattern": "^run-[0-9]{8}-[a-f0-9]{7}-[0-9]{2}$" },
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": { "type": "integer", "minimum": 1 },
+        "repositoryDirty": { "type": "boolean" }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inventoryPath", "inventorySha256", "inventorySizeBytes", "expectedPath", "artifactPresent",
+        "artifactClass", "sha256", "sizeBytes"
+      ],
+      "properties": {
+        "inventoryPath": { "$ref": "#/$defs/repositoryPath" },
+        "inventorySha256": { "$ref": "#/$defs/sha256" },
+        "inventorySizeBytes": { "type": "integer", "minimum": 1 },
+        "expectedPath": { "$ref": "#/$defs/repositoryPath" },
+        "artifactPresent": { "type": "boolean" },
+        "artifactClass": { "$ref": "#/$defs/artifactClass" },
+        "sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "sizeBytes": { "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }] }
+      }
+    },
+    "statuses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "softwareStatus", "resourceCoverageStatus", "teachingValidationStatus", "artifactClass",
+        "releaseDisposition", "reasonCode"
+      ],
+      "properties": {
+        "softwareStatus": { "enum": ["PASS", "PARTIAL", "BLOCKED", "FAIL"] },
+        "resourceCoverageStatus": { "enum": ["VERIFIED", "PARTIAL", "BLOCKED", "NOT_VERIFIED"] },
+        "teachingValidationStatus": { "enum": ["TEACHER_REVIEWED", "PARTIAL", "BLOCKED", "NOT_REVIEWED"] },
+        "artifactClass": { "$ref": "#/$defs/artifactClass" },
+        "releaseDisposition": { "enum": ["RELEASE_READY", "CONTROLLED_TRIAL", "UNSIGNED_TEST_BUILD", "BLOCKED"] },
+        "reasonCode": { "type": "string", "minLength": 1 }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceTreeClean", "cleanWindowsPassed", "artifactSigned", "distributionAuthorized", "controlledTrialAuthorized",
+        "dataBoundaryApproved", "costBoundaryApproved", "defectAuditStatus"
+      ],
+      "properties": {
+        "sourceTreeClean": { "type": "boolean" },
+        "cleanWindowsPassed": { "type": "boolean" },
+        "artifactSigned": { "type": "boolean" },
+        "distributionAuthorized": { "type": "boolean" },
+        "controlledTrialAuthorized": { "type": "boolean" },
+        "dataBoundaryApproved": { "type": "boolean" },
+        "costBoundaryApproved": { "type": "boolean" },
+        "defectAuditStatus": { "enum": ["NOT_RUN", "COMPLETE"] }
+      }
+    },
+    "caseSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["PASS", "FAIL", "BLOCKED", "NOT_RUN"],
+      "properties": {
+        "PASS": { "type": "integer", "minimum": 0 },
+        "FAIL": { "type": "integer", "minimum": 0 },
+        "BLOCKED": { "type": "integer", "minimum": 0 },
+        "NOT_RUN": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/caseResult" }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "cr001"],
+      "properties": {
+        "base": { "type": "array", "items": { "$ref": "#/$defs/requirement" } },
+        "cr001": { "type": "array", "items": { "$ref": "#/$defs/requirement" } }
+      }
+    },
+    "deliverables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path", "status"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "path": { "$ref": "#/$defs/repositoryPath" },
+          "status": { "enum": ["PRESENT", "GENERATED", "MISSING"] }
+        }
+      }
+    },
+    "externalInputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "description", "ownerAction", "blocks"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^EXT[0-9]{2}$" },
+          "status": { "enum": ["PROVIDED", "NOT_PROVIDED"] },
+          "description": { "type": "string", "minLength": 1 },
+          "ownerAction": { "type": "string", "minLength": 1 },
+          "blocks": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
+    "defectAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "assessedCommit", "executedAt", "blockerCode", "items"],
+      "properties": {
+        "status": { "enum": ["NOT_RUN", "COMPLETE"] },
+        "assessedCommit": { "oneOf": [{ "type": "string", "pattern": "^[a-f0-9]{7,64}$" }, { "type": "null" }] },
+        "executedAt": { "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+        "blockerCode": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "severity", "status", "title"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "severity": { "enum": ["P0", "P1", "P2", "P3"] },
+              "status": { "enum": ["OPEN", "CLOSED"] },
+              "title": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "supplyChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sbomStatus", "checksumStatus", "signatureStatus"],
+      "properties": {
+        "sbomStatus": { "enum": ["NOT_RUN", "PASS", "FAIL", "BLOCKED"] },
+        "checksumStatus": { "enum": ["NOT_RUN", "PASS", "FAIL", "BLOCKED"] },
+        "signatureStatus": { "enum": ["NOT_RUN", "SIGNED_VALID", "SIGNED_INVALID", "UNSIGNED", "BLOCKED"] }
+      }
+    },
+    "inputFiles": { "type": "array", "items": { "$ref": "#/$defs/fileDescriptor" } },
+    "knownGaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["gapId", "scope", "status", "blockerCode", "externalInputIds", "safeAction"],
+        "properties": {
+          "gapId": { "type": "string", "minLength": 1 },
+          "scope": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["BLOCKED", "NOT_RUN"] },
+          "blockerCode": { "type": "string", "minLength": 1 },
+          "externalInputIds": { "type": "array", "items": { "type": "string", "pattern": "^EXT[0-9]{2}$" }, "uniqueItems": true },
+          "safeAction": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "repositoryPath": { "type": "string", "pattern": "^(?:(?:reports|planning|acceptance|docs|apps)/[^\\\\:]+|ENV_LOCK\\.json|package-lock\\.json)$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "artifactClass": { "enum": ["NONE", "UNSIGNED_TEST_BUILD", "SIGNED_TEST_BUILD", "SIGNED_RELEASE_CANDIDATE"] },
+    "fileDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "sizeBytes"],
+      "properties": {
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "caseResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caseId", "severity", "status", "blockerCode", "externalInputIds"],
+      "properties": {
+        "caseId": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["P0", "P1", "P2", "P3"] },
+        "status": { "enum": ["PASS", "FAIL", "BLOCKED", "NOT_RUN"] },
+        "blockerCode": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+        "externalInputIds": { "type": "array", "items": { "type": "string", "pattern": "^EXT[0-9]{2}$" }, "uniqueItems": true }
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirementId", "priority", "caseIds"],
+      "properties": {
+        "requirementId": { "type": "string", "minLength": 1 },
+        "priority": { "enum": ["P0", "P1", "P2", "P3"] },
+        "caseIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      }
+    }
+  }
+}

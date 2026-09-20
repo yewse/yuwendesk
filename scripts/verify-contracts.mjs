@@ -10,6 +10,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyCr001 } from './lib/cr001-verify.mjs';
 import { loadAcceptanceDefinitions, validateAcceptanceMap } from './lib/g11-acceptance.mjs';
+import { validateReleaseEvidence } from './lib/g11-release-evidence.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 let failures = 0;
@@ -97,6 +98,25 @@ try {
   log(acceptanceMap.cases?.length === 170, `G11 验收映射总数为 170（实际 ${acceptanceMap.cases?.length ?? 0}）`);
 } catch (e) {
   log(false, `G11 验收账本校验失败：${e.message}`);
+}
+
+// 2d) G11 发行聚合：报告可为 BLOCKED，但需求与案例必须完整，引用证据必须可回读。
+try {
+  const evidencePath = join(root, 'reports', 'release', 'release-evidence.json');
+  const evidence = readJson(evidencePath);
+  const validation = validateReleaseEvidence({ root, evidence });
+  log(validation.ok, `G11 发行证据结构与输入哈希有效${validation.ok ? '' : '：\n    - ' + validation.errors.map((item) => `${item.code}:${item.detail}`).join('\n    - ')}`);
+  log(evidence.requirements?.base?.length === 60,
+    `G11 基础需求归集为 60（实际 ${evidence.requirements?.base?.length ?? 0}）`);
+  log(evidence.requirements?.cr001?.length === 24,
+    `G11 CR-001 需求归集为 24（实际 ${evidence.requirements?.cr001?.length ?? 0}）`);
+  log(evidence.cases?.length === 170,
+    `G11 案例归集为 170（实际 ${evidence.cases?.length ?? 0}）`);
+  log(evidence.statuses?.releaseDisposition !== 'RELEASE_READY' ||
+      evidence.cases.every((item) => item.status === 'PASS'),
+    'G11 RELEASE_READY 不得包含未通过案例');
+} catch (e) {
+  log(false, `G11 发行证据校验失败：${e.message}`);
 }
 
 // 3) 无效示例确实无效（结构层面）

@@ -478,17 +478,41 @@ function transactionEntryPaths(directory, entry) {
   };
 }
 
-export function recoverJsonSetAtomic({ transactionPath }) {
+export function recoverJsonSetAtomic({ transactionPath, expectedTargetNames = null }) {
   if (!existsSync(transactionPath)) return { recovered: false };
   const directory = dirname(transactionPath);
   const journal = JSON.parse(readFileSync(transactionPath, 'utf8'));
   if (journal?.schemaVersion !== 1 || !['PREPARED', 'COMMITTED'].includes(journal.phase) ||
       !Array.isArray(journal.entries)) throw new Error('JSON_SET_JOURNAL_INVALID');
+  const targetNames = journal.entries.map((entry) => entry?.targetName);
+  const targetSet = new Set(targetNames);
+  if (targetSet.size !== journal.entries.length || targetSet.has(basename(transactionPath))) {
+    throw new Error('JSON_SET_JOURNAL_INVALID');
+  }
+  if (expectedTargetNames !== null) {
+    const expected = new Set(expectedTargetNames);
+    if (expected.size !== expectedTargetNames.length || expected.size !== targetSet.size ||
+        [...expected].some((name) => !targetSet.has(name))) throw new Error('JSON_SET_JOURNAL_INVALID');
+  }
+  let transactionToken = null;
+  const allNames = new Set(targetNames);
   for (const entry of journal.entries) {
     if (![entry.targetName, entry.stageName, entry.backupName].every((name) =>
       typeof name === 'string' && name === basename(name) && name.length > 0) || typeof entry.hadTarget !== 'boolean') {
       throw new Error('JSON_SET_JOURNAL_INVALID');
     }
+    const stagePrefix = `${entry.targetName}.set-`;
+    if (!entry.stageName.startsWith(stagePrefix)) throw new Error('JSON_SET_JOURNAL_INVALID');
+    const token = entry.stageName.slice(stagePrefix.length);
+    if (!/^\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(token) ||
+        entry.backupName !== `${entry.targetName}.rollback-${token}` ||
+        (transactionToken !== null && transactionToken !== token) ||
+        allNames.has(entry.stageName) || allNames.has(entry.backupName)) throw new Error('JSON_SET_JOURNAL_INVALID');
+    transactionToken = token;
+    allNames.add(entry.stageName);
+    allNames.add(entry.backupName);
+  }
+  for (const entry of journal.entries) {
     const paths = transactionEntryPaths(directory, entry);
     if (journal.phase === 'PREPARED') {
       if (entry.hadTarget && existsSync(paths.backupPath)) {
@@ -507,11 +531,12 @@ export function recoverJsonSetAtomic({ transactionPath }) {
   return { recovered: true, phase: journal.phase };
 }
 
-export function writeJsonSetAtomic({
+export function writeFileSetAtomic({
   entries, transactionPath, beforePublish = () => {}, recoverOnError = true
 }) {
   if (!isNonEmptyString(transactionPath)) throw new Error('JSON_SET_TRANSACTION_PATH_REQUIRED');
-  recoverJsonSetAtomic({ transactionPath });
+  const expectedTargetNames = entries.map((entry) => basename(entry.targetPath));
+  recoverJsonSetAtomic({ transactionPath, expectedTargetNames });
   const directory = dirname(transactionPath);
   if (entries.some((entry) => dirname(entry.targetPath) !== directory)) throw new Error('JSON_SET_DIRECTORY_MISMATCH');
   const token = `${process.pid}-${randomUUID()}`;
@@ -525,9 +550,13 @@ export function writeJsonSetAtomic({
   let journalWritten = false;
   try {
     for (const entry of staged) {
-      writeJsonAtomic({
-        targetPath: resolve(directory, entry.stageName), value: entry.value, validate: entry.validate, noClobber: true
-      });
+      const stagePath = resolve(directory, entry.stageName);
+      writeFileSync(stagePath, entry.content, { encoding: 'utf8', flag: 'wx' });
+      const validation = entry.validateContent(readFileSync(stagePath, 'utf8'));
+      if (validation === false || (isPlainObject(validation) && validation.ok === false)) {
+        const details = isPlainObject(validation) ? JSON.stringify(validation.errors ?? []) : '';
+        throw new Error(`ATOMIC_FILE_VALIDATION_FAILED:${details}`);
+      }
     }
     const journalValue = {
       schemaVersion: 1,
@@ -551,13 +580,28 @@ export function writeJsonSetAtomic({
       value: { ...journalValue, phase: 'COMMITTED' },
       validate: () => true
     });
-    recoverJsonSetAtomic({ transactionPath });
+    recoverJsonSetAtomic({ transactionPath, expectedTargetNames });
   } catch (cause) {
     if (journalWritten && recoverOnError) {
-      recoverJsonSetAtomic({ transactionPath });
+      recoverJsonSetAtomic({ transactionPath, expectedTargetNames });
     } else if (!journalWritten) {
       for (const entry of staged) rmSync(resolve(directory, entry.stageName), { force: true });
     }
     throw cause;
   }
+}
+
+export function writeJsonSetAtomic({
+  entries, transactionPath, beforePublish = () => {}, recoverOnError = true
+}) {
+  return writeFileSetAtomic({
+    transactionPath,
+    beforePublish,
+    recoverOnError,
+    entries: entries.map((entry) => ({
+      targetPath: entry.targetPath,
+      content: `${JSON.stringify(entry.value, null, 2)}\n`,
+      validateContent: (content) => entry.validate(JSON.parse(content))
+    }))
+  });
 }
