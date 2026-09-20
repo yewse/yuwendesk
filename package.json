@@ -1,0 +1,23 @@
+{
+  "name": "yuwendesk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "语文备课工作台（YuwenDesk）— 面向初中语文教师的中文 Windows 桌面备课应用。当前为 G00/G01 工程验证骨架。",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm --workspace @yuwendesk/desktop run dev",
+    "start": "npm --workspace @yuwendesk/desktop run start",
+    "build": "npm --workspace @yuwendesk/desktop run build",
+    "build:dir": "npm --workspace @yuwendesk/desktop run build:dir",
+    "build:win": "npm --workspace @yuwendesk/desktop run build:win",
+    "lint": "npm --workspace @yuwendesk/desktop run lint",
+    "typecheck": "npm --workspace @yuwendesk/desktop run typecheck",
+    "test:unit": "npm --workspace @yuwendesk/desktop run test:unit",
+    "verify:contracts": "node scripts/verify-contracts.mjs"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  }
+}

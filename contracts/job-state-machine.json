@@ -1,0 +1,79 @@
+{
+  "states": [
+    "QUEUED",
+    "PREPARING",
+    "WAITING_INPUT",
+    "RUNNING",
+    "REVIEWING",
+    "REVISING",
+    "FAILED_RETRYABLE",
+    "PAUSED_BUDGET",
+    "READY",
+    "FAILED_FINAL",
+    "CANCELLED"
+  ],
+  "transitions": {
+    "QUEUED": [
+      "PREPARING",
+      "CANCELLED"
+    ],
+    "PREPARING": [
+      "WAITING_INPUT",
+      "RUNNING",
+      "FAILED_FINAL",
+      "CANCELLED"
+    ],
+    "WAITING_INPUT": [
+      "PREPARING",
+      "CANCELLED"
+    ],
+    "RUNNING": [
+      "WAITING_INPUT",
+      "REVIEWING",
+      "FAILED_RETRYABLE",
+      "FAILED_FINAL",
+      "PAUSED_BUDGET",
+      "CANCELLED"
+    ],
+    "REVIEWING": [
+      "REVISING",
+      "READY",
+      "WAITING_INPUT",
+      "FAILED_FINAL",
+      "PAUSED_BUDGET",
+      "CANCELLED"
+    ],
+    "REVISING": [
+      "REVIEWING",
+      "FAILED_RETRYABLE",
+      "FAILED_FINAL",
+      "PAUSED_BUDGET",
+      "CANCELLED"
+    ],
+    "FAILED_RETRYABLE": [
+      "PREPARING",
+      "CANCELLED"
+    ],
+    "PAUSED_BUDGET": [
+      "PREPARING",
+      "CANCELLED"
+    ],
+    "READY": [],
+    "FAILED_FINAL": [],
+    "CANCELLED": []
+  },
+  "terminal": [
+    "READY",
+    "FAILED_FINAL",
+    "CANCELLED"
+  ],
+  "resume_requires": "explicit action; uncertain in-flight calls not automatically replayed",
+  "limits": {
+    "max_model_calls": 24,
+    "max_tool_calls": 40,
+    "max_stage_attempts": 3,
+    "max_concurrent_jobs": 1,
+    "max_parallel_model_calls": 2
+  },
+  "note": "These are engineering budgets, not promises of teaching effectiveness."
+}

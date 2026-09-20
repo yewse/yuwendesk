@@ -1,0 +1,46 @@
+{
+  "name": "@yuwendesk/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "YuwenDesk 桌面应用（Electron 主/预加载/渲染进程）。G01 可安装骨架。",
+  "author": "YuwenDesk",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build:renderer": "vite build",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build": "npm run build:renderer && npm run build:main",
+    "start": "electron .",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "test:unit": "vitest run",
+    "build:dir": "npm run build && electron-builder --dir --publish never --config electron-builder.yml",
+    "build:win": "npm run build && electron-builder --win nsis --x64 --publish never --config electron-builder.yml"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "fast-xml-parser": "^4.5.0",
+    "jszip": "^3.10.1",
+    "pdfjs-dist": "^3.11.174",
+    "pdfkit": "^0.15.0",
+    "pptxgenjs": "^4.0.1"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "3.7.1",
+    "@types/better-sqlite3": "7.6.11",
+    "@types/node": "20.14.15",
+    "@types/react": "18.3.5",
+    "@types/react-dom": "18.3.0",
+    "@typescript-eslint/eslint-plugin": "7.18.0",
+    "@typescript-eslint/parser": "7.18.0",
+    "@vitejs/plugin-react": "4.3.1",
+    "electron": "44.4.3",
+    "electron-builder": "26.15.3",
+    "eslint": "8.57.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "typescript": "5.5.4",
+    "vite": "5.4.8",
+    "vitest": "2.1.1"
+  }
+}

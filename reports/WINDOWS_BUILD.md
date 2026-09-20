@@ -1,0 +1,49 @@
+# Windows 构建报告（工程测试包）
+
+最近更新：2026-09-19（PR#1 二次审查续开发）
+
+## 结论：Windows x64 未签名工程测试安装包构建成功（修复后重建）
+
+- 命令：`CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --win nsis --x64 --config electron-builder.yml`
+- 本地构建主机：Linux（Cloud Agent）+ `wine 9.0`（授权构建环境内安装，供 NSIS 打包）。
+- 产物：`apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe`
+  - 文件类型：`PE32 executable (GUI) Intel 80386 ... Nullsoft Installer self-extracting archive`
+  - 大小：111,322,686 字节
+  - **SHA256（修复后新构建）：`3e6c1c03a465c57f64485e1ed8bcf381bb2fbbf3796cb7ed1fc88aba7664db85`**
+  - 说明：与上一轮 `98ff155e…`（旧源码）不同，本包来自修复 F01–F08 后的源码；新修复=新来源=新哈希。
+
+## 交付渠道现状（第 5 条证据线：可获得性）
+
+- **Cloud Agent 工件渠道无法承载该 EXE**：实测该渠道约 100MB 上限（50MB/95MB 可存，111MB 写入被丢弃），因此无法把 EXE 作为可下载工件随附。
+- 已新增并**成功运行** CI 工件渠道（reviewer 首选，原生 Windows、锁文件驱动）：`.github/workflows/windows-build.yml` 在 `windows-latest` 上 `npm ci` → typecheck/lint/test（48 项）→ `build:win`（未签名，原生无需 wine）→ 计算 SHA256 → 上传工件。
+  - 运行：https://github.com/yewse/yuwendesk/actions/runs/35440376395 （成功，2m1s，commit e072a06）
+  - 工件：`YuwenDesk-Setup-unsigned-x64`（zip 111,328,743 字节，保留 30 天，含 `SHA256SUMS.txt`、`BUILD_ENV.txt`）
+  - **原生 Windows 构建 EXE 的 SHA256：`ed468ffec8f3aa1798cee856ea4ddbc5a0e4c9cf9757d05731e56ffcbe48fc3d`**（`YuwenDesk-Setup-0.1.0-x64.exe`，PE32 NSIS，111,322,738 字节，runner_os=Windows/AMD64）。
+  - **收件侧独立复核**：已下载该工件并用本机 `sha256sum` 重算，与 CI 的 `SHA256SUMS.txt` 完全一致（见 artifact `pr1_windows_exe_delivery.txt`）。
+  - 原生 Windows 构建哈希与 Linux+wine 构建（`3e6c1c03…`）不同，属正常（来源不同）。
+- **需持有人确认的最小事项（工件可见范围）**：当前仓库为 public，GitHub Actions 工作流工件对可访问该仓库 Actions 的人可下载。请确认此可见范围在既有授权内；若不允许，请指定一个私有工件渠道。**未建立公开 Release、未改仓库可见性、未采购服务、未把 111MB 二进制塞入 git 历史（GitHub 普通文件上限 100MiB）。**
+
+### 第三轮（7.1）：已暂停自动公开上传
+
+- 由于公开工件可见范围尚未明确授权，`.github/workflows/windows-build.yml` 已改为 **仅 `workflow_dispatch` 手动触发**（移除 push 自动触发），避免每次修复提交都产生新的公开工件。
+- 构建显式 `--publish never`（脚本）+ `publish: null`（electron-builder.yml），工程构建禁止任何自动发布，仅由已批准的 artifact 步骤分发。
+- 本轮修复后**在本地（Linux+wine）重建**未签名 EXE 以获得绑定修复提交的新哈希；**未新增公开上传**。文件交付待持有人明确可见范围授权（或指定私有渠道）后，通过手动 `workflow_dispatch` 或私有渠道进行。
+- ACTION/工具链版本：Actions 使用 `@v4`、Node 22、runner `windows-latest`（Windows Server 2025 / 10.0.26100，非 Win11 验收）——记录为实际解析身份，不声称不可变锁定。
+- 依赖 audit：见 `reports/AUDIT.md`（4 项均 dev/test 链，不随产品分发，不 force 修复）。
+
+## 五条证据线分别记录，不得互相替代
+
+| 证据线 | 状态 |
+|---|---|
+| ① 未签名工程包构建（原生 Windows CI + 本地 Linux+wine 对照） | PASS（CI SHA256 `ed468ffe…`；本地 `3e6c1c03…`） |
+| ② 原始 EXE 上传、持有人可下载、独立重算哈希 | PASS（CI 工件可下载；收件侧独立重算与 CI 一致。仅剩 public 可见范围待持有人确认） |
+| ③ 干净 Win11 x64 普通用户安装验收 | BLOCKED_EXTERNAL（无目标机器，EXT02） |
+| ④ 正式代码签名（受信任发布者） | BLOCKED_EXTERNAL（无签名证书，EXT07；缺证书不阻断未签名构建） |
+| ⑤ 真实 Grok 连通/能力探测 | BLOCKED_EXTERNAL（无账户/密钥/预算，EXT03/04） |
+
+## 说明与限制
+
+- 日志中的 `signing with signtool.exe` 在未提供证书时不构成受信任发布者签名；本包按未签名工程测试包处理，SmartScreen/信誉提示可能出现（S09/S13）。
+- Linux+wine 构建可验证打包配置与产物形态，但**不能替代**真实 Windows 安装体验与 SmartScreen 行为（③）。CI 的 windows-latest 通常为 Server 镜像、管理员且 UAC 关闭，也**不等于**干净 Win11 普通用户验收。
+- 未设置应用图标（使用默认 Electron 图标），不影响可安装性；图标为后续任务。
+- 哈希不能替代文件本身；"提供重建命令"不等于逐字节可复现证明（无二次独立构建比对）。

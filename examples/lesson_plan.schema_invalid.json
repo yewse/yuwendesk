@@ -1,0 +1,227 @@
+{
+  "schema_version": "1.0.0",
+  "plan_id": "plan_demo",
+  "revision_id": "revision_demo_1",
+  "previous_revision_id": null,
+  "task_context_id": "context_demo",
+  "title": "自拟人物阅读：细节与解释（软件验证示例）",
+  "declared_duration_sec": 2400,
+  "source_anchors": [
+    {
+      "anchor_id": "anchor_demo_1",
+      "source_version_id": "source_demo_v1",
+      "locator": {
+        "file_page_number": null,
+        "printed_page_label": null,
+        "paragraph_id": "p1",
+        "char_start": 0,
+        "char_end": 27
+      },
+      "quote": "他把递出的伞拿回来，仔细压平翘起的铁丝，才重新递给我。",
+      "context_before": "",
+      "context_after": "",
+      "verification": "exact_checked",
+      "source_class": "public_reference"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "claim1",
+      "kind": "interpretation",
+      "text": "检查伞骨并压平铁丝，可支持谨慎细心的解释。",
+      "anchor_ids": [
+        "anchor_demo_1"
+      ],
+      "certainty": "supported",
+      "caveat": "只是在自拟短材料中的合理解释，不是唯一性格判断。"
+    }
+  ],
+  "objectives": [
+    {
+      "objective_id": "obj1",
+      "description": "依据动作细节解释人物行为，区分摘抄与解释。",
+      "curriculum_ref_ids": [],
+      "cognitive_demand": "explain",
+      "independent_task_ids": [
+        "task2"
+      ],
+      "coverage_state": "needs_source_confirmation"
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": "task1",
+      "objective_ids": [
+        "obj1"
+      ],
+      "prompt": "这个动作让你怎样理解人物？先说出想法。",
+      "material_anchor_ids": [
+        "anchor_demo_1"
+      ],
+      "cognitive_demand": "explain",
+      "support_level": "partial_prompt",
+      "rubric_id": "rub1",
+      "teacher_notes": "明确自拟示例，不是江西真题。",
+      "is_formal_exam": false
+    },
+    {
+      "task_id": "task2",
+      "objective_ids": [
+        "obj1"
+      ],
+      "prompt": "为什么把伞拿回来？选择相关细节，解释你的理解。",
+      "material_anchor_ids": [
+        "anchor_demo_1"
+      ],
+      "cognitive_demand": "explain",
+      "support_level": "independent",
+      "rubric_id": "rub1",
+      "teacher_notes": "明确自拟示例，不是江西真题。",
+      "is_formal_exam": false
+    }
+  ],
+  "rubrics": [
+    {
+      "rubric_id": "rub1",
+      "kind": "project_formative",
+      "criteria": [
+        {
+          "criterion_id": "criterion1",
+          "description": "理解合理，选取相关细节并解释联系。",
+          "acceptable_variants": [
+            "细心照顾他人",
+            "做事谨慎，注意安全；须有文本联系。"
+          ],
+          "insufficient_examples": [
+            "只写他很好，没有相关依据。"
+          ],
+          "anchor_ids": [
+            "anchor_demo_1"
+          ]
+        }
+      ],
+      "source_anchor_ids": [],
+      "allows_alternatives": true,
+      "professional_calibration": "not_calibrated"
+    }
+  ],
+  "activities": [
+    {
+      "activity_id": "act1",
+      "title": "重读与初步解释",
+      "objective_ids": [
+        "obj1"
+      ],
+      "task_ids": [
+        "task1"
+      ],
+      "start_sec": 0,
+      "end_sec": 360,
+      "duration_kind": "estimated",
+      "actor": "both",
+      "requires_teacher_attention": true,
+      "parallel_group_id": null,
+      "branch_group_id": null,
+      "selected": true,
+      "student_action": "先各自阅读并形成解释。",
+      "teacher_action": "确认基本理解。",
+      "priority": "essential",
+      "fallback": "时间不足时压缩重复总结，不取消独立尝试。"
+    },
+    {
+      "activity_id": "act2",
+      "title": "比较并示范",
+      "objective_ids": [
+        "obj1"
+      ],
+      "task_ids": [
+        "task1"
+      ],
+      "start_sec": 360,
+      "end_sec": 720,
+      "duration_kind": "estimated",
+      "actor": "both",
+      "requires_teacher_attention": true,
+      "parallel_group_id": null,
+      "branch_group_id": null,
+      "selected": true,
+      "student_action": "比较摘抄与解释的差别。",
+      "teacher_action": "示范一处细节如何支持理解。",
+      "priority": "compressible",
+      "fallback": "时间不足时压缩重复总结，不取消独立尝试。"
+    },
+    {
+      "activity_id": "act3",
+      "title": "独立解释",
+      "objective_ids": [
+        "obj1"
+      ],
+      "task_ids": [
+        "task2"
+      ],
+      "start_sec": 720,
+      "end_sec": 1500,
+      "duration_kind": "estimated",
+      "actor": "student",
+      "requires_teacher_attention": true,
+      "parallel_group_id": null,
+      "branch_group_id": null,
+      "selected": true,
+      "student_action": "无句式提示地独立写出解释。",
+      "teacher_action": "巡视并记录有限观察。",
+      "priority": "essential",
+      "fallback": "时间不足时压缩重复总结，不取消独立尝试。"
+    },
+    {
+      "activity_id": "act4",
+      "title": "反馈和修改",
+      "objective_ids": [
+        "obj1"
+      ],
+      "task_ids": [
+        "task2"
+      ],
+      "start_sec": 1500,
+      "end_sec": 2100,
+      "duration_kind": "estimated",
+      "actor": "both",
+      "requires_teacher_attention": true,
+      "parallel_group_id": null,
+      "branch_group_id": null,
+      "selected": true,
+      "student_action": "根据明确建议修改自己的解释。",
+      "teacher_action": "展示匿名的不同合理答案。",
+      "priority": "essential",
+      "fallback": "时间不足时压缩重复总结，不取消独立尝试。"
+    },
+    {
+      "activity_id": "act5",
+      "title": "总结与变化空间",
+      "objective_ids": [
+        "obj1"
+      ],
+      "task_ids": [],
+      "start_sec": 2100,
+      "end_sec": 2400,
+      "duration_kind": "estimated",
+      "actor": "both",
+      "requires_teacher_attention": true,
+      "parallel_group_id": null,
+      "branch_group_id": null,
+      "selected": true,
+      "student_action": "说明本次如何判断与核对。",
+      "teacher_action": "保留余量，不临时增加课外任务。",
+      "priority": "compressible",
+      "fallback": "时间不足时压缩重复总结，不取消独立尝试。"
+    }
+  ],
+  "links": [],
+  "homework": [],
+  "teacher_summary": "软件验证用自拟课，不属于已确认教材课例。课堂包含个人阅读、独立解释与修订。",
+  "unknowns": [
+    "课程原文映射未接入。",
+    "没有真实学生学情。"
+  ],
+  "software_review_state": "draft",
+  "teaching_effect_state": "all_students_mastered"
+}

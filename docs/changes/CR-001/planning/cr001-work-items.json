@@ -1,0 +1,182 @@
+{
+  "change_id": "CR-001",
+  "note": "任务细化与映射，不替代现有阶段依赖；Gxx编号来自已有工程包，接入时核对最新仓库。",
+  "work_items": [
+    {
+      "id": "CR001-W01",
+      "stage": "NOW_DOCUMENTS_ONLY",
+      "title": "归档变更并建立追踪映射",
+      "depends_on": [],
+      "deliverables": [
+        "docs/changes/CR001_CLASSROOM_DELIVERABLES.md",
+        "planning/changes/CR001/requirements.json",
+        "acceptance/addenda/classroom-delivery.cases.json"
+      ],
+      "requirements": [
+        "CR001-R01",
+        "CR001-R02",
+        "CR001-R03",
+        "CR001-R04",
+        "CR001-R05",
+        "CR001-R06",
+        "CR001-R07",
+        "CR001-R08",
+        "CR001-R09",
+        "CR001-R10",
+        "CR001-R11",
+        "CR001-R12",
+        "CR001-R13",
+        "CR001-R14",
+        "CR001-R15",
+        "CR001-R16",
+        "CR001-R17",
+        "CR001-R18",
+        "CR001-R19",
+        "CR001-R20",
+        "CR001-R21",
+        "CR001-R22",
+        "CR001-R23",
+        "CR001-R24"
+      ],
+      "rules": [
+        "不新增G02+界面；不改变原F编号",
+        "新案例保持NOT_RUN，原冻结案例不删不降",
+        "更新HANDOFF注明后续G06/G07范围，不自动批准公开上传"
+      ]
+    },
+    {
+      "id": "CR001-W02",
+      "stage": "G05_G06_CONTRACT",
+      "title": "三类受众的呈现与交付合同",
+      "depends_on": [
+        "CR001-W01",
+        "G05-T04"
+      ],
+      "deliverables": [
+        "版本化呈现合同或伴随schema",
+        "任务映射与正反例",
+        "旧合同兼容记录"
+      ],
+      "requirements": [
+        "CR001-R02",
+        "CR001-R03",
+        "CR001-R04",
+        "CR001-R07",
+        "CR001-R16",
+        "CR001-R23"
+      ],
+      "rules": [
+        "遵守原阶段依赖，不因本CR跨过G01验收",
+        "不得通过关闭严格schema实现加字段"
+      ]
+    },
+    {
+      "id": "CR001-W03",
+      "stage": "G06",
+      "title": "PPT与师生讲义三类成品生成",
+      "depends_on": [
+        "CR001-W02",
+        "G06-T01"
+      ],
+      "deliverables": [
+        "真实PPTX/DOCX/PDF",
+        "本地展示",
+        "安全学生导出",
+        "任务映射"
+      ],
+      "requirements": [
+        "CR001-R01",
+        "CR001-R05",
+        "CR001-R06",
+        "CR001-R07",
+        "CR001-R08",
+        "CR001-R09",
+        "CR001-R10",
+        "CR001-R11",
+        "CR001-R12",
+        "CR001-R13",
+        "CR001-R14",
+        "CR001-R15",
+        "CR001-R16",
+        "CR001-R19",
+        "CR001-R20"
+      ],
+      "rules": [
+        "细化G06-T02/T03，不建立与其重复独立的一条实现链",
+        "学生版不从教师文件隐藏文字得到"
+      ]
+    },
+    {
+      "id": "CR001-W04",
+      "stage": "G06_G07",
+      "title": "整包状态、变更联动和错误恢复",
+      "depends_on": [
+        "CR001-W03"
+      ],
+      "deliverables": [
+        "新版同源材料",
+        "部分失败与回退证据",
+        "外部编辑与旧纸本提示"
+      ],
+      "requirements": [
+        "CR001-R03",
+        "CR001-R04",
+        "CR001-R12",
+        "CR001-R17",
+        "CR001-R18",
+        "CR001-R20",
+        "CR001-R22",
+        "CR001-R24"
+      ],
+      "rules": [
+        "映射G06-T04与G07-T02/T03",
+        "不重复运行无关模型调用，不混用新旧成品"
+      ]
+    },
+    {
+      "id": "CR001-W05",
+      "stage": "G06_G09_G11",
+      "title": "三场景验证、受众隔离与最终回归",
+      "depends_on": [
+        "CR001-W04"
+      ],
+      "deliverables": [
+        "CLS-001—040实际记录",
+        "文件/渲染/交互证据",
+        "兼容矩阵",
+        "软件/资源/教学状态分别报告"
+      ],
+      "requirements": [
+        "CR001-R01",
+        "CR001-R02",
+        "CR001-R03",
+        "CR001-R04",
+        "CR001-R05",
+        "CR001-R06",
+        "CR001-R07",
+        "CR001-R08",
+        "CR001-R09",
+        "CR001-R10",
+        "CR001-R11",
+        "CR001-R12",
+        "CR001-R13",
+        "CR001-R14",
+        "CR001-R15",
+        "CR001-R16",
+        "CR001-R17",
+        "CR001-R18",
+        "CR001-R19",
+        "CR001-R20",
+        "CR001-R21",
+        "CR001-R22",
+        "CR001-R23",
+        "CR001-R24"
+      ],
+      "rules": [
+        "EXP-001—005和BIZ-R041—R045继续验收",
+        "实际编辑器缺失写NOT_RUN或BLOCKED_EXTERNAL，不用自评替代",
+        "不为新增材料请求真实学生资料、费用或发布权限"
+      ]
+    }
+  ]
+}

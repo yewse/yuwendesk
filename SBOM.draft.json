@@ -1,0 +1,27 @@
+{
+  "bomFormat": "CycloneDX-like-draft",
+  "specVersionNote": "G00-T03 SBOM 初稿：仅列直接锁定依赖。完整传递依赖以 package-lock.json 为准；正式发布阶段(G11)生成完整 SBOM 与哈希清单。",
+  "generated_at": "2026-09-19",
+  "component": { "name": "yuwendesk", "version": "0.1.0", "type": "application", "appId": "org.yuwendesk.app" },
+  "dependencies_direct": [
+    { "name": "electron", "version": "31.7.7", "license": "MIT", "scope": "runtime+dev" },
+    { "name": "electron-builder", "version": "24.13.3", "license": "MIT", "scope": "dev" },
+    { "name": "react", "version": "18.3.1", "license": "MIT", "scope": "runtime" },
+    { "name": "react-dom", "version": "18.3.1", "license": "MIT", "scope": "runtime" },
+    { "name": "typescript", "version": "5.5.4", "license": "Apache-2.0", "scope": "dev" },
+    { "name": "vite", "version": "5.4.8", "license": "MIT", "scope": "dev" },
+    { "name": "@vitejs/plugin-react", "version": "4.3.1", "license": "MIT", "scope": "dev" },
+    { "name": "vitest", "version": "2.1.1", "license": "MIT", "scope": "dev" },
+    { "name": "eslint", "version": "8.57.0", "license": "MIT", "scope": "dev" },
+    { "name": "@typescript-eslint/parser", "version": "7.18.0", "license": "MIT", "scope": "dev" },
+    { "name": "@typescript-eslint/eslint-plugin", "version": "7.18.0", "license": "MIT", "scope": "dev" },
+    { "name": "@types/node", "version": "20.14.15", "license": "MIT", "scope": "dev" },
+    { "name": "@types/react", "version": "18.3.5", "license": "MIT", "scope": "dev" },
+    { "name": "@types/react-dom", "version": "18.3.0", "license": "MIT", "scope": "dev" }
+  ],
+  "high_attention_future": [
+    "better-sqlite3（G02 数据库，原生模块，需针对 Electron ABI 重建并在 Windows 包内冒烟测试）",
+    "docx / PptxGenJS（G06 同源导出）[S14][S15]",
+    "NSIS 工具链（electron-builder 内置，Windows 安装器）[S08]"
+  ]
+}

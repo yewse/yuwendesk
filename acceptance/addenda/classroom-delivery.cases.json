@@ -1,0 +1,895 @@
+{
+  "schema_version": "1.0.0",
+  "change_id": "CR-001",
+  "note": "追加案例；冻结acceptance/cases.json保留。这里是Given/When/Then验收说明，不是已经编写并执行的软件自动测试；全部NOT_RUN。",
+  "cases": [
+    {
+      "id": "CLS-001",
+      "change_id": "CR-001",
+      "title": "默认课时交付三类五文件",
+      "requirement_ids": [
+        "CR001-R01",
+        "CR001-R02",
+        "CR001-R24"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "有效且已确认的课时，使用默认交付策略",
+      "when": "一次准备整套课堂材料",
+      "then": "获得PPTX、学生DOCX/PDF、教师DOCX/PDF；角色与版本清楚，均为内容完整真实文件",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-002",
+      "change_id": "CR-001",
+      "title": "拒绝提纲或截图冒充课堂成品",
+      "requirement_ids": [
+        "CR001-R01",
+        "CR001-R05",
+        "CR001-R21"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "仅有一页PPT大纲或整页图片式课件",
+      "when": "尝试标记交付完成",
+      "then": "不通过可编辑/可上课验收；不能将大纲重命名为PPTX蒙混",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-003",
+      "change_id": "CR-001",
+      "title": "学生分发与教师目录隔离",
+      "requirement_ids": [
+        "CR001-R02",
+        "CR001-R16",
+        "CR001-R20"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "完整材料包含教师答案与学生讲义",
+      "when": "选择“导出学生用材料”或打印学生讲义",
+      "then": "仅输出学生DOCX/PDF或所选学生PDF；不自动带入教师版或含后置答案的课堂PPT",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-004",
+      "change_id": "CR-001",
+      "title": "同源但不逐字重复",
+      "requirement_ids": [
+        "CR001-R03",
+        "CR001-R04"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "同一任务含较长材料、独立问题和教师说明",
+      "when": "生成三个角色输出",
+      "then": "各文件题意/事实/标准一致；PPT可压缩呈现，讲义保留作答所需内容，教师说明不挤进学生页",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-005",
+      "change_id": "CR-001",
+      "title": "核心任务跨载体可定位",
+      "requirement_ids": [
+        "CR001-R04",
+        "CR001-R09"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "一项任务跨两张幻灯片，讲义同题分两段",
+      "when": "完成分页与任务顺序编排",
+      "then": "稳定ID正确连接；教师能定位学生题目与PPT；不要求一题只在一页或三个载体都重复",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-006",
+      "change_id": "CR-001",
+      "title": "必要内容可编辑",
+      "requirement_ids": [
+        "CR001-R05"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "含中文正文、问题、表格与结构图的真实PPTX",
+      "when": "在已选定的演示编辑器中打开并修改关键内容",
+      "then": "正文和关键任务可编辑，图片仅用于确有必要素材；保存后内容仍正确",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-007",
+      "change_id": "CR-001",
+      "title": "长中文段落与复杂标点不被压缩毁坏",
+      "requirement_ids": [
+        "CR001-R06",
+        "CR001-R10",
+        "CR001-R21"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "含长引文、古诗分行、注音及罕见字的材料",
+      "when": "导出并按约定条件真实渲染",
+      "then": "无裁切重叠/缺字；必要时分页而非无限缩小字号；诗句与标点关系不被破坏",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-008",
+      "change_id": "CR-001",
+      "title": "投影低分辨率与灰度信息仍可辨",
+      "requirement_ids": [
+        "CR001-R06",
+        "CR001-R21"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "对照关系同时使用颜色和文字/线型标记",
+      "when": "在目标或约定投影条件、灰度预览中查看",
+      "then": "关键信息不只靠颜色，文字层级、题目和材料可辨；尚未实测部分保留NOT_RUN",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-009",
+      "change_id": "CR-001",
+      "title": "先题后提示再答案",
+      "requirement_ids": [
+        "CR001-R07",
+        "CR001-R16"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "一个带示范与独立作答的任务",
+      "when": "按默认放映顺序前进",
+      "then": "独立题答案不提前出现；教师显式推进才展示批准提示/答案；示范页与独立题区分",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-010",
+      "change_id": "CR-001",
+      "title": "学生版内容不能靠隐藏教师文本实现",
+      "requirement_ids": [
+        "CR001-R07",
+        "CR001-R16"
+      ],
+      "gate": "G06",
+      "layer": "security",
+      "severity": "P0",
+      "given": "教师专用内容含可检出的测试哨兵，及未公开答案",
+      "when": "生成学生DOCX/PDF并检查正文、隐藏文本、批注、修订、属性、附件、替代文字等",
+      "then": "教师哨兵和未公开答案不被写入；可视图与底层载荷均核对",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-011",
+      "change_id": "CR-001",
+      "title": "允许有教学必要的已解示例",
+      "requirement_ids": [
+        "CR001-R07",
+        "CR001-R08",
+        "CR001-R16"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "讲义含一项已解示范和另一项独立任务",
+      "when": "执行学生版答案检查",
+      "then": "示范答案可保留，独立题答案不泄露；不因出现“参考”或“答案”字样一票否决",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-012",
+      "change_id": "CR-001",
+      "title": "书写空间跟随任务",
+      "requirement_ids": [
+        "CR001-R08",
+        "CR001-R10"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "任务含简答、比较表、修改段落",
+      "when": "生成学生讲义并实际打印/PDF预览",
+      "then": "不同任务有合理作答区；教师版填入答案不会挤掉学生版空白；无固定统一两行",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-013",
+      "change_id": "CR-001",
+      "title": "讲义不是PPT缩印",
+      "requirement_ids": [
+        "CR001-R08",
+        "CR001-R10"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "一组展示用幻灯片含图片和揭示页",
+      "when": "生成学生讲义",
+      "then": "学生页按学习任务重排，材料可读并有书写区；不使用每页多张PPT缩略图作为唯一讲义",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-014",
+      "change_id": "CR-001",
+      "title": "教师版开放答案范围与追问",
+      "requirement_ids": [
+        "CR001-R09"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "文学解释题存在两种有依据的合理解读",
+      "when": "生成教师讲解版",
+      "then": "同号任务具备依据、解释边界、典型误解和追问；不只给单一关键词清单",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-015",
+      "change_id": "CR-001",
+      "title": "跨页表格与材料定位",
+      "requirement_ids": [
+        "CR001-R10",
+        "CR001-R21"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "长表格跨页且问题关联前页原文",
+      "when": "导出DOCX/PDF并真实渲染",
+      "then": "必要表头重复，无孤立标题/被裁行；关联材料与题目可定位，学生无需猜读哪段",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-016",
+      "change_id": "CR-001",
+      "title": "无打印条件不增加抄写作业",
+      "requirement_ids": [
+        "CR001-R11",
+        "CR001-R12",
+        "CR001-R20"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "已确认无打印机，学生有教材和练习本",
+      "when": "准备并上课",
+      "then": "提供课本定位/练习本作答方式；电子讲义仍可用；没有自动增加大段抄题或课外任务",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-017",
+      "change_id": "CR-001",
+      "title": "同任务跨载体不重复计时",
+      "requirement_ids": [
+        "CR001-R04",
+        "CR001-R12"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "同一独立阅读任务同时呈现在PPT和讲义",
+      "when": "核算课堂与课外预算",
+      "then": "任务本身只计一次；真实的分发、阅读、切换、修订另按实际安排计入",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-018",
+      "change_id": "CR-001",
+      "title": "生平跨作品联结返回本篇",
+      "requirement_ids": [
+        "CR001-R13",
+        "CR001-R15"
+      ],
+      "gate": "G05",
+      "layer": "pedagogy",
+      "severity": "P1",
+      "given": "诗词联结样例，相关作品已学状态有已知和未知",
+      "when": "准备三类材料",
+      "then": "PPT少量核实线索；讲义比较和返回本篇作答；教师版保留依据/争议；不讲全生平或伪称未知作品已学",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-019",
+      "change_id": "CR-001",
+      "title": "文学、写作、信息阅读不是同一模板",
+      "requirement_ids": [
+        "CR001-R14"
+      ],
+      "gate": "G05",
+      "layer": "pedagogy",
+      "severity": "P1",
+      "given": "三个不同课型的自拟或获准资料",
+      "when": "分别交付材料包",
+      "then": "文学保留文本解释；写作有实际写改；信息阅读保留条件与来源；不是只换标题",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-020",
+      "change_id": "CR-001",
+      "title": "缺少来源时正确降级",
+      "requirement_ids": [
+        "CR001-R15",
+        "CR001-R24"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "候选拓展未核实，核心文本可用",
+      "when": "生成课堂包",
+      "then": "删除非必要不可靠拓展，或暂停受影响部分；不虚构引文/真题/教材页码",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-021",
+      "change_id": "CR-001",
+      "title": "删掉联结后全包更新",
+      "requirement_ids": [
+        "CR001-R13",
+        "CR001-R17"
+      ],
+      "gate": "G07",
+      "layer": "integration",
+      "severity": "P1",
+      "given": "现有材料包含联结和对应任务",
+      "when": "教师选择减少该联结",
+      "then": "新PPT、师生讲义、定位表、时间同步；旧版保留且标旧，不把删去内容转成作业",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-022",
+      "change_id": "CR-001",
+      "title": "修改题目与评分标准同步",
+      "requirement_ids": [
+        "CR001-R03",
+        "CR001-R04",
+        "CR001-R17"
+      ],
+      "gate": "G07",
+      "layer": "integration",
+      "severity": "P1",
+      "given": "已有同版PPT和师生讲义",
+      "when": "改变一道题意及合理答案范围",
+      "then": "新的题号引用/答案/教师追问同步；无旧答案串入新题，未受影响语义保持",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-023",
+      "change_id": "CR-001",
+      "title": "实际课时缩短保留核心学生行动",
+      "requirement_ids": [
+        "CR001-R12",
+        "CR001-R17"
+      ],
+      "gate": "G07",
+      "layer": "integration",
+      "severity": "P1",
+      "given": "计划时间需要缩短且有可选拓展",
+      "when": "应用一次课时变更",
+      "then": "先重排目标相关活动和负担，再更新全部材料；不是只改时长数字；不默认为学生新增课后任务",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-024",
+      "change_id": "CR-001",
+      "title": "导出被占用或磁盘满不破坏旧包",
+      "requirement_ids": [
+        "CR001-R18"
+      ],
+      "gate": "G06",
+      "layer": "integration",
+      "severity": "P1",
+      "given": "已有已验证旧包，新文件目标被占用或磁盘不足",
+      "when": "尝试导出新版",
+      "then": "不显示整包完成，不覆盖旧好文件；可图形化重试或另选位置，不要求命令行",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-025",
+      "change_id": "CR-001",
+      "title": "导出取消或中断不产生伪完整包",
+      "requirement_ids": [
+        "CR001-R18"
+      ],
+      "gate": "G06",
+      "layer": "integration",
+      "severity": "P1",
+      "given": "多文件导出进行到中途",
+      "when": "取消任务或注入进程中断并重启",
+      "then": "整包状态未完成，临时文件不当正式文件；旧版可恢复，新版可有界重试",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-026",
+      "change_id": "CR-001",
+      "title": "无网络无Office仍能展示已有计划",
+      "requirement_ids": [
+        "CR001-R19"
+      ],
+      "gate": "G06",
+      "layer": "desktop",
+      "severity": "P1",
+      "given": "目标Windows环境无Office/WPS且离线，有已有计划和本地素材",
+      "when": "打开应用课堂模式、查看讲义、导出现有计划",
+      "then": "功能不依赖服务/网址/Office安装；不假称已经测试外部PPTX编辑兼容",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-027",
+      "change_id": "CR-001",
+      "title": "一处选择不要求逐文件修改",
+      "requirement_ids": [
+        "CR001-R17",
+        "CR001-R20"
+      ],
+      "gate": "G07",
+      "layer": "desktop",
+      "severity": "P1",
+      "given": "一套已准备材料，教师希望增加写作时间",
+      "when": "只表达一次调整",
+      "then": "所有相关成品同步更新并有差异摘要；无需再次选择三套提示词、字体和模板",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-028",
+      "change_id": "CR-001",
+      "title": "打印入口不默认教师版或自动打印",
+      "requirement_ids": [
+        "CR001-R02",
+        "CR001-R20"
+      ],
+      "gate": "G06",
+      "layer": "desktop",
+      "severity": "P1",
+      "given": "材料包含师生版本，已选打印学生讲义",
+      "when": "打开打印操作",
+      "then": "默认学生PDF，纸张与页数可预览，经系统确认后打印；不自动提交打印任务",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-029",
+      "change_id": "CR-001",
+      "title": "实际文件与manifest一致",
+      "requirement_ids": [
+        "CR001-R03",
+        "CR001-R18",
+        "CR001-R21"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "已生成完整默认包",
+      "when": "检查文件、plan/revision、规格版本、哈希及映射",
+      "then": "五个应有文件全部可核，manifest不引用不存在文件；哈希来自真实字节而非计划内容代替",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-030",
+      "change_id": "CR-001",
+      "title": "编辑器兼容性逐环境声明",
+      "requirement_ids": [
+        "CR001-R06",
+        "CR001-R10",
+        "CR001-R21",
+        "CR001-R22"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "有一个已获准的PowerPoint或WPS具体版本环境",
+      "when": "打开、编辑、保存、放映PPTX并打开DOCX/PDF",
+      "then": "记录实际版本、字体和结果；其他编辑器不被顺带宣称通过；临时环境缺失不伪造截图",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-031",
+      "change_id": "CR-001",
+      "title": "外部修改不伪装同步",
+      "requirement_ids": [
+        "CR001-R17",
+        "CR001-R22"
+      ],
+      "gate": "G07",
+      "layer": "integration",
+      "severity": "P1",
+      "given": "教师在外部编辑器手改导出文件",
+      "when": "返回应用或重新导入文件",
+      "then": "提示外部副本不自动回写；按明确操作导入为新资源；不覆盖内部计划",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-032",
+      "change_id": "CR-001",
+      "title": "有明确教学理由的载体省略",
+      "requirement_ids": [
+        "CR001-R01",
+        "CR001-R11",
+        "CR001-R24"
+      ],
+      "gate": "G06",
+      "layer": "export",
+      "severity": "P1",
+      "given": "教师已确认本次无需PPT或某交付策略",
+      "when": "完成其他必要材料",
+      "then": "显示按确认策略完成并保留原因；未实现/失败不得自动变成省略；原默认包要求仍在",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-033",
+      "change_id": "CR-001",
+      "title": "旧合同兼容与新角色合同验证",
+      "requirement_ids": [
+        "CR001-R23"
+      ],
+      "gate": "G06",
+      "layer": "contract",
+      "severity": "P1",
+      "given": "已有严格V1.0 LessonPlan/ArtifactManifest示例",
+      "when": "接入CR-001合同",
+      "then": "旧例仍可按旧schema验证；新字段走版本化扩展或伴随合同，不关闭additionalProperties校验",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-034",
+      "change_id": "CR-001",
+      "title": "新增验收不得替代安装或原冻结用例",
+      "requirement_ids": [
+        "CR001-R23",
+        "CR001-R24"
+      ],
+      "gate": "G06",
+      "layer": "process",
+      "severity": "P1",
+      "given": "原G01阻塞与冻结验收仍存在",
+      "when": "归档CR-001并安排实现",
+      "then": "F编号、原案例不重编号或删改；新案例NOT_RUN，G06/G07有明确映射；不宣称G01已过",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-035",
+      "change_id": "CR-001",
+      "title": "安全公开样例不携带真实数据",
+      "requirement_ids": [
+        "CR001-R15",
+        "CR001-R16",
+        "CR001-R24"
+      ],
+      "gate": "G09",
+      "layer": "security",
+      "severity": "P0",
+      "given": "演示材料有自拟学生文本与来源许可记录",
+      "when": "准备样例或CI工件",
+      "then": "只使用虚构或授权脱敏数据，无真实学生资料/API密钥/未获许可教材全文；上传仍受单独授权",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-036",
+      "change_id": "CR-001",
+      "title": "文件存在或截图好看不等于教学有效",
+      "requirement_ids": [
+        "CR001-R14",
+        "CR001-R21"
+      ],
+      "gate": "G11",
+      "layer": "process",
+      "severity": "P1",
+      "given": "所有文件结构与布局检查通过",
+      "when": "生成交付总结",
+      "then": "只报告软件/材料验收状态；未获得真实学习证据时教学效果保持未知，不输出提分保证",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-037",
+      "change_id": "CR-001",
+      "title": "包与不同格式受众元数据不矛盾",
+      "requirement_ids": [
+        "CR001-R02",
+        "CR001-R03",
+        "CR001-R23"
+      ],
+      "gate": "G06",
+      "layer": "contract",
+      "severity": "P1",
+      "given": "五份文件分别有角色、格式和版本记录",
+      "when": "检查完成度与分发清单",
+      "then": "角色和格式一一合理，学生文件不被误标teacher或反之；同revision不同role不互相覆盖",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-038",
+      "change_id": "CR-001",
+      "title": "仅版式修改不改变教学语义",
+      "requirement_ids": [
+        "CR001-R03",
+        "CR001-R06",
+        "CR001-R17"
+      ],
+      "gate": "G07",
+      "layer": "integration",
+      "severity": "P1",
+      "given": "教师调整字号、纸张或主题但不改任务",
+      "when": "重建有关格式",
+      "then": "语义revision保持合理，呈现规格/渲染版本更新；文本证据/题意/评分不被独立重生成",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-039",
+      "change_id": "CR-001",
+      "title": "旧打印件无法同步必须提醒",
+      "requirement_ids": [
+        "CR001-R17",
+        "CR001-R22"
+      ],
+      "gate": "G07",
+      "layer": "desktop",
+      "severity": "P1",
+      "given": "新版本改变题号且旧学生讲义已打印",
+      "when": "完成新包并准备上课",
+      "then": "明确提示旧纸本需重印或采用一致旧版；不能声称纸本已自动更新，不强制丢掉唯一可用旧包",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLS-040",
+      "change_id": "CR-001",
+      "title": "学生材料预览不载入教师私密数据",
+      "requirement_ids": [
+        "CR001-R02",
+        "CR001-R16",
+        "CR001-R19"
+      ],
+      "gate": "G06",
+      "layer": "security",
+      "severity": "P0",
+      "given": "教师版包含测试用teacher-only字段，应用支持学生投屏视图",
+      "when": "切换预览受众和课堂模式",
+      "then": "学生视图所用内容模型和渲染载荷都不包含私密字段；不只CSS隐藏；离线仍遵守",
+      "evidence": [
+        "source_commit、plan_id/revision_id、交付规格版本、构建/渲染环境",
+        "实际操作、退出码或可复核观察",
+        "相关真实成品、哈希、结构/渲染/交互证据；不得只有文字声明"
+      ],
+      "environment": "按案例使用真实生成文件及相应可用环境；独立课堂试用另记录，不把软件通过当效果证明",
+      "status": "NOT_RUN"
+    }
+  ]
+}

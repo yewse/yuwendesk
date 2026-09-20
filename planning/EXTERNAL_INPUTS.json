@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0.0",
+  "items": [
+    {
+      "id": "EXT01",
+      "description": "获授权代码工作区与编码代理运行能力（Linux 终端/文件/Git，可安装开发依赖、构建、运行测试）",
+      "status": "PROVIDED",
+      "secret_value": null,
+      "owner_action": "已在 Cloud Agent 环境提供；G00/G01 已在此环境执行真实构建与本地运行",
+      "blocks": []
+    },
+    {
+      "id": "EXT02",
+      "description": "Win11 x64干净VM和桌面自动化能力",
+      "status": "NOT_PROVIDED",
+      "secret_value": null,
+      "owner_action": "提供或批准Windows执行环境",
+      "blocks": [
+        "G01安装门",
+        "G11"
+      ]
+    },
+    {
+      "id": "EXT03",
+      "description": "Grok API账户权限与密钥",
+      "status": "NOT_PROVIDED",
+      "secret_value": null,
+      "owner_action": "通过秘密管理/图形设置配置，禁止贴进仓库",
+      "blocks": [
+        "G04真实联网"
+      ]
+    },
+    {
+      "id": "EXT04",
+      "description": "开发、真实测试与运行费用上限",
+      "status": "NOT_PROVIDED",
+      "secret_value": null,
+      "owner_action": "确认明确金额与币种",
+      "blocks": [
+        "付费网络调用"
+      ]
+    },
+    {
+      "id": "EXT05",
+      "description": "合法现用教材、课标、评分资料",
+      "status": "NOT_PROVIDED",
+      "secret_value": null,
+      "owner_action": "提供合法文件或授权来源",
+      "blocks": [
+        "真实内容覆盖"
+      ]
+    },
+    {
+      "id": "EXT06",
+      "description": "真实课长、设备、进度",
+      "status": "NOT_PROVIDED",
+      "secret_value": null,
+      "owner_action": "一次确认或从现有材料核对",
+      "blocks": [
+        "本班精确适配"
+      ]
+    },
+    {
+      "id": "EXT07",
+      "description": "发布身份与签名服务",
+      "status": "NOT_PROVIDED",
+      "secret_value": null,
+      "owner_action": "由持有人控制凭据或签名服务",
+      "blocks": [
+        "正式签名发布"
+      ]
+    },
+    {
+      "id": "EXT08",
+      "description": "分发位置和可信更新地址",
+      "status": "NOT_PROVIDED",
+      "secret_value": null,
+      "owner_action": "仅在授权后配置，不生成虚假地址",
+      "blocks": [
+        "在线更新发布"
+      ]
+    },
+    {
+      "id": "EXT09",
+      "description": "实际教师审阅与教学使用证据",
+      "status": "NOT_PROVIDED",
+      "secret_value": null,
+      "owner_action": "正常教学中的必要判断，不要求日常填表",
+      "blocks": [
+        "教学适配/效果声明"
+      ]
+    }
+  ]
+}

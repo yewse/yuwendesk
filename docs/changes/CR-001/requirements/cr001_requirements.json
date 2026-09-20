@@ -1,0 +1,611 @@
+{
+  "change_id": "CR-001",
+  "version": "1.0.0",
+  "date": "2026-09-19",
+  "purpose": "课堂PPT与配套课堂讲义成品要求增补，不是应用功能实现",
+  "basis_commit": "cffcd59aa925032f0d51fcecb8167616e87bf01e",
+  "baseline_preserved": true,
+  "authorization_boundary": "用户已要求整理本次新增需求；未据此授权合并、公开上传、扩大预算、签名或真实资料处理",
+  "requirements": [
+    {
+      "id": "CR001-R01",
+      "title": "以可用课堂材料包为备课最终交付",
+      "priority": "MUST",
+      "rule": "对采用默认交付策略且资料充分的已确认课时，准备课堂演示PPTX、学生讲义DOCX/PDF、教师讲解版DOCX/PDF，共三类成品五个文件；支持在应用内展示。不得用教案、提纲、截图、散题或提示词代替。教案及学校提交格式继续由同源内容生成，不取消原要求。",
+      "observable_result": "用户一次操作即可获取同版材料；缺少应有成品时不能标记整包已完成。",
+      "baseline_requirement_ids": [
+        "R041",
+        "R042"
+      ],
+      "modules": [
+        "M08",
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-001",
+        "CLS-002",
+        "CLS-032"
+      ]
+    },
+    {
+      "id": "CR001-R02",
+      "title": "三类成品按受众分工，避免教师学生混发",
+      "priority": "MUST",
+      "rule": "课堂PPT服务共同呈现；学生讲义服务个人阅读、思考、表达与修订；教师讲解版服务讲解、追问、答案范围和调整。教师材料与学生分发目录、选择入口和文件标记分开。",
+      "observable_result": "“导出学生用材料/打印学生讲义”只选学生版；整包只按教师备课用途交付，不自动发送。",
+      "baseline_requirement_ids": [
+        "R005",
+        "R042",
+        "R043"
+      ],
+      "modules": [
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-001",
+        "CLS-003",
+        "CLS-028",
+        "CLS-037",
+        "CLS-040"
+      ]
+    },
+    {
+      "id": "CR001-R03",
+      "title": "同一教学计划版本与单独呈现规格",
+      "priority": "MUST",
+      "rule": "全部输出绑定同一LessonPlan语义版本。呈现规格允许分页、布局、压缩提示及角色过滤，但不新编目标、题意、事实或评分。需要改变语义时回到计划层生成新版本，禁止分别向模型索要三份独立正文。",
+      "observable_result": "目标、原文、题意、答案与来源没有跨文件漂移；同源不是逐字重复。",
+      "baseline_requirement_ids": [
+        "R031",
+        "R042",
+        "R044",
+        "R045"
+      ],
+      "modules": [
+        "M06",
+        "M07",
+        "M08",
+        "M09"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-004",
+        "CLS-022",
+        "CLS-029",
+        "CLS-037",
+        "CLS-038"
+      ]
+    },
+    {
+      "id": "CR001-R04",
+      "title": "任务与材料跨载体定位",
+      "priority": "MUST",
+      "rule": "保持任务、活动、文本锚点和联结稳定ID，形成PPT页/阶段—学生讲义任务号—教师讲解位置的关联。映射允许一对多、某载体不出现但有理由；显示序号可重排，稳定ID不复用。",
+      "observable_result": "调整顺序后教师能准确找到对应任务，必需的核心任务无遗漏；不强制每题都重复投屏。",
+      "baseline_requirement_ids": [
+        "R042",
+        "R044"
+      ],
+      "modules": [
+        "M07",
+        "M08",
+        "M09"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-004",
+        "CLS-005",
+        "CLS-017",
+        "CLS-022"
+      ]
+    },
+    {
+      "id": "CR001-R05",
+      "title": "课堂PPT不是教案搬运",
+      "priority": "MUST",
+      "rule": "每页有明确课堂作用；正文、任务、比较表和必要结构图为可编辑对象；合理使用原始图片，不允许整页截图冒充可编辑课件。按课堂节奏展示，不设每课固定页数或每页固定时间。",
+      "observable_result": "实际打开PPTX可以编辑关键文字；投屏能看清当前任务，未出现整篇教案密集堆叠。",
+      "baseline_requirement_ids": [
+        "R027",
+        "R029",
+        "R042"
+      ],
+      "modules": [
+        "M06",
+        "M08",
+        "M09"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-002",
+        "CLS-006"
+      ]
+    },
+    {
+      "id": "CR001-R06",
+      "title": "PPT可读与中文排版",
+      "priority": "MUST",
+      "rule": "默认16:9、高对比、充足留白，关键区别不能只靠颜色。中文诗句、标点、注释及表格避免裁切重叠。模板可采用标题32pt、正文28pt作为起始参数，不能当通用研究阈值；溢出先拆分或重排，不偷偷缩小关键文字。",
+      "observable_result": "约定投影/缩放条件的实图验证通过；字体替代和缺字检查可追溯，不额外分发未获许可字体。",
+      "baseline_requirement_ids": [
+        "R037",
+        "R042",
+        "R050"
+      ],
+      "modules": [
+        "M08",
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-007",
+        "CLS-008",
+        "CLS-030",
+        "CLS-038"
+      ]
+    },
+    {
+      "id": "CR001-R07",
+      "title": "答案揭示与保密边界分离",
+      "priority": "MUST",
+      "rule": "独立任务先呈现题目，再由教师显式推进提示与答案；无需依赖复杂动画。课堂PPT可能包含后置答案，只限课堂展示用途，不称其编辑态保密。学生讲义不包含未获准揭示的独立题答案。",
+      "observable_result": "默认放映顺序不会提前显示答案；对照示例可以含答案，但不能泄露独立任务。",
+      "baseline_requirement_ids": [
+        "R031",
+        "R032",
+        "R034",
+        "R043"
+      ],
+      "modules": [
+        "M07",
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-009",
+        "CLS-010",
+        "CLS-011"
+      ]
+    },
+    {
+      "id": "CR001-R08",
+      "title": "学生讲义有真实学习功能",
+      "priority": "MUST",
+      "rule": "按课型选取必要材料或课本定位、核心问题、比较记录、书写留白、修改位置和简要回顾。不是缩印PPT，也不是完整教师讲稿。保留必要语言积累和已教示范，不把所有内容都挖空。",
+      "observable_result": "学生拿到讲义知道在哪里读、想什么、写哪里；任务、空间和预计课堂学习相匹配。",
+      "baseline_requirement_ids": [
+        "R027",
+        "R029",
+        "R042"
+      ],
+      "modules": [
+        "M06",
+        "M07",
+        "M08",
+        "M09"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-011",
+        "CLS-012",
+        "CLS-013"
+      ]
+    },
+    {
+      "id": "CR001-R09",
+      "title": "教师讲解版与学生讲义逐项对应",
+      "priority": "MUST",
+      "rule": "教师版包含同号学生任务、PPT定位、讲解要点、合理答案范围、典型误解、追问、必要支持及时间取舍。背景、事实与解释分开。默认提供可扫读的讲课说明，而非每次输出冗长逐字稿；不强制照稿授课。",
+      "observable_result": "不要求老师再对照多个文件手工补答案；开放题不因不同措辞被机械判错。",
+      "baseline_requirement_ids": [
+        "R014",
+        "R032",
+        "R041",
+        "R043"
+      ],
+      "modules": [
+        "M03",
+        "M07",
+        "M08",
+        "M09"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-005",
+        "CLS-014"
+      ]
+    },
+    {
+      "id": "CR001-R10",
+      "title": "讲义纸面可用与书写空间",
+      "priority": "MUST",
+      "rule": "默认A4、黑白可读，正文可从12pt开始校准；按任务给出合理空白、表格或修改区。允许按已确认习惯调整纸张及字号，不限制每课必须两页。标题、材料和对应任务不能无解释分离。",
+      "observable_result": "打印/PDF真实分页不裁切，表头必要时续页重复，学生作答区不因自动压页消失。",
+      "baseline_requirement_ids": [
+        "R037",
+        "R042"
+      ],
+      "modules": [
+        "M08",
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-007",
+        "CLS-012",
+        "CLS-013",
+        "CLS-015",
+        "CLS-030"
+      ]
+    },
+    {
+      "id": "CR001-R11",
+      "title": "少纸张与无打印模式不减少学习质量",
+      "priority": "MUST",
+      "rule": "沿用“能用课本就不重复印全文”。可用教材定位加必要任务形成精简讲义；设置无打印模式后，可转为课本/练习本任务说明，不自动增加抄题负担。默认仍能生成电子讲义，不等于必须打印。",
+      "observable_result": "无打印机时仍能上课；省纸不通过小字、少作答区或大量抄写实现。",
+      "baseline_requirement_ids": [
+        "R037",
+        "R039",
+        "R042"
+      ],
+      "modules": [
+        "M08",
+        "M09"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-016",
+        "CLS-032"
+      ]
+    },
+    {
+      "id": "CR001-R12",
+      "title": "任务跨媒介只计算一次，新增负担单独核算",
+      "priority": "MUST",
+      "rule": "同一任务在PPT和讲义中的展示不产生两份作业或双倍时间；另外发生的阅读、分发、查找、誊抄、切换和修改时间应计入。作业及复习必做任务沿用原总预算。",
+      "observable_result": "增加讲义不暗中增加任务量；删减或新增任务后时间与课外清单同步。",
+      "baseline_requirement_ids": [
+        "R037",
+        "R038",
+        "R039",
+        "R060"
+      ],
+      "modules": [
+        "M08",
+        "M09",
+        "M12"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-016",
+        "CLS-017",
+        "CLS-023"
+      ]
+    },
+    {
+      "id": "CR001-R13",
+      "title": "高效联结落在三类材料的不同职责",
+      "priority": "MUST",
+      "rule": "同作者、同主题差异、意象语境、文体比较和读写迁移均可使用。教师版可有充分的核实背景，PPT只展示必要线索，学生版提供比较与返回本篇的动作。不讲全生平来代替读文本。",
+      "observable_result": "联结能够支持当前问题，学生有独立解释机会；未学篇目不是自动禁止，也不能冒称已学。",
+      "baseline_requirement_ids": [
+        "R021",
+        "R022",
+        "R023",
+        "R024"
+      ],
+      "modules": [
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M09"
+      ],
+      "primary_gate": "G05",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-018",
+        "CLS-021"
+      ]
+    },
+    {
+      "id": "CR001-R14",
+      "title": "不同课型保留语文学科差异",
+      "priority": "MUST",
+      "rule": "文学、诗词、文言、信息阅读、写作、整本书与口语任务采用相应版式和表现，不统一套人物分析。写作保留构思/实际写/修改；文言关注字句；信息文本保留条件与来源；整本书不被梗概测验替代。",
+      "observable_result": "至少三种代表课型交付不同且适配的材料，不仅替换标题。",
+      "baseline_requirement_ids": [
+        "R012",
+        "R029",
+        "R030",
+        "R033"
+      ],
+      "modules": [
+        "M03",
+        "M06",
+        "M07",
+        "M09"
+      ],
+      "primary_gate": "G05",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-019",
+        "CLS-036"
+      ]
+    },
+    {
+      "id": "CR001-R15",
+      "title": "原文、引文与来源可核查",
+      "priority": "MUST",
+      "rule": "图文和对照材料有来源或自拟标识，教材定位以实际版本为准。学生页可简洁署源，完整锚点在教师版/内部清单可查。生成图片只能作注明的教学示意，不当作历史照片或文本证据。",
+      "observable_result": "错误原文、假页码、虚构真题不进入成品；图像和来源不会成为运行时联网依赖。",
+      "baseline_requirement_ids": [
+        "R011",
+        "R013",
+        "R015",
+        "R046"
+      ],
+      "modules": [
+        "M02",
+        "M03",
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-018",
+        "CLS-020",
+        "CLS-035"
+      ]
+    },
+    {
+      "id": "CR001-R16",
+      "title": "学生材料采用受众过滤而非隐藏",
+      "priority": "MUST",
+      "rule": "学生DOCX/PDF从允许内容生成，教师答案、私人批注、内部评估、未脱敏学生信息不写入其正文、批注、修订、备注、隐藏文本、附件、属性或替代文字。投屏材料不含私人备课信息；隐藏/白字/遮挡不是隔离。",
+      "observable_result": "结构检查+渲染检查发现教师专用哨兵字符串时阻断学生包；明确允许的已教示例答案不误拦。",
+      "baseline_requirement_ids": [
+        "R005",
+        "R020",
+        "R043",
+        "R046"
+      ],
+      "modules": [
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-003",
+        "CLS-009",
+        "CLS-010",
+        "CLS-011",
+        "CLS-035",
+        "CLS-040"
+      ]
+    },
+    {
+      "id": "CR001-R17",
+      "title": "一处修改联动重建与旧版保护",
+      "priority": "MUST",
+      "rule": "修改题目、答案、顺序、材料、课时、联结或支持等级后，同步失效相关成品并按新版本重建；保持用户明确锁定的编辑，不擅自改回AI偏好；保留旧版及差异。",
+      "observable_result": "新讲义不能配旧PPT；用户只表达一次修改，不逐个文件修订。",
+      "baseline_requirement_ids": [
+        "R044",
+        "R045",
+        "R048"
+      ],
+      "modules": [
+        "M08",
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G07",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-021",
+        "CLS-022",
+        "CLS-023",
+        "CLS-027",
+        "CLS-031",
+        "CLS-038",
+        "CLS-039"
+      ]
+    },
+    {
+      "id": "CR001-R18",
+      "title": "整包完成、部分失败与原子交付",
+      "priority": "MUST",
+      "rule": "临时生成、校验后再标记文件就绪；按包维护所需角色和格式的完成情况。文件被占用、磁盘满、取消、进程中断不能覆盖上一套可靠文件，也不能把半套新文件称为完整成品。",
+      "observable_result": "出现失败时能保留旧包并只重试受影响导出；缺失项不能以静默省略蒙混过关。",
+      "baseline_requirement_ids": [
+        "R042",
+        "R045",
+        "R046"
+      ],
+      "modules": [
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-024",
+        "CLS-025",
+        "CLS-029"
+      ]
+    },
+    {
+      "id": "CR001-R19",
+      "title": "离线与无Office的课堂可用性",
+      "priority": "MUST",
+      "rule": "已有计划和许可本地素材可以离线查看、展示和导出；内置课堂模式不要求Office/WPS或网页地址。它按同源计划展示，不冒充通用PPT文件播放器。外部PPTX/DOCX编辑仍需相应编辑器。",
+      "observable_result": "无网络、无Office/WPS的目标环境中能显示本课并导出现有内容；不自动下载缺失运行环境。",
+      "baseline_requirement_ids": [
+        "R042",
+        "R049"
+      ],
+      "modules": [
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-026",
+        "CLS-040"
+      ]
+    },
+    {
+      "id": "CR001-R20",
+      "title": "少量选择、默认预览与打印防误操作",
+      "priority": "MUST",
+      "rule": "默认界面提供“课堂PPT／学生讲义／教师讲解版”预览标签和“一键准备整套”；按已确认版式生成，不每次询问字体页数。单独的学生打印入口默认仅学生PDF，仍通过系统打印确认，不后台自动打印或外发。",
+      "observable_result": "教师不编写提示词、不拼接文件、不误印答案；异常只提出会改变交付的关键选择。",
+      "baseline_requirement_ids": [
+        "R003",
+        "R041",
+        "R042",
+        "R043"
+      ],
+      "modules": [
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-003",
+        "CLS-016",
+        "CLS-027",
+        "CLS-028"
+      ]
+    },
+    {
+      "id": "CR001-R21",
+      "title": "成品级质量检查与证据边界",
+      "priority": "MUST",
+      "rule": "交付验收同时检查文件结构、内容/映射、受众隔离和真实渲染。截图、字号检测、模型自评或XML合法都不能单独证明课堂可读。导出检查通过仅代表材料工程通过，不代表学生提分。",
+      "observable_result": "记录构建/计划/渲染器/编辑器/字体环境与实际文件哈希；没运行的兼容性项目明确NOT_RUN。",
+      "baseline_requirement_ids": [
+        "R046",
+        "R047",
+        "R049",
+        "R050"
+      ],
+      "modules": [
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-002",
+        "CLS-007",
+        "CLS-008",
+        "CLS-015",
+        "CLS-029",
+        "CLS-030",
+        "CLS-036"
+      ]
+    },
+    {
+      "id": "CR001-R22",
+      "title": "兼容性、外部编辑与历史文件边界",
+      "priority": "MUST",
+      "rule": "针对实际支持的PowerPoint/WPS版本分别记录打开、编辑、保存和放映结果，不承诺所有版本像素一致。外部修改不自动回写内部计划；重新导入视为新资源/明确的导入操作，不静默覆盖内部源。已打印旧讲义不能远程更新。",
+      "observable_result": "修改后提示电子旧版失效；外部文件手改不被假称同步，也不要求用户安装开发工具。",
+      "baseline_requirement_ids": [
+        "R044",
+        "R045",
+        "R050"
+      ],
+      "modules": [
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G07",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-030",
+        "CLS-031",
+        "CLS-039"
+      ]
+    },
+    {
+      "id": "CR001-R23",
+      "title": "合同扩展与冻结基线兼容",
+      "priority": "MUST",
+      "rule": "追加独立CR-001命名空间和受众/角色/映射/完成度合同；不重新编号R001—R060、F01—F08或改写冻结验收。旧LessonPlan/ArtifactManifest为additionalProperties=false，不能静默塞入新字段；通过版本化扩展或独立伴随合同并声明迁移。",
+      "observable_result": "旧夹具仍按旧合同校验，新增合同单独验证与映射；“需求已归档”不显示“功能已实现”。",
+      "baseline_requirement_ids": [
+        "R045",
+        "R049",
+        "R059"
+      ],
+      "modules": [
+        "M09",
+        "M10",
+        "M12"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-033",
+        "CLS-034",
+        "CLS-037"
+      ]
+    },
+    {
+      "id": "CR001-R24",
+      "title": "交付范围例外与阶段门",
+      "priority": "MUST",
+      "rule": "默认三类五文件；不需要某载体时需已有策略/教师明确取舍与原因。未实现、生成失败、未运行测试不是省略理由。增补实现落G05—G07，并在G09/G11回归；当前G00/G01仅登记需求，不因此扩大安装骨架，也不放宽原阻塞。",
+      "observable_result": "完整默认包、按确认策略交付、部分完成、受阻分开显示；不擅自触发公开上传、签名、费用或合并。",
+      "baseline_requirement_ids": [
+        "R001",
+        "R003",
+        "R042",
+        "R047",
+        "R060"
+      ],
+      "modules": [
+        "M01",
+        "M08",
+        "M09",
+        "M10"
+      ],
+      "primary_gate": "G06",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "acceptance_case_ids": [
+        "CLS-001",
+        "CLS-020",
+        "CLS-032",
+        "CLS-034",
+        "CLS-035"
+      ]
+    }
+  ]
+}
