@@ -168,7 +168,7 @@
 
 - 已确认四包设计：采用与实际授课分离、可选结构化 Observation、确定性测量门后模型辅助归因、最小纠正与偏好/效果双轨撤回。
 - 首版不保存学生原始作业正文；Observation 保持 `cloud_allowed=false`。真实模型只接收独立构造的去身份化白名单上下文，并要求受保护密钥、联网授权、预算和逐次派发许可。
-- 设计规格：`docs/superpowers/specs/2026-09-20-g08-feedback-attribution-design.md`。G08-T01–T04 尚未实现或验收，冻结用例仍为 NOT_RUN；真实 API 与教学专业复核保持 BLOCKED_EXTERNAL。
+- 设计规格：`docs/superpowers/specs/2026-09-20-g08-feedback-attribution-design.md`；实施计划：`docs/superpowers/plans/2026-09-20-g08-feedback-attribution.md`。G08-T01–T04 尚未实现或验收，冻结用例仍为 NOT_RUN；真实 API 与教学专业复核保持 BLOCKED_EXTERNAL。
 
 ## G09–G11 — NOT_STARTED
 
@@ -176,4 +176,4 @@
 
 ## 下一步
 
-见 `HANDOFF.md`。G08 设计已确认，下一步为写实施计划并按 G08-T01–T04 内联执行。扫描件 OCR 未接入则继续阻塞。外部门保留：开发态 Electron 二进制下载/真实窗口走查、G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。
+见 `HANDOFF.md`。G08 设计与实施计划已确认，下一步按 G08-T01–T04 内联执行。扫描件 OCR 未接入则继续阻塞。外部门保留：开发态 Electron 二进制下载/真实窗口走查、G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。
