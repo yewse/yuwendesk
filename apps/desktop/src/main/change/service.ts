@@ -122,6 +122,8 @@ function parseStoredResult(value: string): LessonChangeApplyResult {
     typeof parsed.reviewReportId !== 'string' ||
     typeof parsed.semanticRevisionChanged !== 'boolean' ||
     typeof parsed.presentationSpecHash !== 'string' ||
+    typeof parsed.reviewReport !== 'object' ||
+    parsed.reviewReport === null ||
     !Array.isArray(parsed.files)
   ) {
     throw new Error('invalid_stored_lesson_change_result');
@@ -255,6 +257,7 @@ export class LessonChangeService {
         reviewReportId: report.report_id,
         semanticRevisionChanged: preview.semanticRevisionChanged,
         presentationSpecHash: preview.presentationSpecHash,
+        reviewReport: report,
         files: artifacts.map((artifact) => ({
           role: artifact.role,
           format: artifact.format,

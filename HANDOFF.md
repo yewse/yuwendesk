@@ -17,8 +17,9 @@
 - **G04 模型闭环已交付（测试替身 + DeepSeek 真实协议离线）**：可配置服务商、提示词工程、上下文边界、预算/缓存/取消/重试、保护收尾。真实云 API 备课质量 BLOCKED（需授权账户与联网）。
 - **G05 完整 LessonPlan 已交付**：按 `contracts/LessonPlan.schema.json` 组建并校验；`lesson_outline` 仅为中间产物。
 - **G06 三类五文件已交付**：课堂 PPTX + 学生 DOCX/PDF + 教师 DOCX/PDF；角色隔离、版本水印、内容来源身份。真实 Office/LibreOffice 保真未验证。
-- **G07 四包设计已完成第 1–2 包**：T01 确定性审查/严格 `ReviewReport`/持久化，T02 受控变更/依赖失效/严格 `ChangeProposal`/五文件暂存哈希复核/SQLite 原子接纳/持久幂等均已落地。旧修订与旧包保留，纯呈现变化不创建语义修订。模型语义审查/教师专业复核/Office-WPS 保真仍 NOT_RUN 或 BLOCKED_EXTERNAL。
-- 仓库单测 **248 passed / 1 skipped（249 total，27 files）**（以 `PROGRESS.md` 最近实测为准）；主/渲染 typecheck、lint、`verify:contracts`、renderer/main build 通过。既有跳过项未改为通过。未签名 Windows EXE 见 `reports/WINDOWS_BUILD.md`。
+- **G07 四包设计已完成第 1–3 包**：T01 确定性审查/严格 `ReviewReport`/持久化，T02 受控变更/依赖失效/严格 `ChangeProposal`/五文件暂存哈希复核/SQLite 原子接纳/持久幂等，T03 单方案最少选择 UI/差异/历史/纸本提醒均已落地。旧修订与旧包保留，纯呈现变化不创建语义修订。模型语义审查/教师专业复核/Office-WPS 保真仍 NOT_RUN 或 BLOCKED_EXTERNAL。
+- 仓库单测 **251 passed / 1 skipped（252 total，28 files）**（以 `PROGRESS.md` 最近实测为准）；主/渲染 typecheck、lint、`verify:contracts`、renderer/main build 通过。renderer 无远程 URL/localhost 依赖。既有跳过项未改为通过。未签名 Windows EXE 见 `reports/WINDOWS_BUILD.md`。
+- 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
 
@@ -61,7 +62,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 
 ## 下一个有界工作包建议
 
-1. **G07-T03（四包中的第 3 包）**：在“我的课程”接入单一方案、最少选择、差异摘要、一次确认、历史与纸本重印提醒。按 `docs/superpowers/plans/2026-09-20-g07-review-change.md` 继续，不重做 G07-T01/T02。
+1. **G07-T04（四包中的第 4 包）**：故障注入、重试截止、整包失败恢复、替换旧的吞错 `materials.generate` 路径并形成最终一致性证据。按 `docs/superpowers/plans/2026-09-20-g07-review-change.md` 继续，不重做 G07-T01–T03。
 2. 获得授权云 API 后关闭 G04 真实备课质量门（当前仅测试替身 + DeepSeek 离线协议；不伪造实网成功）。
 3. 获得 Windows VM 后关闭 G01-T04 与 Windows 目标环境验收（安装→启动→保存→重启→保留数据 + SQLite/凭据/导出在真实 Windows 的行为）。
 

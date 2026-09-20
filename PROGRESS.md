@@ -145,7 +145,7 @@
 
 - 任务/方法示例/**课时计划合同** `lesson_outline.v1`（objectives/steps[stage,minutes,activity,citations]/notes），受同一输出合同校验；资料页“生成课时计划”按获准片段生成，**模拟结果明确标注“测试替身（非真实模型）”**，不冒充真实备课；教师不写提示词。无授权不调用真实 API。
 
-## G07 审查与一处修改 — IN_PROGRESS（四包设计，第 1–2 包完成）
+## G07 审查与一处修改 — IN_PROGRESS（四包设计，第 1–3 包完成）
 
 - [x] **G07-T01 确定性审查层与严格 ReviewReport**：新增 `reviewLessonPlan`，将现有结构/引用/时间/来源核验问题映射到明确返回模块；冲突来源阻断发布，待核验来源保留教师审查；`is_effectiveness_proof` 固定为 `false`，不把软件就绪冒充教学有效。运行时校验拒绝缺字段、多余字段、非法枚举/类型与效果证明声明。
 - [x] **审查持久化与窄 IPC**：SQLite migration v9 一次建齐 G07 的 `review_report/change_proposal/material_bundle/lesson_change_idempotency` 表及 `material_artifact.bundle_id`；审查报告保存、跨重启读取前重新严格校验。`review.run` 支持指定修订，Schema 门拒绝多余字段，缺修订返回 `SOURCE_MISSING`，保护态返回 `DATABASE_LOCKED`。
@@ -156,7 +156,10 @@
 - [x] **窄 IPC**：新增 `change.preview` / `change.apply` / `change.history`；预加载仅暴露命名方法。`change.apply` 强制幂等键；嵌套 change 多余字段也拒绝；版本冲突/键复用/来源缺失/审查阻断/存储保护/文件写入分别映射到现有错误码，不暴露任意文件系统能力。
 - **本包实测（Node 22.23.2）**：`change.test.ts` 6 + `g07-change-sqlite.test.ts` 5 定向通过；全量 Vitest **248 passed / 1 skipped（249 total，27 files）**；主/渲染 TypeScript、ESLint、`verify:contracts`、Vite renderer build 与 main/preload build 均退出 0。真实临时目录验证五文件存在且哈希一致。JOB-002/003/006 与 CLS-021/022/023/038 获得机器可执行覆盖，但冻结验收状态未擅自改为 PASS。
 - **未执行/外部门**：真实 Office/WPS 打开与视觉保真、真实模型复核、Windows 目标运行仍为 `NOT_RUN` / `BLOCKED_EXTERNAL`；正式签名与真实 API 门不变。
-- [ ] **下一包 G07-T03**：在“我的课程”接入单一方案、最少选择、差异摘要、一次确认、历史与纸本重印提醒。
+- [x] **G07-T03 单方案最少选择 UI（代码与自动化范围）**：“我的课程”每次仅激活一种受控修改；显示一份提案、受影响模块/三类五文件和字段级差异；一次确认复用同一稳定幂等键，并以同步在途锁防双击生成新键。成功显示语义修订是否变化、五文件名/完整哈希、ReviewReport disposition/未执行检查、旧修订仍可用与历史；失败保留当前清单并显示“旧版未受影响”及 next_action。题意/答案/联读等变化触发固定纸本重印提醒，纯版式不触发。页面不显示“已授课”或效果通过声明。
+- **本包实测（Node 22.23.2）**：`lessonChangeView.test.ts` 3 + `g07-change-sqlite.test.ts` 5 定向通过；全量 Vitest **251 passed / 1 skipped（252 total，28 files）**；主/渲染 TypeScript、ESLint、Vite renderer build、main/preload build、`verify:contracts` 均退出 0；renderer 源码与构建产物远程 URL/localhost 扫描无匹配。
+- **开发态 Electron 走查：BLOCKED_EXTERNAL**。当前依赖安装为 `--ignore-scripts`，仓库无 Electron 二进制/既有 `.exe`；尝试补齐锁定 Electron 44.4.3 时下载约三分钟无输出且未产生文件，已终止。未伪造启动、点击、截图或 Win11/Office 证据；CLS-027/031/039 保持 NOT_RUN。
+- [ ] **下一包 G07-T04**：故障注入、重试截止、整包失败恢复、替换会吞错的旧 `materials.generate` 路径与最终一致性证据。
 
 ## G08–G11 — NOT_STARTED
 
@@ -164,4 +167,4 @@
 
 ## 下一步
 
-见 `HANDOFF.md`。继续 G07-T03 最少选择 UI 与差异/历史提示；扫描件 OCR 未接入则继续阻塞。外部门保留：G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课质量、公开上传授权。
+见 `HANDOFF.md`。继续 G07-T04 故障注入与整包失败恢复；扫描件 OCR 未接入则继续阻塞。外部门保留：开发态 Electron 二进制下载/真实窗口走查、G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课质量、公开上传授权。

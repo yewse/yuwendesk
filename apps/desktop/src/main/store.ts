@@ -272,6 +272,7 @@ export interface LessonChangeApplyResult {
   reviewReportId: string;
   semanticRevisionChanged: boolean;
   presentationSpecHash: string;
+  reviewReport: ReviewReport;
   files: Array<{
     role: string;
     format: string;

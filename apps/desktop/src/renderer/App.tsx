@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BootstrapData, HealthData, SourceHitDTO, SourceListItemDTO, SourceReadDTO, SourceVersionDTO } from '../shared/ipc';
+import type { ChangePreview, LessonChange } from '../main/change/types';
+import type { LessonPlan } from '../main/lesson/types';
+import type { LessonChangeApplyResult } from '../main/store';
 import { DraftController, DraftSnapshot, getDraftController } from './draftController';
+import {
+  buildChangeSummary,
+  needsPrintedCopyWarning,
+  PRINTED_COPY_WARNING,
+  type LessonChangeViewDiff
+} from './lessonChangeView';
 
 type NavKey = 'prepare' | 'courses' | 'resources' | 'settings';
 
@@ -229,10 +238,57 @@ interface ArtifactItem {
   sha256: string;
   byteSize: number;
 }
+interface LessonHistory {
+  revisions: Array<{ revisionId: string; previousRevisionId: string | null; title: string; createdAt: string }>;
+  proposals: Array<{ changeId: string; changeKind: LessonChange['kind']; status: string; createdAt: string }>;
+  bundles: Array<{ bundleId: string; revisionId: string; presentationSpecHash: string; createdAt: string }>;
+}
+
+const AFFECTED_OUTPUTS = ['课堂PPT', '学生讲义DOCX/PDF', '教师讲解版DOCX/PDF'];
+
+function changeViewDiff(preview: ChangePreview): LessonChangeViewDiff[] {
+  return preview.diff.map((entry) => {
+    const parts = entry.path.split('.');
+    const objectId = parts.length > 1 ? parts[1] : parts[0];
+    let field = parts.at(-1) ?? entry.path;
+    if (entry.path.startsWith('tasks.')) field = 'prompt';
+    else if (entry.path.startsWith('rubrics.')) field = 'acceptable_variants';
+    else if (entry.path.startsWith('links.')) field = 'link_removed';
+    else if (entry.path.startsWith('activities.')) field = 'duration';
+    else if (entry.path === 'presentation_spec') field = 'fontScale';
+    return { objectId, field, before: entry.before, after: entry.after };
+  });
+}
+
+function displayValue(value: unknown): string {
+  if (value === null) return '无';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  return JSON.stringify(value);
+}
+
 function CoursesPage(): JSX.Element {
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [manifest, setManifest] = useState<{ planId: string; revisionId: string; contentOrigin: string; versionStamp: string; files: ArtifactItem[] } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<LessonPlan | null>(null);
+  const [history, setHistory] = useState<LessonHistory | null>(null);
+  const [changeKind, setChangeKind] = useState<LessonChange['kind']>('change_duration');
+  const [durationMinutes, setDurationMinutes] = useState('45');
+  const [activityId, setActivityId] = useState('');
+  const [linkId, setLinkId] = useState('');
+  const [taskId, setTaskId] = useState('');
+  const [rubricId, setRubricId] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [variants, setVariants] = useState('');
+  const [fontScale, setFontScale] = useState('1');
+  const [paperSize, setPaperSize] = useState<'A4' | 'Letter'>('A4');
+  const [theme, setTheme] = useState<'light' | 'high_contrast'>('light');
+  const [previewed, setPreviewed] = useState<{ preview: ChangePreview; change: LessonChange } | null>(null);
+  const [applyResult, setApplyResult] = useState<LessonChangeApplyResult | null>(null);
+  const [changeMessage, setChangeMessage] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const applyKeyRef = useRef<string | null>(null);
+  const applyingRef = useRef(false);
 
   async function reload(): Promise<void> {
     const r = await window.yuwen.lessonList();
@@ -253,10 +309,116 @@ function CoursesPage(): JSX.Element {
     else setMsg(`生成失败：${r.error.message_zh}`);
   }
 
+  function invalidatePreview(): void {
+    setPreviewed(null);
+    setApplyResult(null);
+    setChangeMessage(null);
+    applyKeyRef.current = null;
+  }
+
+  async function loadHistory(planId: string): Promise<void> {
+    const response = await window.yuwen.changeHistory(planId);
+    if (response.ok) setHistory(response.data as LessonHistory);
+  }
+
+  async function openPlan(planId: string): Promise<void> {
+    const response = await window.yuwen.lessonGet(planId);
+    if (!response.ok) {
+      setChangeMessage(`读取失败：${response.error.message_zh}`);
+      return;
+    }
+    const plan = response.data.plan as LessonPlan;
+    setSelectedPlan(plan);
+    setDurationMinutes(String(Math.round(plan.declared_duration_sec / 60)));
+    const studentActivity = plan.activities.find((activity) => activity.actor === 'student');
+    setActivityId(studentActivity?.activity_id ?? '');
+    setLinkId(plan.links.find((link) => link.decision === 'include')?.link_id ?? '');
+    const firstTask = plan.tasks[0];
+    setTaskId(firstTask?.task_id ?? '');
+    setRubricId(firstTask?.rubric_id ?? plan.rubrics[0]?.rubric_id ?? '');
+    setPrompt(firstTask?.prompt ?? '');
+    const rubric = plan.rubrics.find((item) => item.rubric_id === firstTask?.rubric_id);
+    setVariants(rubric?.criteria[0]?.acceptable_variants.join('；') ?? '');
+    invalidatePreview();
+    await loadHistory(planId);
+  }
+
+  function controlledChange(): LessonChange | null {
+    if (!selectedPlan) return null;
+    if (changeKind === 'change_duration') {
+      return { kind: changeKind, durationSec: Math.round(Number(durationMinutes) * 60) };
+    }
+    if (changeKind === 'increase_independent_time') {
+      return activityId ? { kind: changeKind, activityId, addedSec: 300 } : null;
+    }
+    if (changeKind === 'remove_link') return linkId ? { kind: changeKind, linkId } : null;
+    const answerList = variants
+      .split(/[；;]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (changeKind === 'edit_task') {
+      return taskId && prompt.trim()
+        ? { kind: changeKind, taskId, prompt: prompt.trim(), acceptableVariants: answerList }
+        : null;
+    }
+    if (changeKind === 'edit_rubric') {
+      return rubricId ? { kind: changeKind, rubricId, acceptableVariants: answerList } : null;
+    }
+    return { kind: changeKind, fontScale: Number(fontScale), paperSize, theme };
+  }
+
+  async function previewChange(): Promise<void> {
+    if (!selectedPlan) return;
+    const change = controlledChange();
+    if (!change) {
+      setChangeMessage('请先补全这一处修改。');
+      return;
+    }
+    const response = await window.yuwen.changePreview(selectedPlan.plan_id, selectedPlan.revision_id, change);
+    if (!response.ok) {
+      setChangeMessage(`未生成预览：${response.error.message_zh}；${response.error.next_action}`);
+      return;
+    }
+    setPreviewed({ preview: response.data.preview, change });
+    setApplyResult(null);
+    setChangeMessage(null);
+    applyKeyRef.current = crypto.randomUUID();
+  }
+
+  async function applyChange(): Promise<void> {
+    if (!selectedPlan || !previewed || applyingRef.current || applyResult) return;
+    applyingRef.current = true;
+    setApplying(true);
+    const idempotencyKey = applyKeyRef.current ?? crypto.randomUUID();
+    applyKeyRef.current = idempotencyKey;
+    try {
+      const response = await window.yuwen.changeApply(
+        selectedPlan.plan_id,
+        selectedPlan.revision_id,
+        previewed.change,
+        idempotencyKey
+      );
+      if (!response.ok) {
+        setChangeMessage(`旧版未受影响：${response.error.message_zh}；${response.error.next_action}`);
+        return;
+      }
+      setApplyResult(response.data.result);
+      setChangeMessage('修改已原子接纳；旧修订与旧成品仍可查。');
+      await reload();
+      await loadHistory(selectedPlan.plan_id);
+    } finally {
+      applyingRef.current = false;
+      setApplying(false);
+    }
+  }
+
+  const viewDiff = previewed ? changeViewDiff(previewed.preview) : [];
+  const printWarning = needsPrintedCopyWarning(viewDiff);
+
   return (
     <div className="page">
       <h1>我的课程</h1>
-      <p className="lead">完整课时计划（LessonPlan）与三类五文件成品：课堂 PPT、学生讲义(DOCX/PDF)、教师讲义(DOCX/PDF)。生成、采用、已授课、有效果是不同状态。</p>
+      <p className="lead">完整课时计划（LessonPlan）与三类五文件成品：课堂 PPT、学生讲义(DOCX/PDF)、教师讲解版(DOCX/PDF)。软件审查只检查结构、引用与版本一致性。</p>
       <div className="card">
         <div className="card-title">课时计划</div>
         <p className="muted small">无真实模型授权时，可用“自拟完整计划”并行开发；模拟/自拟内容明确标注，不冒充真实备课质量。</p>
@@ -274,6 +436,9 @@ function CoursesPage(): JSX.Element {
                 <div className="muted small mono">{p.planId}</div>
               </div>
               <div className="src-actions">
+                <button className="btn small" onClick={() => void openPlan(p.planId)}>
+                  打开一处修改
+                </button>
                 <button className="btn small" onClick={() => void generate(p.planId)}>
                   生成三类五文件
                 </button>
@@ -283,6 +448,245 @@ function CoursesPage(): JSX.Element {
           {plans.length === 0 && <p className="muted small">暂无课时计划。点击上方按钮组建自拟完整计划。</p>}
         </ul>
       </div>
+
+      {selectedPlan && (
+        <div className="card change-panel">
+          <div className="card-title">一处修改 · {selectedPlan.title}</div>
+          <p className="muted small mono">当前语义修订 {selectedPlan.revision_id}</p>
+          <div className="change-grid">
+            <label>
+              <span>本次只改</span>
+              <select
+                className="search-input"
+                value={changeKind}
+                onChange={(event) => {
+                  setChangeKind(event.target.value as LessonChange['kind']);
+                  invalidatePreview();
+                }}
+              >
+                <option value="change_duration">改变实际课时</option>
+                <option value="increase_independent_time">独立学习增加 5 分钟</option>
+                {selectedPlan.links.some((link) => link.decision === 'include') && <option value="remove_link">减少一个联结</option>}
+                <option value="edit_task">修改题目与合理答案范围</option>
+                <option value="edit_rubric">只修改合理答案范围</option>
+                <option value="presentation_only">只调整版式</option>
+              </select>
+            </label>
+
+            {changeKind === 'change_duration' && (
+              <label>
+                <span>实际课时（分钟）</span>
+                <input
+                  className="search-input"
+                  type="number"
+                  min={5}
+                  max={240}
+                  value={durationMinutes}
+                  onChange={(event) => {
+                    setDurationMinutes(event.target.value);
+                    invalidatePreview();
+                  }}
+                />
+              </label>
+            )}
+            {changeKind === 'increase_independent_time' && (
+              <label>
+                <span>学生独立活动</span>
+                <select
+                  className="search-input"
+                  value={activityId}
+                  onChange={(event) => {
+                    setActivityId(event.target.value);
+                    invalidatePreview();
+                  }}
+                >
+                  {selectedPlan.activities
+                    .filter((activity) => activity.actor === 'student')
+                    .map((activity) => (
+                      <option key={activity.activity_id} value={activity.activity_id}>{activity.title}</option>
+                    ))}
+                </select>
+              </label>
+            )}
+            {changeKind === 'remove_link' && (
+              <label>
+                <span>移除联结</span>
+                <select
+                  className="search-input"
+                  value={linkId}
+                  onChange={(event) => {
+                    setLinkId(event.target.value);
+                    invalidatePreview();
+                  }}
+                >
+                  {selectedPlan.links.filter((link) => link.decision === 'include').map((link) => (
+                    <option key={link.link_id} value={link.link_id}>{link.purpose}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {(changeKind === 'edit_task' || changeKind === 'edit_rubric') && (
+              <>
+                <label>
+                  <span>{changeKind === 'edit_task' ? '任务' : '量规'}</span>
+                  <select
+                    className="search-input"
+                    value={changeKind === 'edit_task' ? taskId : rubricId}
+                    onChange={(event) => {
+                      const nextTask = selectedPlan.tasks.find((task) =>
+                        changeKind === 'edit_task'
+                          ? task.task_id === event.target.value
+                          : task.rubric_id === event.target.value
+                      );
+                      if (changeKind === 'edit_task') setTaskId(event.target.value);
+                      else setRubricId(event.target.value);
+                      if (nextTask) {
+                        setTaskId(nextTask.task_id);
+                        setRubricId(nextTask.rubric_id);
+                        setPrompt(nextTask.prompt);
+                        const nextRubric = selectedPlan.rubrics.find((item) => item.rubric_id === nextTask.rubric_id);
+                        setVariants(nextRubric?.criteria[0]?.acceptable_variants.join('；') ?? '');
+                      }
+                      invalidatePreview();
+                    }}
+                  >
+                    {selectedPlan.tasks.map((task) => (
+                      <option key={task.task_id} value={changeKind === 'edit_task' ? task.task_id : task.rubric_id}>{task.prompt}</option>
+                    ))}
+                  </select>
+                </label>
+                {changeKind === 'edit_task' && (
+                  <label className="wide">
+                    <span>新题意</span>
+                    <textarea
+                      className="draft compact"
+                      value={prompt}
+                      maxLength={4000}
+                      onChange={(event) => {
+                        setPrompt(event.target.value);
+                        invalidatePreview();
+                      }}
+                    />
+                  </label>
+                )}
+                <label className="wide">
+                  <span>合理答案范围（用分号分隔）</span>
+                  <textarea
+                    className="draft compact"
+                    value={variants}
+                    maxLength={4000}
+                    onChange={(event) => {
+                      setVariants(event.target.value);
+                      invalidatePreview();
+                    }}
+                  />
+                </label>
+              </>
+            )}
+            {changeKind === 'presentation_only' && (
+              <>
+                <label>
+                  <span>字号比例</span>
+                  <input
+                    className="search-input"
+                    type="number"
+                    min={0.8}
+                    max={1.5}
+                    step={0.05}
+                    value={fontScale}
+                    onChange={(event) => {
+                      setFontScale(event.target.value);
+                      invalidatePreview();
+                    }}
+                  />
+                </label>
+                <label>
+                  <span>纸张</span>
+                  <select className="search-input" value={paperSize} onChange={(event) => { setPaperSize(event.target.value as 'A4' | 'Letter'); invalidatePreview(); }}>
+                    <option value="A4">A4</option>
+                    <option value="Letter">Letter</option>
+                  </select>
+                </label>
+                <label>
+                  <span>主题</span>
+                  <select className="search-input" value={theme} onChange={(event) => { setTheme(event.target.value as 'light' | 'high_contrast'); invalidatePreview(); }}>
+                    <option value="light">明亮</option>
+                    <option value="high_contrast">高对比</option>
+                  </select>
+                </label>
+              </>
+            )}
+          </div>
+          <button className="btn" disabled={applying} onClick={() => void previewChange()}>预览改动</button>
+
+          {previewed && (
+            <div className="change-preview">
+              <b>单一建议方案</b>
+              <p>{buildChangeSummary({ changeKind: previewed.change.kind, invalidatedModules: previewed.preview.invalidatedModules, diff: viewDiff, affectedOutputs: AFFECTED_OUTPUTS })}</p>
+              <div className="muted small">提案：{previewed.preview.proposal.hypothesis}</div>
+              <ul className="diff-list">
+                {viewDiff.map((entry, index) => (
+                  <li key={`${entry.objectId}-${entry.field}-${index}`}>
+                    <b>{entry.objectId} · {entry.field}</b>
+                    <span>{displayValue(entry.before)} → {displayValue(entry.after)}</span>
+                  </li>
+                ))}
+              </ul>
+              {printWarning && <p className="notice warn small">{PRINTED_COPY_WARNING}</p>}
+              <button className="btn" disabled={applying || !!applyResult} onClick={() => void applyChange()}>
+                {applying ? '正在校验并同步生成…' : '确认并同步更新'}
+              </button>
+            </div>
+          )}
+          {changeMessage && <p className={`notice small ${changeMessage.startsWith('旧版未受影响') ? 'warn' : ''}`}>{changeMessage}</p>}
+        </div>
+      )}
+
+      {applyResult && (
+        <div className="card">
+          <div className="card-title">同步更新结果</div>
+          <p className="notice small">
+            {applyResult.semanticRevisionChanged
+              ? `新语义修订 ${applyResult.revisionId}；先前修订仍可用。`
+              : `语义修订保持 ${applyResult.revisionId}；仅新增呈现包。`}
+          </p>
+          <p className="muted small">
+            软件审查：{applyResult.reviewReport.disposition}；未执行：{applyResult.reviewReport.not_executed_checks.join('、') || '无'}
+          </p>
+          {printWarning && <p className="notice warn small">{PRINTED_COPY_WARNING}</p>}
+          <ul className="src-list">
+            {applyResult.files.map((file) => (
+              <li key={`${applyResult.bundleId}-${file.filename}`} className="src-item">
+                <div>
+                  <b>{file.filename}</b> <span className="tag">{file.role}</span> <span className="tag">{file.format}</span>
+                  <div className="muted small mono">{file.byteSize} 字节 · sha256 {file.sha256}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {selectedPlan && history && (
+        <div className="card">
+          <div className="card-title">版本与成品历史</div>
+          <p className="muted small">旧修订不会被覆盖；每个成品包按修订与呈现规格单独保留。</p>
+          <ul className="history-list">
+            {history.revisions.map((revision) => (
+              <li key={revision.revisionId}>
+                <span className="mono">{revision.revisionId}</span>
+                <span>{revision.previousRevisionId ? `来自 ${revision.previousRevisionId}` : '初始修订'}</span>
+              </li>
+            ))}
+            {history.bundles.map((bundle) => (
+              <li key={bundle.bundleId}>
+                <span className="mono">{bundle.bundleId}</span>
+                <span>修订 {bundle.revisionId} · 规格 {bundle.presentationSpecHash.slice(0, 12)}…</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {manifest && (
         <div className="card">
