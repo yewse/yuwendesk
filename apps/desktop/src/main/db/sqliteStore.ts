@@ -51,6 +51,16 @@ export interface CommitFaultHooks {
   beforeIdempotency?: () => void;
 }
 
+// 仅供 G07 原子提交测试使用；每个钩子位于一个明确的 SQLite 事务边界内。
+export interface LessonChangeCommitFaultHooks {
+  beforeRevisionInsert?: () => void;
+  afterRevisionInsert?: () => void;
+  afterBundleInsert?: () => void;
+  afterArtifactInsert?: () => void;
+  beforeCurrentPointerUpdate?: () => void;
+  beforeIdempotencySuccess?: () => void;
+}
+
 export interface SqliteStoreOptions {
   // 旧 JSON 读取/隔离的可注入 IO（供确定性测试读取失败/隔离失败）。
   legacyIo?: StoreIo;
@@ -60,6 +70,8 @@ export interface SqliteStoreOptions {
   safeStorage?: SafeStorageLike;
   // 测试用事务中途故障注入。
   commitFaults?: CommitFaultHooks;
+  // G07 测试用课时修改事务故障注入；生产不配置。
+  lessonChangeFaults?: LessonChangeCommitFaultHooks;
   // 可注入的解析实现：生产可注入 worker 线程后端使耗时解析不阻塞主进程；缺省内联 extractBuffer。
   parseFile?: (buf: Buffer, format: string, opts: ExtractOpts) => Promise<ExtractResult>;
 }
@@ -409,6 +421,7 @@ export class SqliteStore {
   private readonly archiveRename: (from: string, to: string) => Promise<void>;
   private readonly safeStorage?: SafeStorageLike;
   private readonly commitFaults?: CommitFaultHooks;
+  private readonly lessonChangeFaults?: LessonChangeCommitFaultHooks;
   private readonly parseFile: (buf: Buffer, format: string, opts: ExtractOpts) => Promise<ExtractResult>;
   private readonly cancelRegistry = new Map<string, CancelSignal>();
 
@@ -420,6 +433,7 @@ export class SqliteStore {
     this.archiveRename = opts.archiveRename ?? ((from, to) => fs.rename(from, to));
     this.safeStorage = opts.safeStorage;
     this.commitFaults = opts.commitFaults;
+    this.lessonChangeFaults = opts.lessonChangeFaults;
     this.parseFile = opts.parseFile ?? ((buf, format, o) => extractBuffer(buf, format, o));
   }
 
@@ -1312,6 +1326,89 @@ export class SqliteStore {
     );
   }
 
+  recordLessonChangeFailure(
+    key: string,
+    fingerprint: string,
+    errorCode: string,
+    updatedAt = new Date().toISOString()
+  ): number {
+    this.assertWritable();
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      const existing = this.findLessonChangeIdempotency(key);
+      if (existing) {
+        if (existing.fingerprint !== fingerprint) throw new LessonChangeKeyReuseError();
+        if (existing.status === 'succeeded' || existing.status === 'failed_final') return existing.failureCount;
+        const failureCount = Math.min(existing.failureCount + 1, 3);
+        const status = failureCount >= 3 ? 'failed_final' : 'failed';
+        db.prepare(
+          `UPDATE lesson_change_idempotency
+           SET status=?,result_json=NULL,failure_count=?,error_code=?,updated_at=? WHERE key=?`
+        ).run(status, failureCount, errorCode, updatedAt, key);
+      } else {
+        db.prepare(
+          `INSERT INTO lesson_change_idempotency(key,fingerprint,status,result_json,failure_count,error_code,updated_at)
+           VALUES(?,?, 'failed', NULL,1,?,?)`
+        ).run(key, fingerprint, errorCode, updatedAt);
+      }
+      return this.findLessonChangeIdempotency(key)!.failureCount;
+    });
+    return tx.immediate();
+  }
+
+  getLessonChangeAttempt(key: string, fingerprint: string): { failureCount: number; status: string } | null {
+    const existing = this.findLessonChangeIdempotency(key);
+    if (!existing) return null;
+    if (existing.fingerprint !== fingerprint) throw new LessonChangeKeyReuseError();
+    return { failureCount: existing.failureCount, status: existing.status };
+  }
+
+  commitMaterialBundle(input: import('../store').MaterialBundleCommitInput): void {
+    this.assertWritable();
+    if (input.artifacts.length !== 5) throw new Error('material_bundle_requires_five_artifacts');
+    const reviewErrors = validateReviewReport(input.review.report);
+    if (reviewErrors.length) throw new Error(`invalid_review_report:${reviewErrors.join('|')}`);
+    if (
+      input.review.planId !== input.bundle.planId ||
+      input.review.revisionId !== input.bundle.revisionId ||
+      input.artifacts.some(
+        (artifact) =>
+          artifact.planId !== input.bundle.planId ||
+          artifact.revisionId !== input.bundle.revisionId ||
+          artifact.bundleId !== input.bundle.bundleId
+      )
+    ) {
+      throw new Error('material_bundle_record_mismatch');
+    }
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      const current = db
+        .prepare('SELECT current_revision_id currentRevisionId FROM lesson_plan WHERE plan_id=?')
+        .get(input.bundle.planId) as { currentRevisionId: string | null } | undefined;
+      if (!current || current.currentRevisionId !== input.bundle.revisionId) throw new LessonChangeConflictError();
+      db.prepare(
+        `INSERT INTO material_bundle(bundle_id,plan_id,revision_id,presentation_spec_hash,directory,status,created_at)
+         VALUES(@bundleId,@planId,@revisionId,@presentationSpecHash,@directory,@status,@createdAt)`
+      ).run(input.bundle);
+      const artifactInsert = db.prepare(
+        `INSERT INTO material_artifact(id,plan_id,revision_id,role,format,filename,path,sha256,byte_size,content_origin,created_at,bundle_id)
+         VALUES(@id,@planId,@revisionId,@role,@format,@filename,@path,@sha256,@byteSize,@contentOrigin,@createdAt,@bundleId)`
+      );
+      for (const artifact of input.artifacts) artifactInsert.run(artifact);
+      db.prepare(
+        `INSERT INTO review_report(report_id,plan_id,revision_id,report_json,created_at)
+         VALUES(@reportId,@planId,@revisionId,@reportJson,@createdAt)`
+      ).run({
+        reportId: input.review.reportId,
+        planId: input.review.planId,
+        revisionId: input.review.revisionId,
+        reportJson: JSON.stringify(input.review.report),
+        createdAt: input.review.createdAt
+      });
+    });
+    tx.immediate();
+  }
+
   commitLessonChange(input: import('../store').LessonChangeCommitInput): import('../store').LessonChangeApplyResult {
     this.assertWritable();
     if (input.artifacts.length !== 5) throw new Error('lesson_change_requires_five_artifacts');
@@ -1341,8 +1438,10 @@ export class SqliteStore {
       const existing = this.findLessonChangeIdempotency(input.idempotencyKey);
       if (existing) {
         if (existing.fingerprint !== input.fingerprint) throw new LessonChangeKeyReuseError();
-        if (existing.status !== 'succeeded' || !existing.resultJson) throw new LessonChangeConflictError();
-        return JSON.parse(existing.resultJson) as import('../store').LessonChangeApplyResult;
+        if (existing.status === 'succeeded' && existing.resultJson) {
+          return JSON.parse(existing.resultJson) as import('../store').LessonChangeApplyResult;
+        }
+        if (existing.status !== 'failed') throw new LessonChangeConflictError();
       }
 
       const current = db
@@ -1358,10 +1457,12 @@ export class SqliteStore {
         ) {
           throw new Error('lesson_change_revision_mismatch');
         }
+        this.lessonChangeFaults?.beforeRevisionInsert?.();
         db.prepare(
           `INSERT INTO lesson_revision(revision_id,plan_id,previous_revision_id,title,content_json,content_origin,valid,created_at)
            VALUES(@revisionId,@planId,@previousRevisionId,@title,@contentJson,@contentOrigin,@valid,@createdAt)`
         ).run({ ...input.revision, valid: input.revision.valid ? 1 : 0 });
+        this.lessonChangeFaults?.afterRevisionInsert?.();
       } else if (input.result.revisionId !== input.baseRevisionId) {
         throw new Error('lesson_change_presentation_revision_mismatch');
       }
@@ -1370,11 +1471,13 @@ export class SqliteStore {
         `INSERT INTO material_bundle(bundle_id,plan_id,revision_id,presentation_spec_hash,directory,status,created_at)
          VALUES(@bundleId,@planId,@revisionId,@presentationSpecHash,@directory,@status,@createdAt)`
       ).run(input.bundle);
+      this.lessonChangeFaults?.afterBundleInsert?.();
       const artifactInsert = db.prepare(
         `INSERT INTO material_artifact(id,plan_id,revision_id,role,format,filename,path,sha256,byte_size,content_origin,created_at,bundle_id)
          VALUES(@id,@planId,@revisionId,@role,@format,@filename,@path,@sha256,@byteSize,@contentOrigin,@createdAt,@bundleId)`
       );
       for (const artifact of input.artifacts) artifactInsert.run(artifact);
+      this.lessonChangeFaults?.afterArtifactInsert?.();
 
       db.prepare(
         `INSERT INTO review_report(report_id,plan_id,revision_id,report_json,created_at)
@@ -1395,6 +1498,7 @@ export class SqliteStore {
       });
 
       if (input.revision) {
+        this.lessonChangeFaults?.beforeCurrentPointerUpdate?.();
         const updated = db
           .prepare(
             `UPDATE lesson_plan SET current_revision_id=?,title=?,updated_at=?
@@ -1410,10 +1514,20 @@ export class SqliteStore {
         if (updated.changes !== 1) throw new LessonChangeConflictError();
       }
 
-      db.prepare(
-        `INSERT INTO lesson_change_idempotency(key,fingerprint,status,result_json,failure_count,error_code,updated_at)
-         VALUES(?,?, 'succeeded', ?,0,NULL,?)`
-      ).run(input.idempotencyKey, input.fingerprint, JSON.stringify(input.result), input.proposal.acceptedAt);
+      this.lessonChangeFaults?.beforeIdempotencySuccess?.();
+      if (existing) {
+        const updated = db.prepare(
+          `UPDATE lesson_change_idempotency
+           SET status='succeeded',result_json=?,error_code=NULL,updated_at=?
+           WHERE key=? AND fingerprint=? AND status='failed'`
+        ).run(JSON.stringify(input.result), input.proposal.acceptedAt, input.idempotencyKey, input.fingerprint);
+        if (updated.changes !== 1) throw new LessonChangeConflictError();
+      } else {
+        db.prepare(
+          `INSERT INTO lesson_change_idempotency(key,fingerprint,status,result_json,failure_count,error_code,updated_at)
+           VALUES(?,?, 'succeeded', ?,0,NULL,?)`
+        ).run(input.idempotencyKey, input.fingerprint, JSON.stringify(input.result), input.proposal.acceptedAt);
+      }
       return input.result;
     });
     return tx.immediate();

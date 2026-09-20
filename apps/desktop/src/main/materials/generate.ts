@@ -240,14 +240,25 @@ export async function renderSectionsPdf(
       doc.on('data', (c: Buffer) => chunks.push(c));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.registerFont('cjk', fontPath);
-      doc.font('cjk');
       doc.fillColor(spec.theme === 'high_contrast' ? '#000000' : '#202020');
+      const writeMixed = (value: string, fontSize: number): void => {
+        const runs = value.match(/[ -~]+|[^ -~]+/g) ?? [value];
+        runs.forEach((run, index) => {
+          const ascii = [...run].every((char) => {
+            const code = char.charCodeAt(0);
+            return code >= 32 && code <= 126;
+          });
+          doc
+            .font(ascii ? 'Helvetica' : 'cjk')
+            .fontSize(fontSize)
+            .text(run, { width: 500, continued: index < runs.length - 1 });
+        });
+      };
       for (const s of sections) {
-        doc.fontSize(15 * spec.fontScale).text(s.heading, { width: 500 });
-        doc.fontSize(12 * spec.fontScale);
-        for (const l of s.lines) doc.text(l, { width: 500 });
-        if (s.table) for (const row of s.table) doc.text(row.join('  |  '), { width: 500 });
-        if (s.writeLines) for (let i = 0; i < s.writeLines; i++) doc.text('＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿', { width: 500 });
+        writeMixed(s.heading, 15 * spec.fontScale);
+        for (const l of s.lines) writeMixed(l, 12 * spec.fontScale);
+        if (s.table) for (const row of s.table) writeMixed(row.join('  |  '), 12 * spec.fontScale);
+        if (s.writeLines) for (let i = 0; i < s.writeLines; i++) writeMixed('＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿', 12 * spec.fontScale);
         doc.moveDown(0.5);
       }
       doc.end();

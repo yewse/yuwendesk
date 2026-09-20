@@ -16,7 +16,7 @@ import type {
 } from '../shared/ipc';
 import type { ReviewReport } from '../main/review/types';
 import type { ChangePreview, LessonChange } from '../main/change/types';
-import type { LessonChangeApplyResult } from '../main/store';
+import type { LessonChangeApplyOutcome } from '../main/store';
 
 // 预加载在 sandbox=true 下不能 require 本地模块，因此保持完全自包含：
 // 仅使用类型导入（编译期擦除）与本地常量，运行时只依赖 electron。
@@ -119,7 +119,7 @@ const api = {
   changePreview: (planId: string, baseRevisionId: string, change: LessonChange) =>
     call<{ preview: ChangePreview }>('change.preview', { payload: { planId, baseRevisionId, change } }),
   changeApply: (planId: string, baseRevisionId: string, change: LessonChange, idempotencyKey: string) =>
-    call<{ result: LessonChangeApplyResult }>('change.apply', {
+    call<{ result: LessonChangeApplyOutcome }>('change.apply', {
       idempotency_key: idempotencyKey,
       payload: { planId, baseRevisionId, change }
     }),

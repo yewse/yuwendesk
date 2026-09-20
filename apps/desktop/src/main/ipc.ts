@@ -10,12 +10,20 @@ import type {
 } from '../shared/ipc';
 import { IMPLEMENTED_OPERATIONS, IPC_SCHEMA_VERSION } from '../shared/ipc';
 import type { ErrorCode } from '../shared/ipc';
-import type { DraftStore, LessonStore, MaterialArtifactRecord, SourceStore } from './store';
+import type {
+  DraftStore,
+  LessonStore,
+  MaterialArtifactRecord,
+  MaterialBundleRecord,
+  ReviewReportRecord,
+  SourceStore
+} from './store';
 import { StoreProtectedError } from './store';
 import { checkPayload } from './schemaGate';
 import { buildLessonPlan, demoLessonSpec, validateLessonPlan } from './lesson/build';
 import { buildMaterialSet } from './materials/generate';
 import { reviewLessonPlan } from './review/review';
+import { reviewMaterialSet } from './review/bundleReview';
 import {
   LessonChangeConflictError,
   LessonChangeDiskError,
@@ -26,10 +34,11 @@ import {
 } from './change/service';
 import { ChangeBlockedError, ChangeValidationError } from './change/change';
 import type { LessonChange } from './change/types';
+import type { LessonPlan } from './lesson/types';
 import { FontMissingError } from './materials/generate';
-import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { nodeBundleIo, promoteStagedBundle, stageMaterialSet, type PublishedBundle } from './materials/publish';
 
 function errorResponse(
   code: ErrorCode,
@@ -481,36 +490,107 @@ export class IpcService {
     return errorResponse('EXPORT_INVALID', '修改未能安全提交。', '请保留旧版本并重试；持续失败请联系支持。');
   }
 
-  // G06：由当前修订确定性生成三类五文件，写入 userData 并登记清单（版本一致记录）。
+  // G06/G07：生成后先复核内存字节，再以暂存→回读哈希→原子改名发布；文件、报告与清单同事务登记。
   private async materialsGenerate(req: IpcRequest): Promise<IpcResponse> {
     const ls = this.ctx.lessonStore;
     if (!ls) return errorResponse('INPUT_INVALID', '成品生成不可用。', '请重启应用。');
     const rec = ls.getLessonRevision((req.payload as { planId: string }).planId);
     if (!rec) return errorResponse('SOURCE_MISSING', '课时计划不存在。', '请先组建计划。');
-    const plan = JSON.parse(rec.contentJson);
-    const set = await buildMaterialSet(plan, rec.contentOrigin);
-    const dir = join(this.ctx.userDataDir ?? '.', 'materials', set.revisionId);
+    const bundleId = `bundle_${randomUUID()}`;
+    const root = join(this.ctx.userDataDir ?? '.', 'materials');
+    const stagingDirectory = join(root, '.staging', bundleId);
+    let published: PublishedBundle | null = null;
     try {
-      mkdirSync(dir, { recursive: true });
-    } catch {
-      /* ignore */
-    }
-    const now = new Date().toISOString();
-    const recs: MaterialArtifactRecord[] = set.files.map((f) => {
-      const p = join(dir, f.filename);
-      try {
-        writeFileSync(p, f.bytes);
-      } catch {
-        /* ignore write errors; manifest still returned */
+      const plan = JSON.parse(rec.contentJson) as LessonPlan;
+      const set = await buildMaterialSet(plan, rec.contentOrigin);
+      const baseReport = reviewLessonPlan(plan, {
+        ids: {
+          reportId: () => `report_${randomUUID()}`,
+          issueId: () => `issue_${randomUUID()}`
+        }
+      });
+      const bundleIssues = await reviewMaterialSet(plan, set);
+      const report = {
+        ...baseReport,
+        issues: [...baseReport.issues, ...bundleIssues],
+        executed_checks: [...new Set([...baseReport.executed_checks, 'material_bundle_consistency'])]
+      };
+      if (report.issues.some((issue) => issue.severity === 'blocking')) report.disposition = 'blocked';
+      else if (report.issues.some((issue) => issue.severity === 'fix')) report.disposition = 'needs_fix';
+      if (report.disposition !== 'ready_for_teacher') {
+        return errorResponse('EXPORT_INVALID', '生成的材料包未通过发布前一致性审查；旧版未受影响。', '请返回建议模块修正后重试。');
       }
-      return { id: randomUUID(), planId: set.planId, revisionId: set.revisionId, role: f.role, format: f.format, filename: f.filename, path: p, sha256: f.sha256, byteSize: f.bytes.length, contentOrigin: set.contentOrigin, createdAt: now };
-    });
-    try {
-      ls.saveMaterialArtifacts(recs);
-    } catch {
-      /* ignore */
+
+      const staged = await stageMaterialSet(root, bundleId, set, nodeBundleIo);
+      published = await promoteStagedBundle(root, staged, nodeBundleIo);
+      const now = new Date().toISOString();
+      const artifacts: MaterialArtifactRecord[] = published.files.map((file) => ({
+        id: randomUUID(),
+        planId: set.planId,
+        revisionId: set.revisionId,
+        role: file.role,
+        format: file.format,
+        filename: file.filename,
+        path: join(published!.directory, file.filename),
+        sha256: file.sha256,
+        byteSize: file.byteSize,
+        contentOrigin: set.contentOrigin,
+        createdAt: now,
+        bundleId
+      }));
+      const bundle: MaterialBundleRecord = {
+        bundleId,
+        planId: set.planId,
+        revisionId: set.revisionId,
+        presentationSpecHash: createHash('sha256')
+          .update(JSON.stringify({ fontScale: 1, paperSize: 'A4', theme: 'light' }))
+          .digest('hex'),
+        directory: published.directory,
+        status: 'published',
+        createdAt: now
+      };
+      const reportRecord: ReviewReportRecord = {
+        reportId: report.report_id,
+        planId: set.planId,
+        revisionId: set.revisionId,
+        report,
+        createdAt: now
+      };
+      ls.commitMaterialBundle({ bundle, artifacts, review: reportRecord });
+      return {
+        ok: true,
+        data: {
+          planId: set.planId,
+          revisionId: set.revisionId,
+          contentOrigin: set.contentOrigin,
+          versionStamp: set.versionStamp,
+          files: artifacts.map((artifact) => ({
+            role: artifact.role,
+            format: artifact.format,
+            filename: artifact.filename,
+            path: artifact.path,
+            sha256: artifact.sha256,
+            byteSize: artifact.byteSize
+          }))
+        }
+      };
+    } catch (error) {
+      await nodeBundleIo.rm(published?.directory ?? stagingDirectory).catch(() => undefined);
+      if (error instanceof StoreProtectedError) {
+        return errorResponse('DATABASE_LOCKED', '本地数据库处于保护状态；旧版未受影响，成品未登记。', '请先恢复或备份数据库。');
+      }
+      if (error instanceof LessonChangeConflictError) {
+        return errorResponse('VERSION_CONFLICT', '计划已更新；旧版未受影响，生成的成品未登记。', '请刷新最新版本后重试。');
+      }
+      if (error instanceof FontMissingError) {
+        return errorResponse('EXPORT_INVALID', '缺少可用的内置中文字体；旧版未受影响，未发布成品。', '请修复应用资源后重试。');
+      }
+      const code = (error as { code?: unknown } | null)?.code;
+      if (code === 'ENOSPC' || code === 'EDQUOT' || code === 'EACCES' || code === 'EROFS' || code === 'ENOTDIR') {
+        return errorResponse('DISK_FULL', '成品写入失败；旧版未受影响，未登记不存在的文件。', '请检查磁盘空间与目录权限后重试。');
+      }
+      return errorResponse('EXPORT_INVALID', '成品未能安全发布；旧版未受影响。', '请保留旧版本并重试；持续失败请联系支持。');
     }
-    return { ok: true, data: { planId: set.planId, revisionId: set.revisionId, contentOrigin: set.contentOrigin, versionStamp: set.versionStamp, files: recs.map((r) => ({ role: r.role, format: r.format, filename: r.filename, path: r.path, sha256: r.sha256, byteSize: r.byteSize })) } };
   }
 
   private sourcesReadOriginal(req: IpcRequest): IpcResponse {

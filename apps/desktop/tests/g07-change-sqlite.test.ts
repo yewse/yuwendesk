@@ -145,7 +145,12 @@ describe('G07-T02 real SQLite lesson change commit', () => {
       })
     ]);
 
-    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const diagnostics = results.map((result) =>
+      result.status === 'fulfilled'
+        ? 'fulfilled'
+        : `${result.reason instanceof Error ? result.reason.name : typeof result.reason}:${result.reason instanceof Error ? result.reason.message : String(result.reason)}:${JSON.stringify((result.reason as { issues?: unknown }).issues ?? [])}`
+    );
+    expect(results.filter((result) => result.status === 'fulfilled'), diagnostics.join(' | ')).toHaveLength(1);
     const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
     expect(rejected?.reason).toBeInstanceOf(LessonChangeConflictError);
     expect(store.listLessonChangeHistory(base.plan_id).revisions).toHaveLength(2);

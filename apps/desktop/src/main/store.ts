@@ -265,6 +265,7 @@ export interface StoredChangeProposal {
   acceptedAt: string | null;
 }
 export interface LessonChangeApplyResult {
+  status: 'succeeded';
   changeId: string;
   planId: string;
   revisionId: string;
@@ -282,6 +283,14 @@ export interface LessonChangeApplyResult {
     byteSize: number;
   }>;
 }
+export interface LessonChangeFailedFinalResult {
+  status: 'failed_final';
+  planId: string;
+  revisionId: string;
+  failureCount: 3;
+  errorCode: string;
+}
+export type LessonChangeApplyOutcome = LessonChangeApplyResult | LessonChangeFailedFinalResult;
 export interface LessonChangeIdempotencyRecord {
   key: string;
   fingerprint: string;
@@ -301,6 +310,11 @@ export interface LessonChangeCommitInput {
   bundle: MaterialBundleRecord;
   artifacts: MaterialArtifactRecord[];
   result: LessonChangeApplyResult;
+}
+export interface MaterialBundleCommitInput {
+  bundle: MaterialBundleRecord;
+  artifacts: MaterialArtifactRecord[];
+  review: ReviewReportRecord;
 }
 
 export class LessonChangeConflictError extends Error {
@@ -325,7 +339,18 @@ export interface LessonStore {
   saveReviewReport(rec: ReviewReportRecord): void;
   getLatestReviewReport(planId: string, revisionId: string): ReviewReportRecord | null;
   commitLessonChange(input: LessonChangeCommitInput): LessonChangeApplyResult;
+  commitMaterialBundle(input: MaterialBundleCommitInput): void;
   findLessonChangeIdempotency(key: string): LessonChangeIdempotencyRecord | null;
+  recordLessonChangeFailure(
+    key: string,
+    fingerprint: string,
+    errorCode: string,
+    updatedAt?: string
+  ): number;
+  getLessonChangeAttempt(
+    key: string,
+    fingerprint: string
+  ): { failureCount: number; status: string } | null;
   listLessonChangeHistory(planId: string): {
     revisions: LessonRevisionRecord[];
     proposals: StoredChangeProposal[];

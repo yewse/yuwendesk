@@ -402,6 +402,12 @@ function CoursesPage(): JSX.Element {
         setChangeMessage(`旧版未受影响：${response.error.message_zh}；${response.error.next_action}`);
         return;
       }
+      if (response.data.result.status === 'failed_final') {
+        setChangeMessage(
+          `旧版未受影响：同一修改已连续失败 ${response.data.result.failureCount} 次，已停止自动重试（${response.data.result.errorCode}）。`
+        );
+        return;
+      }
       setApplyResult(response.data.result);
       setChangeMessage('修改已原子接纳；旧修订与旧成品仍可查。');
       await reload();

@@ -1,6 +1,10 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { buildLessonPlan, validateLessonPlan, type LessonPlanSpec } from '../src/main/lesson/build';
+import JSZip from 'jszip';
+import { buildLessonPlan, demoLessonSpec, validateLessonPlan, type LessonPlanSpec } from '../src/main/lesson/build';
 import { buildMaterialSet, renderSectionsPdf, resolveCjkFont, studentSections, versionStamp, FontMissingError } from '../src/main/materials/generate';
+import { reviewMaterialSet } from '../src/main/review/bundleReview';
+import { previewLessonChange } from '../src/main/change/change';
 import { extractBuffer } from '../src/main/sources/extract';
 
 // 自拟《春》完整课时计划规格（明确标注为自拟内容）。
@@ -67,6 +71,23 @@ const ORIGIN = 'authored';
 async function textOf(bytes: Buffer, format: string): Promise<string> {
   const r = await extractBuffer(bytes, format);
   return r.fullText;
+}
+
+function sha256(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+async function addTextToOfficeFile(bytes: Buffer, path: string, closingTag: string, text: string): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(bytes);
+  const part = zip.file(path);
+  if (!part) throw new Error(`missing office part: ${path}`);
+  const xml = await part.async('string');
+  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const paragraph = path.startsWith('word/')
+    ? `<w:p><w:r><w:t>${escaped}</w:t></w:r></w:p>`
+    : `<a:p><a:r><a:t>${escaped}</a:t></a:r></a:p>`;
+  zip.file(path, xml.replace(closingTag, `${paragraph}${closingTag}`));
+  return zip.generateAsync({ type: 'nodebuffer' });
 }
 
 describe('G06 三类五文件：生成/角色隔离/版本一致/一处修改联动', () => {
@@ -161,5 +182,99 @@ describe('G06 三类五文件：生成/角色隔离/版本一致/一处修改联
     const plan = buildLessonPlan(chunSpec());
     const sections = studentSections(plan, versionStamp(plan, ORIGIN));
     await expect(renderSectionsPdf(sections, null)).rejects.toBeInstanceOf(FontMissingError);
+  });
+});
+
+describe('G07 材料包发布前一致性审查', () => {
+  it('生成器产出的标准三类五文件通过发布前一致性审查', async () => {
+    const plan = buildLessonPlan(demoLessonSpec());
+    const set = await buildMaterialSet(plan, ORIGIN);
+
+    expect(await reviewMaterialSet(plan, set)).toEqual([]);
+  });
+
+  it('任务修改后重生成的三类五文件仍通过同步审查', async () => {
+    const plan = buildLessonPlan(demoLessonSpec());
+    const preview = previewLessonChange(
+      plan,
+      {
+        kind: 'edit_task',
+        taskId: plan.tasks[0].task_id,
+        prompt: '故障测试后的新任务',
+        acceptableVariants: ['故障测试后的新答案']
+      },
+      { changeId: 'change_review', revisionId: 'rev_review' }
+    );
+    const set = await buildMaterialSet(preview.candidatePlan, ORIGIN, preview.presentationSpec);
+
+    expect(await reviewMaterialSet(preview.candidatePlan, set)).toEqual([]);
+  });
+
+  it('要求且只允许 presentation/student/teacher 三类五文件', async () => {
+    const plan = buildLessonPlan(chunSpec());
+    const set = await buildMaterialSet(plan, ORIGIN);
+    set.files.pop();
+    set.files.push({ ...set.files[0], filename: 'duplicate.pptx' });
+
+    const issues = await reviewMaterialSet(plan, set);
+
+    expect(issues.some((x) => x.rule_id === 'G07_BUNDLE_SHAPE' && x.severity === 'blocking')).toBe(true);
+  });
+
+  it('重算每个文件 SHA-256，不信任生成器声明值', async () => {
+    const plan = buildLessonPlan(chunSpec());
+    const set = await buildMaterialSet(plan, ORIGIN);
+    set.files[0].sha256 = '0'.repeat(64);
+
+    const issues = await reviewMaterialSet(plan, set);
+
+    expect(issues.some((x) => x.rule_id === 'G07_BUNDLE_SHA256' && x.return_module === 'M09')).toBe(true);
+  });
+
+  it('拦截学生版中的教师私密内容，即使文件本身仍可解析', async () => {
+    const plan = buildLessonPlan(chunSpec());
+    const set = await buildMaterialSet(plan, ORIGIN);
+    const student = set.files.find((x) => x.role === 'student' && x.format === 'docx')!;
+    student.bytes = await addTextToOfficeFile(student.bytes, 'word/document.xml', '</w:body>', plan.teacher_summary);
+    student.sha256 = sha256(student.bytes);
+
+    const issues = await reviewMaterialSet(plan, set);
+
+    expect(issues.some((x) => x.rule_id === 'G07_STUDENT_ROLE_LEAK' && x.object_ids.includes(student.filename))).toBe(true);
+  });
+
+  it('拦截集合元数据或文件正文中的 plan/revision 不一致', async () => {
+    const plan = buildLessonPlan(chunSpec());
+    const set = await buildMaterialSet(plan, ORIGIN);
+    set.revisionId = 'rev_wrong';
+
+    const issues = await reviewMaterialSet(plan, set);
+
+    expect(issues.some((x) => x.rule_id === 'G07_VERSION_STAMP')).toBe(true);
+  });
+
+  it('拦截投屏课件泄漏 unknowns 等教师私密信息', async () => {
+    const plan = buildLessonPlan(chunSpec());
+    const set = await buildMaterialSet(plan, ORIGIN);
+    const pptx = set.files.find((x) => x.role === 'presentation')!;
+    pptx.bytes = await addTextToOfficeFile(pptx.bytes, 'ppt/slides/slide1.xml', '</p:txBody>', plan.unknowns[0]);
+    pptx.sha256 = sha256(pptx.bytes);
+
+    const issues = await reviewMaterialSet(plan, set);
+
+    expect(issues.some((x) => x.rule_id === 'G07_PRESENTATION_ROLE_LEAK')).toBe(true);
+  });
+
+  it('任务与答案修改后若仍发布旧文件，分别报告任务和答案未同步', async () => {
+    const plan = buildLessonPlan(chunSpec());
+    const staleSet = await buildMaterialSet(plan, ORIGIN);
+    const changedPlan = structuredClone(plan);
+    changedPlan.tasks[0].prompt = '修订后的全新朗读任务';
+    changedPlan.rubrics[0].criteria[0].acceptable_variants = ['修订后的全新合理答案'];
+
+    const issues = await reviewMaterialSet(changedPlan, staleSet);
+
+    expect(issues.some((x) => x.rule_id === 'G07_TASK_SYNC')).toBe(true);
+    expect(issues.some((x) => x.rule_id === 'G07_ANSWER_SYNC')).toBe(true);
   });
 });

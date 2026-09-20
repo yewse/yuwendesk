@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type {
+  LessonChangeApplyOutcome,
   LessonChangeApplyResult,
   LessonRevisionRecord,
   LessonStore,
@@ -9,8 +10,8 @@ import type {
   ReviewReportRecord,
   StoredChangeProposal
 } from '../store';
-import { LessonChangeConflictError, LessonChangeKeyReuseError } from '../store';
-import { buildMaterialSet } from '../materials/generate';
+import { LessonChangeConflictError, LessonChangeKeyReuseError, StoreProtectedError } from '../store';
+import { buildMaterialSet, FontMissingError, type MaterialSet } from '../materials/generate';
 import {
   nodeBundleIo,
   promoteStagedBundle,
@@ -19,8 +20,10 @@ import {
   type PublishedBundle
 } from '../materials/publish';
 import { reviewLessonPlan } from '../review/review';
+import { reviewMaterialSet } from '../review/bundleReview';
+import type { ReviewIssue } from '../review/types';
 import type { LessonPlan } from '../lesson/types';
-import { previewLessonChange } from './change';
+import { ChangeBlockedError, ChangeValidationError, previewLessonChange } from './change';
 import type { ChangePreview, LessonChange } from './types';
 
 export { LessonChangeConflictError, LessonChangeKeyReuseError } from '../store';
@@ -39,6 +42,7 @@ export interface LessonChangeServiceOptions {
   rootDir: string;
   io?: BundleIo;
   ids?: LessonChangeIds;
+  buildSet?: typeof buildMaterialSet;
 }
 
 export interface LessonChangeRequest {
@@ -56,8 +60,12 @@ export class LessonChangeSourceMissingError extends Error {
 }
 
 export class LessonChangeReviewError extends Error {
-  constructor(public readonly disposition: 'needs_fix' | 'blocked') {
-    super(`LESSON_CHANGE_REVIEW_${disposition.toUpperCase()}`);
+  constructor(
+    public readonly disposition: 'needs_fix' | 'blocked',
+    public readonly issues: ReviewIssue[] = []
+  ) {
+    const rules = [...new Set(issues.map((issue) => issue.rule_id))];
+    super(`LESSON_CHANGE_REVIEW_${disposition.toUpperCase()}${rules.length ? `:${rules.join(',')}` : ''}`);
     this.name = 'LessonChangeReviewError';
   }
 }
@@ -128,12 +136,38 @@ function parseStoredResult(value: string): LessonChangeApplyResult {
   ) {
     throw new Error('invalid_stored_lesson_change_result');
   }
-  return parsed as LessonChangeApplyResult;
+  return { ...(parsed as LessonChangeApplyResult), status: 'succeeded' };
+}
+
+function failureCode(error: unknown): string | null {
+  if (error instanceof LessonChangeConflictError || error instanceof LessonChangeKeyReuseError) return null;
+  if (error instanceof LessonChangeSourceMissingError || error instanceof LessonChangeReviewError) return null;
+  if (error instanceof ChangeBlockedError || error instanceof ChangeValidationError || error instanceof FontMissingError) return null;
+  if (error instanceof LessonChangeDiskError) return 'DISK_FULL';
+  if (error instanceof StoreProtectedError) return 'DATABASE_LOCKED';
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code === 'ENOSPC' || code === 'EDQUOT' || code === 'EACCES' || code === 'EROFS') return 'DISK_FULL';
+  return 'DATABASE_LOCKED';
+}
+
+function mergeBundleReview(
+  report: ReturnType<typeof reviewLessonPlan>,
+  issues: Awaited<ReturnType<typeof reviewMaterialSet>>
+): ReturnType<typeof reviewLessonPlan> {
+  const merged = {
+    ...report,
+    issues: [...report.issues, ...issues],
+    executed_checks: [...new Set([...report.executed_checks, 'material_bundle_consistency'])]
+  };
+  if (merged.issues.some((item) => item.severity === 'blocking')) merged.disposition = 'blocked';
+  else if (merged.issues.some((item) => item.severity === 'fix')) merged.disposition = 'needs_fix';
+  return merged;
 }
 
 export class LessonChangeService {
   private readonly io: BundleIo;
   private readonly ids: LessonChangeIds;
+  private readonly buildSet: (plan: LessonPlan, contentOrigin: string, presentationSpec?: Parameters<typeof buildMaterialSet>[2]) => Promise<MaterialSet>;
 
   constructor(
     private readonly store: LessonStore,
@@ -141,6 +175,7 @@ export class LessonChangeService {
   ) {
     this.io = options.io ?? nodeBundleIo;
     this.ids = options.ids ?? defaultIds();
+    this.buildSet = options.buildSet ?? buildMaterialSet;
   }
 
   preview(planId: string, baseRevisionId: string, change: LessonChange): ChangePreview {
@@ -156,38 +191,47 @@ export class LessonChangeService {
     return this.store.listLessonChangeHistory(planId);
   }
 
-  async apply(request: LessonChangeRequest): Promise<LessonChangeApplyResult> {
+  async apply(request: LessonChangeRequest): Promise<LessonChangeApplyOutcome> {
     const requestFingerprint = fingerprint(request);
     const existing = this.store.findLessonChangeIdempotency(request.idempotencyKey);
     if (existing) {
       if (existing.fingerprint !== requestFingerprint) throw new LessonChangeKeyReuseError();
       if (existing.status === 'succeeded' && existing.resultJson) return parseStoredResult(existing.resultJson);
-      throw new LessonChangeConflictError();
+      if (existing.status === 'failed_final' || existing.failureCount >= 3) {
+        return {
+          status: 'failed_final',
+          planId: request.planId,
+          revisionId: request.baseRevisionId,
+          failureCount: 3,
+          errorCode: existing.errorCode ?? 'UNKNOWN'
+        };
+      }
     }
 
     const baseRecord = this.store.getLessonRevision(request.planId, request.baseRevisionId);
     if (!baseRecord) throw new LessonChangeSourceMissingError();
-    const preview = previewLessonChange(parsePlan(baseRecord), request.change, {
-      changeId: this.ids.changeId(),
-      revisionId: this.ids.revisionId()
-    });
-    const report = reviewLessonPlan(preview.candidatePlan, {
-      ids: {
-        reportId: this.ids.reportId,
-        issueId: this.ids.issueId
-      }
-    });
-    if (report.disposition !== 'ready_for_teacher') throw new LessonChangeReviewError(report.disposition);
-
     const bundleId = this.ids.bundleId();
     const stagingDirectory = join(this.options.rootDir, '.staging', bundleId);
     let published: PublishedBundle | null = null;
-    const materialSet = await buildMaterialSet(
-      preview.candidatePlan,
-      baseRecord.contentOrigin,
-      preview.presentationSpec
-    );
     try {
+      const preview = previewLessonChange(parsePlan(baseRecord), request.change, {
+        changeId: this.ids.changeId(),
+        revisionId: this.ids.revisionId()
+      });
+      let report = reviewLessonPlan(preview.candidatePlan, {
+        ids: {
+          reportId: this.ids.reportId,
+          issueId: this.ids.issueId
+        }
+      });
+      if (report.disposition !== 'ready_for_teacher') throw new LessonChangeReviewError(report.disposition, report.issues);
+      const materialSet = await this.buildSet(
+        preview.candidatePlan,
+        baseRecord.contentOrigin,
+        preview.presentationSpec
+      );
+      report = mergeBundleReview(report, await reviewMaterialSet(preview.candidatePlan, materialSet));
+      if (report.disposition !== 'ready_for_teacher') throw new LessonChangeReviewError(report.disposition, report.issues);
       try {
         const staged = await stageMaterialSet(this.options.rootDir, bundleId, materialSet, this.io);
         published = await promoteStagedBundle(this.options.rootDir, staged, this.io);
@@ -250,6 +294,7 @@ export class LessonChangeService {
         bundleId
       }));
       const result: LessonChangeApplyResult = {
+        status: 'succeeded',
         changeId: proposal.change_id,
         planId: request.planId,
         revisionId: preview.candidatePlan.revision_id,
@@ -280,6 +325,14 @@ export class LessonChangeService {
       });
     } catch (error) {
       await this.io.rm(published?.directory ?? stagingDirectory).catch(() => undefined);
+      const code = failureCode(error);
+      if (code) {
+        try {
+          this.store.recordLessonChangeFailure(request.idempotencyKey, requestFingerprint, code, this.ids.now());
+        } catch {
+          // 失败计数本身不能掩盖更接近根因的原始错误；调用方仍收到本次失败。
+        }
+      }
       throw error;
     }
   }
