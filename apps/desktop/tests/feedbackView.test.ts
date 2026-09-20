@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { TeachingEvent } from '../src/main/feedback/types';
-import { buildTeachingStatus, teachingSubmissionKey } from '../src/renderer/feedbackView';
+import {
+  OBSERVATION_OUTCOME_OPTIONS,
+  buildObservationPrompt,
+  buildTeachingStatus,
+  teachingSubmissionKey
+} from '../src/renderer/feedbackView';
 
 const event: TeachingEvent = {
   event_id: 'teach_1',
@@ -46,5 +51,29 @@ describe('G08 feedback renderer view model', () => {
     };
     expect(teachingSubmissionKey(base)).toBe(teachingSubmissionKey({ ...base }));
     expect(teachingSubmissionKey(base)).not.toBe(teachingSubmissionKey({ ...base, actualDurationSec: 2100 }));
+  });
+
+  it('offers four bounded optional outcomes only after teaching and never turns skip into a result', () => {
+    expect(OBSERVATION_OUTCOME_OPTIONS.map((item) => item.value)).toEqual([
+      'met_expectation',
+      'needed_prompt',
+      'clear_difficulty',
+      'insufficient_evidence'
+    ]);
+    expect(buildObservationPrompt({ teachingEvents: [], observedTeachingEventIds: [], dismissedTeachingEventIds: [] })).toEqual({
+      visible: false,
+      teachingEventId: null,
+      knowledgeLabel: '尚无反馈'
+    });
+    expect(buildObservationPrompt({ teachingEvents: [event], observedTeachingEventIds: [], dismissedTeachingEventIds: [] })).toEqual({
+      visible: true,
+      teachingEventId: 'teach_1',
+      knowledgeLabel: '尚无反馈'
+    });
+    expect(buildObservationPrompt({ teachingEvents: [event], observedTeachingEventIds: [], dismissedTeachingEventIds: ['teach_1'] })).toEqual({
+      visible: false,
+      teachingEventId: 'teach_1',
+      knowledgeLabel: '尚无反馈'
+    });
   });
 });

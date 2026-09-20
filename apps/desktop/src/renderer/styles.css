@@ -469,6 +469,44 @@ h1 {
 .teaching-history li {
   align-items: flex-start;
 }
+.observation-panel,
+.observation-history {
+  margin-top: 16px;
+}
+.outcome-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.outcome-options .selected {
+  border-color: var(--accent, #3b6cff);
+  background: #eef3ff;
+}
+.observation-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.coverage-preview {
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent, #3b6cff);
+  background: #f6f8fb;
+  font-size: 13px;
+}
+.observation-details {
+  margin: 12px 0;
+}
+.observation-details summary {
+  cursor: pointer;
+  color: var(--accent, #3b6cff);
+  font-size: 13px;
+}
+.observation-history .history-list li > div {
+  min-width: 0;
+}
 .change-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

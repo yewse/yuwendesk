@@ -45,8 +45,14 @@ import {
   FeedbackKeyReuseError,
   FeedbackSourceMissingError,
   FeedbackVersionConflictError,
-  type ImplementationState
+  type ImplementationState,
+  type ObservationMaterialRelation,
+  type ObservationOutcomeValue,
+  type ObservationSelection,
+  type ObservationSourceKind,
+  type ObservationSupportLevel
 } from './feedback/types';
+import { createObservationRecord, ObservationPrivacyError } from './feedback/observation';
 
 function errorResponse(
   code: ErrorCode,
@@ -79,6 +85,12 @@ export interface IpcServiceContext {
   lessonStore?: LessonStore;
   // G08 采用/授课/观察反馈流（由 SqliteStore 提供）。
   feedbackStore?: FeedbackStore;
+  // G08 删除观察前的原生确认；仅主进程注入，渲染层不能签发 token。
+  confirmObservationDelete?: (input: {
+    workspaceId: string;
+    planId: string;
+    observationId: string;
+  }) => Promise<{ token: string; expiresAt: number } | null>;
   // 成品文件输出根目录（userData）。
   userDataDir?: string;
   // G07 一处修改服务；生产缺省时由 lessonStore + userDataDir 构造，测试可注入。
@@ -131,6 +143,10 @@ export function validateEnvelope(op: string, req: unknown): IpcResponse<never> |
 
 export class IpcService {
   private readonly lessonChangeService?: LessonChangeService;
+  private readonly observationDeleteTokens = new Map<
+    string,
+    { workspaceId: string; planId: string; observationId: string; expiresAt: number; consumedBy?: string; deletedAt?: string }
+  >();
 
   constructor(private readonly ctx: IpcServiceContext) {
     this.lessonChangeService =
@@ -208,6 +224,14 @@ export class IpcService {
         return this.plansRecordTeaching(request);
       case 'feedback.history':
         return this.feedbackHistory(request);
+      case 'observations.add':
+        return this.observationsAdd(request);
+      case 'observations.list':
+        return this.observationsList(request);
+      case 'observations.prepareDelete':
+        return this.observationsPrepareDelete(request);
+      case 'observations.delete':
+        return this.observationsDelete(request);
       case 'review.run':
         return this.reviewRun(request);
       case 'change.preview':
@@ -483,6 +507,193 @@ export class IpcService {
       }
       throw error;
     }
+  }
+
+  private observationsAdd(req: IpcRequest): IpcResponse {
+    const feedback = this.ctx.feedbackStore;
+    if (!feedback) return errorResponse('SOURCE_MISSING', '课堂观察功能不可用。', '请重启应用。');
+    if (!Number.isSafeInteger(req.expected_revision) || (req.expected_revision as number) < 0) {
+      return errorResponse('INPUT_INVALID', '课堂观察缺少有效的反馈版本。', '请刷新课程后重试。');
+    }
+    if (typeof req.idempotency_key !== 'string' || !req.idempotency_key.trim()) {
+      return errorResponse('INPUT_INVALID', '课堂观察缺少幂等键。', '请重试当前操作。');
+    }
+    const payload = req.payload as {
+      planId: string;
+      planRevisionId: string;
+      teachingEventId: string;
+      taskId: string;
+      sourceKind: ObservationSourceKind;
+      observedAt: string;
+      outcome: ObservationOutcomeValue;
+      supportLevel: ObservationSupportLevel;
+      materialRelation: ObservationMaterialRelation;
+      delayDays: number;
+      sampleCount: number;
+      populationCount: number;
+      selection: ObservationSelection;
+      coverageCaveat: string;
+      summary: string;
+    };
+    const workspaceId = typeof req.workspace_id === 'string' && req.workspace_id.trim() ? req.workspace_id.trim() : 'workspace_default';
+    try {
+      const record = createObservationRecord(
+        {
+          workspaceId,
+          planRevisionId: payload.planRevisionId,
+          teachingEventId: payload.teachingEventId,
+          taskId: payload.taskId,
+          sourceKind: payload.sourceKind,
+          observedAt: payload.observedAt,
+          outcome: payload.outcome,
+          supportLevel: payload.supportLevel,
+          materialRelation: payload.materialRelation,
+          delayDays: payload.delayDays,
+          sampleCount: payload.sampleCount,
+          populationCount: payload.populationCount,
+          selection: payload.selection,
+          coverageCaveat: payload.coverageCaveat,
+          summary: payload.summary
+        },
+        { observationId: () => `observation_${randomUUID()}` }
+      );
+      const fingerprint = createHash('sha256')
+        .update(JSON.stringify([req.expected_revision, workspaceId, payload]))
+        .digest('hex');
+      return {
+        ok: true,
+        data: feedback.addObservation({
+          workspaceId,
+          planId: payload.planId,
+          teachingEventId: payload.teachingEventId,
+          expectedRevision: req.expected_revision as number,
+          idempotencyKey: req.idempotency_key,
+          fingerprint,
+          observation: record.observation,
+          outcome: record.outcome,
+          createdAt: new Date().toISOString()
+        })
+      };
+    } catch (error) {
+      return this.feedbackMutationError(error, '课堂观察');
+    }
+  }
+
+  private observationsList(req: IpcRequest): IpcResponse {
+    const feedback = this.ctx.feedbackStore;
+    if (!feedback) return errorResponse('SOURCE_MISSING', '课堂观察功能不可用。', '请重启应用。');
+    const planId = (req.payload as { planId: string }).planId;
+    try {
+      return {
+        ok: true,
+        data: {
+          observations: feedback.listObservations(planId),
+          knowledgeState: feedback.feedbackKnowledgeState(planId)
+        }
+      };
+    } catch (error) {
+      if (error instanceof StoreProtectedError) {
+        return errorResponse('DATABASE_LOCKED', '课堂观察校验失败，未隐藏损坏数据。', '请先备份并恢复本地数据库。');
+      }
+      throw error;
+    }
+  }
+
+  private async observationsPrepareDelete(req: IpcRequest): Promise<IpcResponse> {
+    const feedback = this.ctx.feedbackStore;
+    const confirm = this.ctx.confirmObservationDelete;
+    if (!feedback || !confirm) return errorResponse('INPUT_INVALID', '删除确认功能不可用。', '请重启应用。');
+    const payload = req.payload as { planId: string; observationId: string };
+    let exists = false;
+    try {
+      exists = feedback
+        .listObservations(payload.planId)
+        .some((record) => record.observation.observation_id === payload.observationId);
+    } catch (error) {
+      if (error instanceof StoreProtectedError) {
+        return errorResponse('DATABASE_LOCKED', '课堂观察校验失败，不能准备删除。', '请先备份并恢复本地数据库。');
+      }
+      throw error;
+    }
+    if (!exists) return errorResponse('SOURCE_MISSING', '要删除的课堂观察不存在。', '请刷新课程后重试。');
+    const workspaceId = typeof req.workspace_id === 'string' && req.workspace_id.trim() ? req.workspace_id.trim() : 'workspace_default';
+    const issued = await confirm({ workspaceId, planId: payload.planId, observationId: payload.observationId });
+    if (!issued || !issued.token.trim() || !Number.isFinite(issued.expiresAt) || issued.expiresAt <= Date.now()) {
+      return errorResponse('INPUT_INVALID', '未确认删除，课堂观察保持不变。', '如需删除，请重新确认。');
+    }
+    this.observationDeleteTokens.set(issued.token, {
+      workspaceId,
+      planId: payload.planId,
+      observationId: payload.observationId,
+      expiresAt: issued.expiresAt
+    });
+    return { ok: true, data: { confirmationToken: issued.token, expiresAt: issued.expiresAt } };
+  }
+
+  private observationsDelete(req: IpcRequest): IpcResponse {
+    const feedback = this.ctx.feedbackStore;
+    if (!feedback) return errorResponse('SOURCE_MISSING', '课堂观察功能不可用。', '请重启应用。');
+    if (!Number.isSafeInteger(req.expected_revision) || (req.expected_revision as number) < 0) {
+      return errorResponse('INPUT_INVALID', '删除请求缺少有效的反馈版本。', '请刷新课程后重试。');
+    }
+    if (typeof req.idempotency_key !== 'string' || !req.idempotency_key.trim()) {
+      return errorResponse('INPUT_INVALID', '删除请求缺少幂等键。', '请重试当前操作。');
+    }
+    const payload = req.payload as { planId: string; observationId: string; confirmationToken: string };
+    const workspaceId = typeof req.workspace_id === 'string' && req.workspace_id.trim() ? req.workspace_id.trim() : 'workspace_default';
+    const token = this.observationDeleteTokens.get(payload.confirmationToken);
+    if (
+      !token ||
+      token.expiresAt <= Date.now() ||
+      token.workspaceId !== workspaceId ||
+      token.planId !== payload.planId ||
+      token.observationId !== payload.observationId ||
+      (token.consumedBy !== undefined && token.consumedBy !== req.idempotency_key)
+    ) {
+      return errorResponse('INPUT_INVALID', '删除确认已失效、已被使用或与观察不匹配。', '请重新确认删除。');
+    }
+    token.consumedBy = req.idempotency_key;
+    token.deletedAt ??= new Date().toISOString();
+    const fingerprint = createHash('sha256')
+      .update(JSON.stringify([req.expected_revision, workspaceId, payload.planId, payload.observationId]))
+      .digest('hex');
+    try {
+      return {
+        ok: true,
+        data: feedback.deleteObservation({
+          workspaceId,
+          planId: payload.planId,
+          observationId: payload.observationId,
+          expectedRevision: req.expected_revision as number,
+          idempotencyKey: req.idempotency_key,
+          fingerprint,
+          confirmationToken: payload.confirmationToken,
+          deletedAt: token.deletedAt,
+          backupScopesNotCovered: ['external_or_offline_backups']
+        })
+      };
+    } catch (error) {
+      return this.feedbackMutationError(error, '课堂观察删除');
+    }
+  }
+
+  private feedbackMutationError(error: unknown, label: string): IpcResponse<never> {
+    if (error instanceof FeedbackVersionConflictError) {
+      return errorResponse('VERSION_CONFLICT', `${label}流已被其他操作更新，本次未覆盖。`, '请刷新课程后重试。');
+    }
+    if (error instanceof FeedbackKeyReuseError) {
+      return errorResponse('INPUT_INVALID', `${label}幂等键已用于不同内容。`, '请重试当前操作。');
+    }
+    if (error instanceof FeedbackSourceMissingError) {
+      return errorResponse('SOURCE_MISSING', `${label}引用的授课、课时或任务不存在。`, '请刷新课程后重试。');
+    }
+    if (error instanceof ObservationPrivacyError) {
+      return errorResponse('PRIVACY_BLOCKED', '课堂观察包含不必要的身份、联系方式、原始作品或路径字段，未保存。', '请只保留去身份化的表现事实。');
+    }
+    if (error instanceof StoreProtectedError) {
+      return errorResponse('DATABASE_LOCKED', '本地数据库处于保护状态，本次反馈未写入。', '请先恢复或备份数据库。');
+    }
+    return errorResponse('INPUT_INVALID', `${label}内容无效。`, '请核对样本范围、时间和观察内容后重试。');
   }
 
   private reviewRun(req: IpcRequest): IpcResponse {

@@ -164,14 +164,17 @@
 - **本包实测（Windows 11 开发主机，Node 24.15.0）**：`g07-bundle-failure.test.ts` 20、`materials.test.ts` 16、`g07-change-sqlite.test.ts` 5 均通过；全量 Vitest **279 passed / 1 skipped（280 total，29 files）**；主/渲染 typecheck、ESLint、合同校验、renderer/main build、`git diff --check` 均退出 0。一次实际自拟材料包的五个 SHA-256 与命令记录见 `reports/G07_EVIDENCE.md`。pdfjs 仍输出可选 canvas/standardFontDataUrl 警告，但相应文字抽取断言通过；不把它当 Office/WPS 保真证据。
 - **外部门保持分离**：开发态 Electron UI（锁定包缺二进制）、干净 Win11 标准账户安装、真实 API 语义审查、PowerPoint/WPS/Word 视觉保真、正式签名均为 `BLOCKED_EXTERNAL`。冻结验收定义与 NOT_RUN 状态未删除、未伪改为 PASS。
 
-## G08 反馈与教学纠正 — IN_PROGRESS（T01 已完成本地工程范围）
+## G08 反馈与教学纠正 — IN_PROGRESS（T01–T02 已完成本地工程范围）
 
 - [x] **G08-T01 采用与实际授课分离**：新增严格 `TeachingEvent`（实际时间、时长、完整/部分/中止、可选临场调整），不含采用状态或有效性字段；事件绑定已存在的课时修订，但不改变 `lesson_plan` 当前修订或发布状态。
 - [x] **反馈流存储边界**：SQLite schema v10 一次创建 G08 表；`recordTeaching` 在 `IMMEDIATE` 事务内完成来源核对、expected revision、持久幂等、事件写入与反馈流递增。同键同载荷跨重启重放不重复写，同键异载荷拒绝，同基础版本两个不同键仅一个成功。
 - [x] **命名 IPC 与 UI**：`plans.recordTeaching` 强制 expected revision 与幂等键；`feedback.history` 只读返回反馈流版本、授课历史和 `knowledgeState: unknown`。预加载不暴露通用 invoke。“我的课程”分别显示采用/授课状态，表单阻止双击并复用未变化提交的幂等键；记录后明确提示不会自动认定采用或教学有效。
-- [ ] **G08-T02–T04**：可选结构化 Observation/样本与删除墓碑、确定性测量门与模型辅助归因、最小纠正及偏好/效果双轨撤回尚未实现。
-- **T01 实测（Windows 开发主机，Node 24.15.0 / npm 11.12.1）**：定向 16/16；全量 Vitest **295 passed / 1 skipped（296 total，32 files）**；主/渲染 typecheck、ESLint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0。持久事件 JSON 损坏会 fail-closed 为存储保护错误，不返回空历史掩盖。既有 pdfjs 可选 canvas/standardFontDataUrl 警告仍存在，相应断言通过。
-- **状态边界**：机器测试只证明事件、事务、IPC 与渲染代码边界，不证明教师实际实施质量或教学有效性；冻结验收未改为 PASS。开发态 Electron UI 走查、干净 Windows 安装、真实 API 归因质量、教学专业复核、Office/WPS 保真与正式签名仍为 `BLOCKED_EXTERNAL`。
+- [x] **G08-T02 可选观察与透明样本范围**：新增未改动既有 `Observation` 的严格伴随合同 `ObservationOutcome`；四种结果、提示程度、材料关系、延迟、样本数/总体数/选择方式和覆盖限制分开保存。只有已记录 `TeachingEvent` 的课时才能新增观察；跳过不落库并保持 unknown。
+- [x] **隐私与删除边界**：Observation 强制 `sensitive_payload_ref=null`、`cloud_allowed=false`；IPC 不接受原始作品、任意路径或额外字段，本地保守规则阻断显式姓名字段、明显手机号/证件号。删除必须经主进程原生确认签发的短时绑定 token；正文与结果在一个事务内删除，仅保留无正文墓碑并明确外部/离线备份未覆盖，失败则原记录与反馈流版本均回滚。
+- [x] **可选反馈 UI**：实际授课后显示一次四选反馈；“暂不反馈”只关闭本次卡片，不写成功/失败。样本明细默认折叠，但选择方式与覆盖限制始终可见；典型/自愿/未知样本不显示全班百分比。历史可经再次原生确认删除。
+- [ ] **G08-T03–T04**：确定性测量门与模型辅助归因、最小纠正及偏好/效果双轨撤回尚未实现。
+- **T02 实测（Windows 开发主机，Node 24.15.0 / npm 11.12.1；全为虚构数据）**：定向 19/19；全量 Vitest **311 passed / 1 skipped（312 total，34 files）**；主/渲染 typecheck、ESLint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0。覆盖无授课拒绝、跨重启幂等、过期版本、插入/删除事务故障回滚、单次 token、内容无关墓碑和删除后 `deleted` 知识状态。
+- **状态边界**：机器测试只证明事件、事务、IPC、隐私守卫与渲染代码边界，不证明一般匿名化能力、教师实际实施质量或教学有效性；冻结验收未改为 PASS。真实学生材料隐私授权、开发态 Electron UI 走查、干净 Windows 安装、真实 API 归因质量、教学专业复核、Office/WPS 保真与正式签名仍为 `BLOCKED_EXTERNAL`。
 - 设计规格：`docs/superpowers/specs/2026-09-20-g08-feedback-attribution-design.md`；实施计划：`docs/superpowers/plans/2026-09-20-g08-feedback-attribution.md`。首版仍不保存学生原始作业正文；Observation 保持 `cloud_allowed=false`。
 
 ## G09–G11 — NOT_STARTED
@@ -180,4 +183,4 @@
 
 ## 下一步
 
-见 `HANDOFF.md`。下一步按已确认计划内联执行 G08-T02（可选 Observation、透明样本范围与删除墓碑），不重做 G00–G08-T01。扫描件 OCR 未接入则继续阻塞。外部门保留：开发态 Electron 二进制下载/真实窗口走查、G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。
+见 `HANDOFF.md`。下一步按已确认计划内联执行 G08-T03（确定性测量门、去身份化白名单上下文和模型辅助待验归因），不重做 G00–G08-T02。扫描件 OCR 未接入则继续阻塞。外部门保留：真实学生材料隐私授权、开发态 Electron 二进制下载/真实窗口走查、G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。

@@ -172,6 +172,57 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     required: ['planId'],
     additionalProperties: false
   },
+  'observations.add': {
+    type: 'object',
+    properties: {
+      planId: { type: 'string', minLength: 1, maxLength: 128 },
+      planRevisionId: { type: 'string', minLength: 1, maxLength: 128 },
+      teachingEventId: { type: 'string', minLength: 1, maxLength: 128 },
+      taskId: { type: 'string', minLength: 1, maxLength: 128 },
+      sourceKind: { type: 'string', minLength: 1, maxLength: 32 },
+      observedAt: { type: 'string', minLength: 1, maxLength: 64 },
+      outcome: { type: 'string', minLength: 1, maxLength: 32 },
+      supportLevel: { type: 'string', minLength: 1, maxLength: 32 },
+      materialRelation: { type: 'string', minLength: 1, maxLength: 32 },
+      delayDays: { type: 'integer', nonNegative: true },
+      sampleCount: { type: 'integer', nonNegative: true },
+      populationCount: { type: 'integer', nonNegative: true },
+      selection: { type: 'string', minLength: 1, maxLength: 32 },
+      coverageCaveat: { type: 'string', minLength: 1, maxLength: 4000 },
+      summary: { type: 'string', maxLength: 4000 }
+    },
+    required: [
+      'planId', 'planRevisionId', 'teachingEventId', 'taskId', 'sourceKind', 'observedAt', 'outcome',
+      'supportLevel', 'materialRelation', 'delayDays', 'sampleCount', 'populationCount', 'selection',
+      'coverageCaveat', 'summary'
+    ],
+    additionalProperties: false
+  },
+  'observations.list': {
+    type: 'object',
+    properties: { planId: { type: 'string', minLength: 1, maxLength: 128 } },
+    required: ['planId'],
+    additionalProperties: false
+  },
+  'observations.prepareDelete': {
+    type: 'object',
+    properties: {
+      planId: { type: 'string', minLength: 1, maxLength: 128 },
+      observationId: { type: 'string', minLength: 1, maxLength: 128 }
+    },
+    required: ['planId', 'observationId'],
+    additionalProperties: false
+  },
+  'observations.delete': {
+    type: 'object',
+    properties: {
+      planId: { type: 'string', minLength: 1, maxLength: 128 },
+      observationId: { type: 'string', minLength: 1, maxLength: 128 },
+      confirmationToken: { type: 'string', minLength: 1, maxLength: 256 }
+    },
+    required: ['planId', 'observationId', 'confirmationToken'],
+    additionalProperties: false
+  },
   'review.run': {
     type: 'object',
     properties: {

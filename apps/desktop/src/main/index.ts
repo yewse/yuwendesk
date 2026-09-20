@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { release } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -216,6 +217,23 @@ async function bootstrap(): Promise<void> {
     modelService,
     lessonStore: store,
     feedbackStore: store,
+    confirmObservationDelete: async ({ observationId }) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: ['取消', '删除本机观察'],
+        defaultId: 0,
+        cancelId: 0,
+        title: APP_NAME_ZH,
+        message: '确认删除这条课堂观察？',
+        detail: '本机观察正文和结果会删除，并保留不含正文的删除记录。外部或离线备份不在本次删除范围内。'
+      });
+      if (response !== 1) return null;
+      return {
+        token: `observation-delete_${observationId}_${randomUUID()}`,
+        expiresAt: Date.now() + 2 * 60_000
+      };
+    },
     userDataDir: app.getPath('userData'),
     appVersion: app.getVersion(),
     appNameZh: APP_NAME_ZH,

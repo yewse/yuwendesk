@@ -278,6 +278,17 @@
       "arbitrary_path_allowed": false
     },
     {
+      "operation": "observations.prepareDelete",
+      "kind": "write",
+      "scope": "workspace",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": false,
+      "output_contract": "短时单次删除确认令牌",
+      "semantic_guard": "仅主进程原生确认后签发并绑定观察ID",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
       "operation": "artifacts.render",
       "kind": "write",
       "scope": "workspace",

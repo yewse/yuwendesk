@@ -37,12 +37,19 @@ import {
   FeedbackKeyReuseError,
   FeedbackSourceMissingError,
   FeedbackVersionConflictError,
+  type AddObservationInput,
+  type DeleteObservationInput,
   type FeedbackHistory,
+  type FeedbackKnowledgeState,
   type FeedbackWriteResult,
+  type ObservationDeleteResult,
+  type ObservationRecord,
   type RecordTeachingInput,
   type TeachingEvent
 } from '../feedback/types';
 import { validateTeachingEvent } from '../feedback/teaching';
+import { validateObservation, validateObservationOutcome } from '../feedback/observation';
+import { isBoundedString, isIsoDateTime, isRecord } from '../feedback/validation';
 import { extractBuffer, ExtractError, extractText, type CancelSignal, type ExtractOpts, type ExtractResult } from '../sources/extract';
 import {
   CredentialProtector,
@@ -71,6 +78,12 @@ export interface LessonChangeCommitFaultHooks {
   beforeIdempotencySuccess?: () => void;
 }
 
+// 仅供 G08 反馈事务回滚测试使用；生产不配置。
+export interface FeedbackCommitFaultHooks {
+  afterObservationInsert?: () => void;
+  afterObservationDelete?: () => void;
+}
+
 export interface SqliteStoreOptions {
   // 旧 JSON 读取/隔离的可注入 IO（供确定性测试读取失败/隔离失败）。
   legacyIo?: StoreIo;
@@ -82,6 +95,8 @@ export interface SqliteStoreOptions {
   commitFaults?: CommitFaultHooks;
   // G07 测试用课时修改事务故障注入；生产不配置。
   lessonChangeFaults?: LessonChangeCommitFaultHooks;
+  // G08 测试用观察写入/删除事务故障注入；生产不配置。
+  feedbackFaults?: FeedbackCommitFaultHooks;
   // 可注入的解析实现：生产可注入 worker 线程后端使耗时解析不阻塞主进程；缺省内联 extractBuffer。
   parseFile?: (buf: Buffer, format: string, opts: ExtractOpts) => Promise<ExtractResult>;
 }
@@ -116,6 +131,36 @@ function locatorLabel(loc: SourceLocator): string {
 }
 const SOURCE_PREVIEW_MAX = 8000;
 const SEARCH_LIMIT = 30;
+
+function parseObservationRecord(value: unknown, context: string): ObservationRecord {
+  if (!isRecord(value) || typeof value.teachingEventId !== 'string') {
+    throw new StoreProtectedError(`${context}:record`);
+  }
+  const observationErrors = validateObservation(value.observation);
+  const outcomeErrors = validateObservationOutcome(value.outcome);
+  if (observationErrors.length || outcomeErrors.length) {
+    throw new StoreProtectedError(`${context}:${[...observationErrors, ...outcomeErrors].join('|')}`);
+  }
+  const record = value as unknown as ObservationRecord;
+  if (record.observation.observation_id !== record.outcome.observation_id) {
+    throw new StoreProtectedError(`${context}:identity`);
+  }
+  return record;
+}
+
+function parseObservationDeleteResult(value: unknown, context: string): ObservationDeleteResult {
+  if (
+    !isRecord(value) ||
+    typeof value.observationId !== 'string' ||
+    typeof value.planId !== 'string' ||
+    !isIsoDateTime(value.deletedAt) ||
+    !Array.isArray(value.backupScopesNotCovered) ||
+    value.backupScopesNotCovered.some((item) => typeof item !== 'string')
+  ) {
+    throw new StoreProtectedError(`${context}:result`);
+  }
+  return value as unknown as ObservationDeleteResult;
+}
 
 function likeEscape(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -528,6 +573,7 @@ export class SqliteStore {
   private readonly safeStorage?: SafeStorageLike;
   private readonly commitFaults?: CommitFaultHooks;
   private readonly lessonChangeFaults?: LessonChangeCommitFaultHooks;
+  private readonly feedbackFaults?: FeedbackCommitFaultHooks;
   private readonly parseFile: (buf: Buffer, format: string, opts: ExtractOpts) => Promise<ExtractResult>;
   private readonly cancelRegistry = new Map<string, CancelSignal>();
 
@@ -540,6 +586,7 @@ export class SqliteStore {
     this.safeStorage = opts.safeStorage;
     this.commitFaults = opts.commitFaults;
     this.lessonChangeFaults = opts.lessonChangeFaults;
+    this.feedbackFaults = opts.feedbackFaults;
     this.parseFile = opts.parseFile ?? ((buf, format, o) => extractBuffer(buf, format, o));
   }
 
@@ -1805,7 +1852,253 @@ export class SqliteStore {
       if (errors.length) throw new StoreProtectedError(`invalid_stored_teaching_event:${errors.join('|')}`);
       return event as TeachingEvent;
     });
-    return { streamRevision: stream?.revision ?? 0, teachingEvents, knowledgeState: 'unknown' };
+    return {
+      streamRevision: stream?.revision ?? 0,
+      teachingEvents,
+      knowledgeState: this.feedbackKnowledgeState(planId)
+    };
+  }
+
+  addObservation(input: AddObservationInput): FeedbackWriteResult<ObservationRecord> {
+    this.assertWritable();
+    const observationErrors = validateObservation(input.observation);
+    const outcomeErrors = validateObservationOutcome(input.outcome);
+    if (observationErrors.length) throw new Error(`invalid_observation:${observationErrors.join('|')}`);
+    if (outcomeErrors.length) throw new Error(`invalid_observation_outcome:${outcomeErrors.join('|')}`);
+    if (input.observation.observation_id !== input.outcome.observation_id) throw new Error('observation_identity_mismatch');
+    if (input.observation.workspace_id !== input.workspaceId) throw new Error('observation_workspace_mismatch');
+    if (!isIsoDateTime(input.createdAt)) throw new Error('invalid_observation_created_at');
+    if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) throw new Error('invalid_feedback_revision');
+    if (!input.idempotencyKey.trim() || !input.fingerprint.trim()) throw new Error('invalid_feedback_idempotency');
+
+    const db = this.requireDb();
+    const tx = db.transaction((): FeedbackWriteResult<ObservationRecord> => {
+      const existing = db
+        .prepare('SELECT fingerprint,operation,status,result_json resultJson FROM feedback_idempotency WHERE key=?')
+        .get(input.idempotencyKey) as
+        | { fingerprint: string; operation: string; status: string; resultJson: string | null }
+        | undefined;
+      if (existing) {
+        if (existing.fingerprint !== input.fingerprint || existing.operation !== 'observations.add') {
+          throw new FeedbackKeyReuseError();
+        }
+        if (existing.status !== 'succeeded' || !existing.resultJson) throw new StoreProtectedError('observation_idempotency_incomplete');
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(existing.resultJson) as unknown;
+        } catch {
+          throw new StoreProtectedError('invalid_observation_idempotency_result:json');
+        }
+        if (!isRecord(parsed) || !Number.isSafeInteger(parsed.streamRevision) || (parsed.streamRevision as number) < 1) {
+          throw new StoreProtectedError('invalid_observation_idempotency_result:revision');
+        }
+        return {
+          streamRevision: parsed.streamRevision as number,
+          value: parseObservationRecord(parsed.value, 'invalid_observation_idempotency_result'),
+          replayed: true
+        };
+      }
+
+      const lesson = db
+        .prepare('SELECT content_json contentJson FROM lesson_revision WHERE plan_id=? AND revision_id=?')
+        .get(input.planId, input.observation.plan_revision_id) as { contentJson: string } | undefined;
+      if (!lesson) throw new FeedbackSourceMissingError();
+      let lessonContent: unknown;
+      try {
+        lessonContent = JSON.parse(lesson.contentJson) as unknown;
+      } catch {
+        throw new StoreProtectedError('invalid_observation_lesson_revision:json');
+      }
+      if (
+        input.observation.task_id !== null &&
+        (!isRecord(lessonContent) ||
+          !Array.isArray(lessonContent.tasks) ||
+          !lessonContent.tasks.some((task) => isRecord(task) && task.task_id === input.observation.task_id))
+      ) {
+        throw new FeedbackSourceMissingError();
+      }
+
+      const teaching = db
+        .prepare(
+          `SELECT 1 FROM teaching_event
+           WHERE event_id=? AND workspace_id=? AND plan_id=? AND plan_revision_id=?`
+        )
+        .get(input.teachingEventId, input.workspaceId, input.planId, input.observation.plan_revision_id);
+      if (!teaching) throw new FeedbackSourceMissingError();
+
+      const stream = db
+        .prepare('SELECT workspace_id workspaceId,revision FROM feedback_stream WHERE plan_id=?')
+        .get(input.planId) as { workspaceId: string; revision: number } | undefined;
+      if (!stream || stream.workspaceId !== input.workspaceId) throw new FeedbackSourceMissingError();
+      if (stream.revision !== input.expectedRevision) throw new FeedbackVersionConflictError();
+
+      db.prepare(
+        `INSERT INTO learning_observation(observation_id,workspace_id,plan_id,teaching_event_id,observation_json,created_at)
+         VALUES(?,?,?,?,?,?)`
+      ).run(
+        input.observation.observation_id,
+        input.workspaceId,
+        input.planId,
+        input.teachingEventId,
+        JSON.stringify(input.observation),
+        input.createdAt
+      );
+      this.feedbackFaults?.afterObservationInsert?.();
+      db.prepare('INSERT INTO observation_outcome(observation_id,outcome_json) VALUES(?,?)').run(
+        input.observation.observation_id,
+        JSON.stringify(input.outcome)
+      );
+
+      const nextRevision = stream.revision + 1;
+      db.prepare('UPDATE feedback_stream SET revision=?,updated_at=? WHERE plan_id=?').run(
+        nextRevision,
+        input.createdAt,
+        input.planId
+      );
+      const value: ObservationRecord = {
+        teachingEventId: input.teachingEventId,
+        observation: input.observation,
+        outcome: input.outcome
+      };
+      const result = { streamRevision: nextRevision, value };
+      db.prepare(
+        `INSERT INTO feedback_idempotency(key,fingerprint,operation,status,result_json,updated_at)
+         VALUES(?,?,?,?,?,?)`
+      ).run(
+        input.idempotencyKey,
+        input.fingerprint,
+        'observations.add',
+        'succeeded',
+        JSON.stringify(result),
+        input.createdAt
+      );
+      return { ...result, replayed: false };
+    });
+    return tx.immediate();
+  }
+
+  listObservations(planId: string): ObservationRecord[] {
+    const db = this.requireDb();
+    const rows = db
+      .prepare(
+        `SELECT o.teaching_event_id teachingEventId,o.observation_json observationJson,
+                oo.outcome_json outcomeJson
+         FROM learning_observation o
+         LEFT JOIN observation_outcome oo ON oo.observation_id=o.observation_id
+         WHERE o.plan_id=? ORDER BY o.created_at,o.observation_id`
+      )
+      .all(planId) as Array<{ teachingEventId: string; observationJson: string; outcomeJson: string | null }>;
+    return rows.map((row) => {
+      try {
+        if (row.outcomeJson === null) throw new StoreProtectedError('invalid_stored_observation:missing_outcome');
+        return parseObservationRecord(
+          {
+            teachingEventId: row.teachingEventId,
+            observation: JSON.parse(row.observationJson) as unknown,
+            outcome: JSON.parse(row.outcomeJson) as unknown
+          },
+          'invalid_stored_observation'
+        );
+      } catch (error) {
+        if (error instanceof StoreProtectedError) throw error;
+        throw new StoreProtectedError('invalid_stored_observation:json');
+      }
+    });
+  }
+
+  feedbackKnowledgeState(planId: string): FeedbackKnowledgeState {
+    const db = this.requireDb();
+    const active = db.prepare('SELECT COUNT(*) count FROM learning_observation WHERE plan_id=?').get(planId) as { count: number };
+    if (active.count > 0) return 'observed';
+    const deleted = db.prepare('SELECT COUNT(*) count FROM observation_tombstone WHERE plan_id=?').get(planId) as { count: number };
+    return deleted.count > 0 ? 'deleted' : 'unknown';
+  }
+
+  deleteObservation(input: DeleteObservationInput): FeedbackWriteResult<ObservationDeleteResult> {
+    this.assertWritable();
+    if (!input.confirmationToken.trim()) throw new Error('observation_delete_confirmation_missing');
+    if (!isIsoDateTime(input.deletedAt)) throw new Error('invalid_observation_deleted_at');
+    if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) throw new Error('invalid_feedback_revision');
+    if (!input.idempotencyKey.trim() || !input.fingerprint.trim()) throw new Error('invalid_feedback_idempotency');
+    if (
+      !Array.isArray(input.backupScopesNotCovered) ||
+      input.backupScopesNotCovered.length === 0 ||
+      input.backupScopesNotCovered.some((scope) => !isBoundedString(scope, 1, 128))
+    ) throw new Error('invalid_observation_backup_scope');
+
+    const db = this.requireDb();
+    const tx = db.transaction((): FeedbackWriteResult<ObservationDeleteResult> => {
+      const existing = db
+        .prepare('SELECT fingerprint,operation,status,result_json resultJson FROM feedback_idempotency WHERE key=?')
+        .get(input.idempotencyKey) as
+        | { fingerprint: string; operation: string; status: string; resultJson: string | null }
+        | undefined;
+      if (existing) {
+        if (existing.fingerprint !== input.fingerprint || existing.operation !== 'observations.delete') {
+          throw new FeedbackKeyReuseError();
+        }
+        if (existing.status !== 'succeeded' || !existing.resultJson) throw new StoreProtectedError('observation_delete_idempotency_incomplete');
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(existing.resultJson) as unknown;
+        } catch {
+          throw new StoreProtectedError('invalid_observation_delete_idempotency_result:json');
+        }
+        if (!isRecord(parsed) || !Number.isSafeInteger(parsed.streamRevision) || (parsed.streamRevision as number) < 1) {
+          throw new StoreProtectedError('invalid_observation_delete_idempotency_result:revision');
+        }
+        return {
+          streamRevision: parsed.streamRevision as number,
+          value: parseObservationDeleteResult(parsed.value, 'invalid_observation_delete_idempotency_result'),
+          replayed: true
+        };
+      }
+
+      const row = db
+        .prepare('SELECT workspace_id workspaceId,plan_id planId FROM learning_observation WHERE observation_id=?')
+        .get(input.observationId) as { workspaceId: string; planId: string } | undefined;
+      if (!row || row.workspaceId !== input.workspaceId || row.planId !== input.planId) throw new FeedbackSourceMissingError();
+      const stream = db
+        .prepare('SELECT workspace_id workspaceId,revision FROM feedback_stream WHERE plan_id=?')
+        .get(input.planId) as { workspaceId: string; revision: number } | undefined;
+      if (!stream || stream.workspaceId !== input.workspaceId) throw new FeedbackSourceMissingError();
+      if (stream.revision !== input.expectedRevision) throw new FeedbackVersionConflictError();
+
+      db.prepare('DELETE FROM observation_outcome WHERE observation_id=?').run(input.observationId);
+      db.prepare('DELETE FROM learning_observation WHERE observation_id=?').run(input.observationId);
+      this.feedbackFaults?.afterObservationDelete?.();
+
+      const value: ObservationDeleteResult = {
+        observationId: input.observationId,
+        planId: input.planId,
+        deletedAt: input.deletedAt,
+        backupScopesNotCovered: [...input.backupScopesNotCovered]
+      };
+      db.prepare(
+        `INSERT INTO observation_tombstone(observation_id,workspace_id,plan_id,deleted_at,backup_scope_json)
+         VALUES(?,?,?,?,?)`
+      ).run(input.observationId, input.workspaceId, input.planId, input.deletedAt, JSON.stringify(value));
+      const nextRevision = stream.revision + 1;
+      db.prepare('UPDATE feedback_stream SET revision=?,updated_at=? WHERE plan_id=?').run(
+        nextRevision,
+        input.deletedAt,
+        input.planId
+      );
+      const result = { streamRevision: nextRevision, value };
+      db.prepare(
+        `INSERT INTO feedback_idempotency(key,fingerprint,operation,status,result_json,updated_at)
+         VALUES(?,?,?,?,?,?)`
+      ).run(
+        input.idempotencyKey,
+        input.fingerprint,
+        'observations.delete',
+        'succeeded',
+        JSON.stringify(result),
+        input.deletedAt
+      );
+      return { ...result, replayed: false };
+    });
+    return tx.immediate();
   }
 
   // ===== G04 模型配置/作业持久化 =====

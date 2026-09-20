@@ -17,7 +17,20 @@ import type {
 import type { ReviewReport } from '../main/review/types';
 import type { ChangePreview, LessonChange } from '../main/change/types';
 import type { LessonChangeApplyOutcome } from '../main/store';
-import type { FeedbackHistory, FeedbackWriteResult, ImplementationState, TeachingEvent } from '../main/feedback/types';
+import type {
+  FeedbackHistory,
+  FeedbackKnowledgeState,
+  FeedbackWriteResult,
+  ImplementationState,
+  ObservationDeleteResult,
+  ObservationMaterialRelation,
+  ObservationOutcomeValue,
+  ObservationRecord,
+  ObservationSelection,
+  ObservationSourceKind,
+  ObservationSupportLevel,
+  TeachingEvent
+} from '../main/feedback/types';
 
 // 预加载在 sandbox=true 下不能 require 本地模块，因此保持完全自包含：
 // 仅使用类型导入（编译期擦除）与本地常量，运行时只依赖 electron。
@@ -135,6 +148,56 @@ const api = {
     call<FeedbackHistory>('feedback.history', {
       workspace_id: 'workspace_default',
       payload: { planId }
+    }),
+  addObservation: (
+    payload: {
+      planId: string;
+      planRevisionId: string;
+      teachingEventId: string;
+      taskId: string;
+      sourceKind: ObservationSourceKind;
+      observedAt: string;
+      outcome: ObservationOutcomeValue;
+      supportLevel: ObservationSupportLevel;
+      materialRelation: ObservationMaterialRelation;
+      delayDays: number;
+      sampleCount: number;
+      populationCount: number;
+      selection: ObservationSelection;
+      coverageCaveat: string;
+      summary: string;
+    },
+    expectedRevision: number,
+    idempotencyKey: string
+  ) =>
+    call<FeedbackWriteResult<ObservationRecord>>('observations.add', {
+      workspace_id: 'workspace_default',
+      expected_revision: expectedRevision,
+      idempotency_key: idempotencyKey,
+      payload
+    }),
+  listObservations: (planId: string) =>
+    call<{ observations: ObservationRecord[]; knowledgeState: FeedbackKnowledgeState }>('observations.list', {
+      workspace_id: 'workspace_default',
+      payload: { planId }
+    }),
+  prepareObservationDelete: (planId: string, observationId: string) =>
+    call<{ confirmationToken: string; expiresAt: number }>('observations.prepareDelete', {
+      workspace_id: 'workspace_default',
+      payload: { planId, observationId }
+    }),
+  deleteObservation: (
+    planId: string,
+    observationId: string,
+    confirmationToken: string,
+    expectedRevision: number,
+    idempotencyKey: string
+  ) =>
+    call<FeedbackWriteResult<ObservationDeleteResult>>('observations.delete', {
+      workspace_id: 'workspace_default',
+      expected_revision: expectedRevision,
+      idempotency_key: idempotencyKey,
+      payload: { planId, observationId, confirmationToken }
     }),
   reviewRun: (planId: string, revisionId?: string) =>
     call<{ report: ReviewReport }>('review.run', {

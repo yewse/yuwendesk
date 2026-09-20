@@ -4,7 +4,17 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { ReviewReport } from './review/types';
 import type { ChangeProposal, LessonChange } from './change/types';
-import type { FeedbackHistory, FeedbackWriteResult, RecordTeachingInput, TeachingEvent } from './feedback/types';
+import type {
+  AddObservationInput,
+  DeleteObservationInput,
+  FeedbackHistory,
+  FeedbackKnowledgeState,
+  FeedbackWriteResult,
+  ObservationDeleteResult,
+  ObservationRecord,
+  RecordTeachingInput,
+  TeachingEvent
+} from './feedback/types';
 
 // G01 本地持久化：只保存教师自己的备课草稿与窗口状态，不含任何 AI 生成正文或密钥。
 // 使用「临时文件 → 原子改名」保证崩溃时不产生半成品（规范 7.2）。后续 G02 以 SQLite 单写入者替换。
@@ -363,6 +373,10 @@ export interface LessonStore {
 export interface FeedbackStore {
   recordTeaching(input: RecordTeachingInput): FeedbackWriteResult<TeachingEvent>;
   getFeedbackHistory(planId: string): FeedbackHistory;
+  addObservation(input: AddObservationInput): FeedbackWriteResult<ObservationRecord>;
+  listObservations(planId: string): ObservationRecord[];
+  deleteObservation(input: DeleteObservationInput): FeedbackWriteResult<ObservationDeleteResult>;
+  feedbackKnowledgeState(planId: string): FeedbackKnowledgeState;
 }
 
 export interface ModelStore {

@@ -1,11 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BootstrapData, HealthData, SourceHitDTO, SourceListItemDTO, SourceReadDTO, SourceVersionDTO } from '../shared/ipc';
 import type { ChangePreview, LessonChange } from '../main/change/types';
-import type { ImplementationState, TeachingEvent } from '../main/feedback/types';
+import type {
+  ImplementationState,
+  ObservationMaterialRelation,
+  ObservationOutcomeValue,
+  ObservationRecord,
+  ObservationSelection,
+  ObservationSourceKind,
+  ObservationSupportLevel,
+  TeachingEvent
+} from '../main/feedback/types';
+import { observationCoverageSummary } from '../main/feedback/observation';
 import type { LessonPlan } from '../main/lesson/types';
 import type { LessonChangeApplyResult } from '../main/store';
 import { DraftController, DraftSnapshot, getDraftController } from './draftController';
-import { buildTeachingStatus, teachingSubmissionKey } from './feedbackView';
+import {
+  OBSERVATION_OUTCOME_OPTIONS,
+  buildObservationPrompt,
+  buildTeachingStatus,
+  teachingSubmissionKey
+} from './feedbackView';
 import {
   buildChangeSummary,
   needsPrintedCopyWarning,
@@ -301,10 +316,28 @@ function CoursesPage(): JSX.Element {
   const [adjustmentSummary, setAdjustmentSummary] = useState('');
   const [teachingMessage, setTeachingMessage] = useState<string | null>(null);
   const [recordingTeaching, setRecordingTeaching] = useState(false);
+  const [observations, setObservations] = useState<ObservationRecord[]>([]);
+  const [dismissedTeachingEventIds, setDismissedTeachingEventIds] = useState<string[]>([]);
+  const [observationOutcome, setObservationOutcome] = useState<ObservationOutcomeValue>('met_expectation');
+  const [observationSummary, setObservationSummary] = useState('');
+  const [observationObservedAt, setObservationObservedAt] = useState(() => localDateTimeValue());
+  const [observationSourceKind, setObservationSourceKind] = useState<ObservationSourceKind>('teacher_observation');
+  const [observationSupport, setObservationSupport] = useState<ObservationSupportLevel>('independent');
+  const [observationMaterial, setObservationMaterial] = useState<ObservationMaterialRelation>('same_item');
+  const [observationDelayDays, setObservationDelayDays] = useState('0');
+  const [observationSampleCount, setObservationSampleCount] = useState('0');
+  const [observationPopulationCount, setObservationPopulationCount] = useState('0');
+  const [observationSelection, setObservationSelection] = useState<ObservationSelection>('unknown');
+  const [observationCaveat, setObservationCaveat] = useState('尚未确认样本覆盖，不能推算全班比例');
+  const [observationMessage, setObservationMessage] = useState<string | null>(null);
+  const [savingObservation, setSavingObservation] = useState(false);
   const applyKeyRef = useRef<string | null>(null);
   const applyingRef = useRef(false);
   const teachingRequestRef = useRef<{ signature: string; key: string } | null>(null);
   const recordingTeachingRef = useRef(false);
+  const observationRequestRef = useRef<{ signature: string; key: string } | null>(null);
+  const savingObservationRef = useRef(false);
+  const observationDeleteKeysRef = useRef(new Map<string, string>());
 
   async function reload(): Promise<void> {
     const r = await window.yuwen.lessonList();
@@ -347,6 +380,15 @@ function CoursesPage(): JSX.Element {
     setFeedbackRevision(response.data.streamRevision);
   }
 
+  async function loadObservations(planId: string): Promise<void> {
+    const response = await window.yuwen.listObservations(planId);
+    if (!response.ok) {
+      setObservationMessage(`课堂观察读取失败：${response.error.message_zh}`);
+      return;
+    }
+    setObservations(response.data.observations);
+  }
+
   async function openPlan(planId: string): Promise<void> {
     const response = await window.yuwen.lessonGet(planId);
     if (!response.ok) {
@@ -362,6 +404,22 @@ function CoursesPage(): JSX.Element {
     setAdjustmentSummary('');
     setTeachingMessage(null);
     teachingRequestRef.current = null;
+    setObservations([]);
+    setDismissedTeachingEventIds([]);
+    setObservationOutcome('met_expectation');
+    setObservationSummary('');
+    setObservationObservedAt(localDateTimeValue());
+    setObservationSourceKind('teacher_observation');
+    setObservationSupport('independent');
+    setObservationMaterial('same_item');
+    setObservationDelayDays('0');
+    setObservationSampleCount('0');
+    setObservationPopulationCount('0');
+    setObservationSelection('unknown');
+    setObservationCaveat('尚未确认样本覆盖，不能推算全班比例');
+    setObservationMessage(null);
+    observationRequestRef.current = null;
+    observationDeleteKeysRef.current.clear();
     const studentActivity = plan.activities.find((activity) => activity.actor === 'student');
     setActivityId(studentActivity?.activity_id ?? '');
     setLinkId(plan.links.find((link) => link.decision === 'include')?.link_id ?? '');
@@ -372,7 +430,7 @@ function CoursesPage(): JSX.Element {
     const rubric = plan.rubrics.find((item) => item.rubric_id === firstTask?.rubric_id);
     setVariants(rubric?.criteria[0]?.acceptable_variants.join('；') ?? '');
     invalidatePreview();
-    await Promise.all([loadHistory(planId), loadFeedbackHistory(planId)]);
+    await Promise.all([loadHistory(planId), loadFeedbackHistory(planId), loadObservations(planId)]);
   }
 
   async function recordTeaching(): Promise<void> {
@@ -421,6 +479,111 @@ function CoursesPage(): JSX.Element {
     } finally {
       recordingTeachingRef.current = false;
       setRecordingTeaching(false);
+    }
+  }
+
+  async function saveObservation(teachingEventId: string): Promise<void> {
+    if (!selectedPlan || savingObservationRef.current) return;
+    const taskId = selectedPlan.tasks[0]?.task_id;
+    if (!taskId) {
+      setObservationMessage('当前课时没有可绑定的稳定任务，未保存观察。');
+      return;
+    }
+    const delayDays = Number(observationDelayDays);
+    const sampleCount = Number(observationSampleCount);
+    const populationCount = Number(observationPopulationCount);
+    const observedAt = new Date(observationObservedAt);
+    if (
+      ![delayDays, sampleCount, populationCount].every((value) => Number.isSafeInteger(value) && value >= 0) ||
+      sampleCount > populationCount
+    ) {
+      setObservationMessage('延迟天数、样本数和总体数须为非负整数，且样本数不能超过总体数。');
+      return;
+    }
+    if (Number.isNaN(observedAt.getTime())) {
+      setObservationMessage('请填写有效的观察时间。');
+      return;
+    }
+    if (!observationCaveat.trim()) {
+      setObservationMessage('请说明样本选择和覆盖限制。');
+      return;
+    }
+    const payload = {
+      planId: selectedPlan.plan_id,
+      planRevisionId: selectedPlan.revision_id,
+      teachingEventId,
+      taskId,
+      sourceKind: observationSourceKind,
+      observedAt: observedAt.toISOString(),
+      outcome: observationOutcome,
+      supportLevel: observationSupport,
+      materialRelation: observationMaterial,
+      delayDays,
+      sampleCount,
+      populationCount,
+      selection: observationSelection,
+      coverageCaveat: observationCaveat,
+      summary: observationSummary
+    };
+    const signature = JSON.stringify(payload);
+    if (observationRequestRef.current?.signature !== signature) {
+      observationRequestRef.current = { signature, key: `observation-${crypto.randomUUID()}` };
+    }
+    savingObservationRef.current = true;
+    setSavingObservation(true);
+    setObservationMessage(null);
+    try {
+      const response = await window.yuwen.addObservation(payload, feedbackRevision, observationRequestRef.current.key);
+      if (!response.ok) {
+        setObservationMessage(`课堂观察未保存：${response.error.message_zh}；${response.error.next_action}`);
+        if (response.error.code === 'VERSION_CONFLICT') await loadFeedbackHistory(selectedPlan.plan_id);
+        return;
+      }
+      setFeedbackRevision(response.data.streamRevision);
+      await loadObservations(selectedPlan.plan_id);
+      setObservationMessage('已在本机保存观察；这不是教学有效性或全班表现证明。');
+      observationRequestRef.current = null;
+    } finally {
+      savingObservationRef.current = false;
+      setSavingObservation(false);
+    }
+  }
+
+  async function deleteObservation(observationId: string): Promise<void> {
+    if (!selectedPlan || savingObservationRef.current) return;
+    savingObservationRef.current = true;
+    setSavingObservation(true);
+    setObservationMessage(null);
+    try {
+      const prepared = await window.yuwen.prepareObservationDelete(selectedPlan.plan_id, observationId);
+      if (!prepared.ok) {
+        setObservationMessage(`未删除：${prepared.error.message_zh}`);
+        return;
+      }
+      let key = observationDeleteKeysRef.current.get(observationId);
+      if (!key) {
+        key = `observation-delete-${crypto.randomUUID()}`;
+        observationDeleteKeysRef.current.set(observationId, key);
+      }
+      const response = await window.yuwen.deleteObservation(
+        selectedPlan.plan_id,
+        observationId,
+        prepared.data.confirmationToken,
+        feedbackRevision,
+        key
+      );
+      if (!response.ok) {
+        setObservationMessage(`未删除：${response.error.message_zh}；${response.error.next_action}`);
+        if (response.error.code === 'VERSION_CONFLICT') await loadFeedbackHistory(selectedPlan.plan_id);
+        return;
+      }
+      observationDeleteKeysRef.current.delete(observationId);
+      setFeedbackRevision(response.data.streamRevision);
+      await loadObservations(selectedPlan.plan_id);
+      setObservationMessage('本机观察正文已删除；外部或离线备份不在本次删除范围内。');
+    } finally {
+      savingObservationRef.current = false;
+      setSavingObservation(false);
     }
   }
 
@@ -502,6 +665,17 @@ function CoursesPage(): JSX.Element {
   const viewDiff = previewed ? changeViewDiff(previewed.preview) : [];
   const printWarning = needsPrintedCopyWarning(viewDiff);
   const teachingStatus = buildTeachingStatus({ adopted: false, events: teachingEvents });
+  const observationPrompt = buildObservationPrompt({
+    teachingEvents,
+    observedTeachingEventIds: observations.map((record) => record.teachingEventId),
+    dismissedTeachingEventIds
+  });
+  const coveragePreview = observationCoverageSummary({
+    sample_count: Number.isSafeInteger(Number(observationSampleCount)) ? Number(observationSampleCount) : null,
+    population_count: Number.isSafeInteger(Number(observationPopulationCount)) ? Number(observationPopulationCount) : null,
+    selection: observationSelection,
+    coverage_caveat: observationCaveat.trim() || '尚未填写覆盖限制'
+  });
 
   return (
     <div className="page">
@@ -602,6 +776,138 @@ function CoursesPage(): JSX.Element {
           )}
         </div>
       )}
+
+      {selectedPlan && observationPrompt.visible && observationPrompt.teachingEventId && (
+        <div className="card observation-panel">
+          <div className="card-title">一次可选课后反馈</div>
+          <p className="muted small">
+            只记录本次表现事实。无需填写学生姓名、联系方式、原始作业正文或文件路径；跳过不会记为成功或失败。
+          </p>
+          <div className="outcome-options" role="group" aria-label="本次观察结果">
+            {OBSERVATION_OUTCOME_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                className={`btn small ${observationOutcome === option.value ? 'selected' : ''}`}
+                onClick={() => {
+                  setObservationOutcome(option.value);
+                  observationRequestRef.current = null;
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <label className="observation-summary">
+            <span>表现事实摘要（可选）</span>
+            <textarea
+              className="draft compact"
+              maxLength={4000}
+              value={observationSummary}
+              placeholder="例如：部分作答能指出关键词，但书面证据联系仍需提示。"
+              onChange={(event) => {
+                setObservationSummary(event.target.value);
+                observationRequestRef.current = null;
+              }}
+            />
+          </label>
+          <p className="coverage-preview">样本范围：{coveragePreview}</p>
+          <details className="observation-details">
+            <summary>补充观察条件与样本范围</summary>
+            <div className="change-grid">
+              <label>
+                <span>观察时间</span>
+                <input className="search-input" type="datetime-local" value={observationObservedAt} onChange={(event) => { setObservationObservedAt(event.target.value); observationRequestRef.current = null; }} />
+              </label>
+              <label>
+                <span>来源类型</span>
+                <select className="search-input" value={observationSourceKind} onChange={(event) => { setObservationSourceKind(event.target.value as ObservationSourceKind); observationRequestRef.current = null; }}>
+                  <option value="teacher_observation">教师观察</option>
+                  <option value="student_work">已授权学生作品的观察（不保存正文）</option>
+                  <option value="existing_exam">既有考试的观察（不保存正文）</option>
+                </select>
+              </label>
+              <label>
+                <span>提示程度</span>
+                <select className="search-input" value={observationSupport} onChange={(event) => { setObservationSupport(event.target.value as ObservationSupportLevel); observationRequestRef.current = null; }}>
+                  <option value="independent">独立完成</option>
+                  <option value="partial_prompt">部分提示</option>
+                  <option value="full_model">完整示范</option>
+                  <option value="unknown">未知</option>
+                </select>
+              </label>
+              <label>
+                <span>材料关系</span>
+                <select className="search-input" value={observationMaterial} onChange={(event) => { setObservationMaterial(event.target.value as ObservationMaterialRelation); observationRequestRef.current = null; }}>
+                  <option value="same_item">同题</option>
+                  <option value="similar_new">相似新题</option>
+                  <option value="different_context">不同情境</option>
+                  <option value="unknown">未知</option>
+                </select>
+              </label>
+              <label>
+                <span>延迟天数</span>
+                <input className="search-input" type="number" min={0} step={1} value={observationDelayDays} onChange={(event) => { setObservationDelayDays(event.target.value); observationRequestRef.current = null; }} />
+              </label>
+              <label>
+                <span>样本选择</span>
+                <select className="search-input" value={observationSelection} onChange={(event) => { setObservationSelection(event.target.value as ObservationSelection); observationRequestRef.current = null; }}>
+                  <option value="unknown">未知</option>
+                  <option value="all_available">全部可用记录</option>
+                  <option value="planned_sample">预先计划样本</option>
+                  <option value="typical_cases">典型样本</option>
+                  <option value="voluntary">自愿样本</option>
+                </select>
+              </label>
+              <label>
+                <span>样本数</span>
+                <input className="search-input" type="number" min={0} step={1} value={observationSampleCount} onChange={(event) => { setObservationSampleCount(event.target.value); observationRequestRef.current = null; }} />
+              </label>
+              <label>
+                <span>总体数</span>
+                <input className="search-input" type="number" min={0} step={1} value={observationPopulationCount} onChange={(event) => { setObservationPopulationCount(event.target.value); observationRequestRef.current = null; }} />
+              </label>
+              <label className="wide">
+                <span>覆盖限制（必填）</span>
+                <textarea className="draft compact" maxLength={4000} value={observationCaveat} onChange={(event) => { setObservationCaveat(event.target.value); observationRequestRef.current = null; }} />
+              </label>
+            </div>
+          </details>
+          <div className="confirm-actions">
+            <button className="btn" disabled={savingObservation} onClick={() => void saveObservation(observationPrompt.teachingEventId as string)}>
+              {savingObservation ? '正在保存…' : '保存本机观察'}
+            </button>
+            <button
+              className="btn"
+              disabled={savingObservation}
+              onClick={() => setDismissedTeachingEventIds((current) => [...current, observationPrompt.teachingEventId as string])}
+            >
+              暂不反馈
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedPlan && observations.length > 0 && (
+        <div className="card observation-history">
+          <div className="card-title">本机课堂观察</div>
+          <p className="muted small">这些记录保持本地，不含原始学生作品；样本限制始终随记录显示。</p>
+          <ul className="history-list">
+            {observations.map((record) => (
+              <li key={record.observation.observation_id}>
+                <div>
+                  <b>{OBSERVATION_OUTCOME_OPTIONS.find((option) => option.value === record.outcome.outcome)?.label}</b>
+                  <div className="muted small">{record.observation.summary || '未填写表现摘要'}</div>
+                  <div className="muted small">{observationCoverageSummary(record.observation)}</div>
+                </div>
+                <button className="btn small" disabled={savingObservation} onClick={() => void deleteObservation(record.observation.observation_id)}>
+                  删除本机观察
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {selectedPlan && observationMessage && <p className={`notice small ${observationMessage.includes('未') ? 'warn' : ''}`}>{observationMessage}</p>}
 
       {selectedPlan && (
         <div className="card change-panel">
