@@ -414,4 +414,13 @@ describe('G11-T03 canonical checksums and signature states', () => {
     expect(script).toContain('Microsoft.PowerShell.Utility\\Get-FileHash');
     expect(script).toContain('Microsoft.PowerShell.Utility\\ConvertTo-Json');
   });
+
+  it('uses the validated release aggregation provenance instead of a second dirty-path allowlist', () => {
+    const script = readFileSync(join(root, 'scripts', 'generate-g11-supply-chain.mjs'), 'utf8');
+    expect(script).not.toContain('inspectRepositoryProvenance');
+    expect(script).not.toContain('G11_GENERATED_OUTPUT_PATHS');
+    expect(script).toContain('const repositoryProvenance = aggregationInput.repositoryProvenance;');
+    expect(script.indexOf('loadReleaseAggregationInputs({ root, releaseInput, generatedAt })'))
+      .toBeLessThan(script.indexOf('const environment = {'));
+  });
 });

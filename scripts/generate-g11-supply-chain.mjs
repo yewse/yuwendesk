@@ -12,8 +12,6 @@ import {
 } from './lib/g11-acceptance.mjs';
 import {
   aggregateReleaseEvidence,
-  G11_GENERATED_OUTPUT_PATHS,
-  inspectRepositoryProvenance,
   loadReleaseAggregationInputs,
   validateReleaseEvidence,
   verifyCandidateArtifactSnapshot
@@ -102,18 +100,9 @@ const environmentLock = JSON.parse(readRepositoryFile('ENV_LOCK.json'));
 const releaseInput = JSON.parse(readRepositoryFile('reports/release/release-input.json'));
 const candidate = JSON.parse(readRepositoryFile('reports/release/candidate-artifact.json'));
 verifyCandidateArtifactSnapshot({ root, candidateArtifact: candidate });
-const allowedDirtyPaths = [
-  ...G11_GENERATED_OUTPUT_PATHS,
-  releaseInput.acceptanceRunPath,
-  'reports/release/candidate-artifact.json',
-  'reports/release/defect-audit.json'
-];
-if (candidate.artifactPresent) allowedDirtyPaths.push(candidate.expectedPath);
-const repositoryProvenance = inspectRepositoryProvenance({
-  root,
-  sourceCommit: releaseInput.sourceCommit,
-  allowedDirtyPaths
-});
+const generatedAt = new Date().toISOString();
+const aggregationInput = loadReleaseAggregationInputs({ root, releaseInput, generatedAt });
+const repositoryProvenance = aggregationInput.repositoryProvenance;
 
 const sbom = JSON.parse(runNodeNpm([
   'sbom', '--package-lock-only', '--sbom-format=cyclonedx', '--sbom-type=application'
@@ -130,7 +119,6 @@ const sbomValidation = validateCycloneDxSbom({
 });
 if (!sbomValidation.ok) throw new Error(`SBOM_VALIDATION_FAILED:${JSON.stringify(sbomValidation.errors)}`);
 
-const generatedAt = new Date().toISOString();
 const actualNode = versionWithoutPrefix(process.version);
 const actualNpm = versionWithoutPrefix(runNodeNpm(['--version']));
 const requiredNode = versionWithoutPrefix(environmentLock?.build_host?.node);
@@ -197,7 +185,6 @@ const prospectiveSupplyChain = {
   componentCount: environment.componentCount,
   dependencyCount: environment.dependencyCount
 };
-const aggregationInput = loadReleaseAggregationInputs({ root, releaseInput, generatedAt });
 aggregationInput.supplyChain = prospectiveSupplyChain;
 aggregationInput.deliverables = aggregationInput.deliverables.map((item) => {
   if (['release_evidence', 'known_limitations', 'final_status'].includes(item.id)) {

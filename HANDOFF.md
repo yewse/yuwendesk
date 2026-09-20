@@ -56,6 +56,9 @@
 - **G11-E08 精确定位成功**：`5c0de04` 的 131,024,559-byte 候选（SHA-256 `f63d5809d8c47513c206907e680147e7c6330bbf31db18e2c5e943ad0edb86e5`）对应 `run-20260920-5c0de04-01` 再次记录 0/6/38/126。新字段定位到 `g11-release-evidence.test.ts` 的静态覆盖测试；历史失败未覆盖。
 - **E08 根因修复**：测试为检查首个 JSON 差异路径却读取 live 候选快照，在新 EXE 与旧 `candidate-artifact.json` 的短暂窗口先命中 provenance 漂移。现用导出的纯 `firstDifferencePath` 断言精确路径，另保留 live 校验只验证篡改拒绝；提交后须重建候选并创建第三轮追加运行验证。
 - **E08 当前验证**：全量 631 passed / 1 skipped（632 total，68 files），typecheck/lint/build/contracts/diff 均通过；发行仍为 `BLOCKED / RELEASE_REQUIRED_CASE_FAILED`，签名 `UNSIGNED`，最终验证退出 2。
+- **G11-E09 第三轮追加验收通过**：`5d5fe78` 候选 131,024,555 bytes / SHA-256 `6d04a8a1871d2bb4ad45ab8b43464d3a9b5f0dd138e11ac60ed8cdb0c84d0b75`；`run-20260920-5d5fe78-01` 为 clean run，6/0/38/126。前两轮失败未删除或改写。
+- **E09 事务根因与修复**：clean `release:sbom` 的精确差异为 `$.supplyChain.sbomStatus`。供应链脚本的第二份 dirty-path allowlist遗漏 AcceptanceRun 引用的 Vitest 文件，使环境记录与权威聚合输入对 source clean 的判断相反。现先调用 `loadReleaseAggregationInputs` 并复用其 `repositoryProvenance`，删除复制的 allowlist；dirty 源码下八文件事务已成功，提交后须在 clean source 上最终复验。
+- **E09 当前验证**：全量 632 passed / 1 skipped（633 total，68 files），typecheck/lint/build/contracts/diff 均通过；dirty-source 发行验证退出 2。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -103,9 +106,9 @@ npm run build:candidate
 
 ## 下一个有界工作包建议
 
-1. 提交 E08 后运行 `npm run build:candidate`，从该 clean commit 重建带来源记录的未签名工程候选；不得复用历史 EXE 或哈希。
-2. 创建第三个追加验收运行；若再失败，继续使用 `failedAssertions` 精确定位，不删除或覆盖任一历史运行。
-3. 在 clean source 上运行完整发行证据链，使用 E06 诊断修复事务期间的精确 dirty path。真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。其余外部门继续阻断。
+1. 提交 E09 后运行 `npm run build:candidate`，从该 clean commit 重建带来源记录的未签名工程候选；不得复用历史 EXE 或哈希。
+2. 创建第四个追加验收运行，并立即运行 `release:evidence → release:sbom → release:verify`，验证 clean source 八文件事务收敛；历史运行保持追加。
+3. 真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。Grok、签名、分发、真人教师复核等外部门继续阻断。
 
 ## 重要纪律
 

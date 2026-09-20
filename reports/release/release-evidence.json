@@ -1,31 +1,31 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T19:08:10.979Z",
-  "sourceCommit": "5c0de0429c2bab13765190817921a334c32e0522",
+  "generatedAt": "2026-09-20T19:13:27.597Z",
+  "sourceCommit": "5d5fe7825355e2420ce1ed8284ee19616734d264",
   "acceptanceRun": {
-    "runId": "run-20260920-5c0de04-01",
-    "path": "reports/acceptance-runs/run-20260920-5c0de04-01.json",
-    "sha256": "709a6b4a0b68020fac4665175b746f950f956858fd301be54f6a84233bb6336a",
-    "sizeBytes": 78307,
+    "runId": "run-20260920-5d5fe78-01",
+    "path": "reports/acceptance-runs/run-20260920-5d5fe78-01.json",
+    "sha256": "0e661508a742adafe99cfd413564c4d8cca633870903f756e0fe51938efd13f3",
+    "sizeBytes": 78289,
     "repositoryDirty": false
   },
   "candidate": {
     "inventoryPath": "reports/release/candidate-artifact.json",
-    "inventorySha256": "d077054b837190be8a96685135aecfe6a0b4015079292cc81ec72f508f9c9c34",
+    "inventorySha256": "2fe5320daed774616170a475294dcbb21197e9aee204783476ce9324ecba5914",
     "inventorySizeBytes": 563,
     "expectedPath": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
     "artifactPresent": true,
     "artifactClass": "UNSIGNED_TEST_BUILD",
-    "sha256": "f63d5809d8c47513c206907e680147e7c6330bbf31db18e2c5e943ad0edb86e5",
-    "sizeBytes": 131024559
+    "sha256": "6d04a8a1871d2bb4ad45ab8b43464d3a9b5f0dd138e11ac60ed8cdb0c84d0b75",
+    "sizeBytes": 131024555
   },
   "statuses": {
-    "softwareStatus": "FAIL",
+    "softwareStatus": "BLOCKED",
     "resourceCoverageStatus": "BLOCKED",
     "teachingValidationStatus": "NOT_REVIEWED",
     "artifactClass": "UNSIGNED_TEST_BUILD",
     "releaseDisposition": "BLOCKED",
-    "reasonCode": "RELEASE_REQUIRED_CASE_FAILED"
+    "reasonCode": "RELEASE_SOURCE_DIRTY"
   },
   "gates": {
     "sourceTreeClean": false,
@@ -38,8 +38,8 @@
     "defectAuditStatus": "NOT_RUN"
   },
   "caseSummary": {
-    "PASS": 0,
-    "FAIL": 6,
+    "PASS": 6,
+    "FAIL": 0,
     "BLOCKED": 38,
     "NOT_RUN": 126
   },
@@ -883,7 +883,7 @@
     {
       "caseId": "DAT-005",
       "severity": "P1",
-      "status": "FAIL",
+      "status": "PASS",
       "blockerCode": null,
       "externalInputIds": []
     },
@@ -1029,7 +1029,7 @@
     {
       "caseId": "JOB-003",
       "severity": "P1",
-      "status": "FAIL",
+      "status": "PASS",
       "blockerCode": null,
       "externalInputIds": []
     },
@@ -1050,14 +1050,14 @@
     {
       "caseId": "JOB-006",
       "severity": "P1",
-      "status": "FAIL",
+      "status": "PASS",
       "blockerCode": null,
       "externalInputIds": []
     },
     {
       "caseId": "JOB-007",
       "severity": "P1",
-      "status": "FAIL",
+      "status": "PASS",
       "blockerCode": null,
       "externalInputIds": []
     },
@@ -1183,7 +1183,7 @@
     {
       "caseId": "SEC-009",
       "severity": "P0",
-      "status": "FAIL",
+      "status": "PASS",
       "blockerCode": null,
       "externalInputIds": []
     },
@@ -1269,7 +1269,7 @@
     {
       "caseId": "UPD-001",
       "severity": "P0",
-      "status": "FAIL",
+      "status": "PASS",
       "blockerCode": null,
       "externalInputIds": []
     },
@@ -1975,7 +1975,7 @@
   "deliverables": [
     {
       "id": "acceptance_run",
-      "path": "reports/acceptance-runs/run-20260920-5c0de04-01.json",
+      "path": "reports/acceptance-runs/run-20260920-5d5fe78-01.json",
       "status": "PRESENT"
     },
     {
@@ -2163,8 +2163,8 @@
     },
     {
       "path": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
-      "sha256": "f63d5809d8c47513c206907e680147e7c6330bbf31db18e2c5e943ad0edb86e5",
-      "sizeBytes": 131024559
+      "sha256": "6d04a8a1871d2bb4ad45ab8b43464d3a9b5f0dd138e11ac60ed8cdb0c84d0b75",
+      "sizeBytes": 131024555
     },
     {
       "path": "planning/changes/CR001/traceability.json",
@@ -2187,13 +2187,13 @@
       "sizeBytes": 27957
     },
     {
-      "path": "reports/acceptance-runs/run-20260920-5c0de04-01.json",
-      "sha256": "709a6b4a0b68020fac4665175b746f950f956858fd301be54f6a84233bb6336a",
-      "sizeBytes": 78307
+      "path": "reports/acceptance-runs/run-20260920-5d5fe78-01.json",
+      "sha256": "0e661508a742adafe99cfd413564c4d8cca633870903f756e0fe51938efd13f3",
+      "sizeBytes": 78289
     },
     {
       "path": "reports/release/candidate-artifact.json",
-      "sha256": "d077054b837190be8a96685135aecfe6a0b4015079292cc81ec72f508f9c9c34",
+      "sha256": "2fe5320daed774616170a475294dcbb21197e9aee204783476ce9324ecba5914",
       "sizeBytes": 563
     },
     {
@@ -2288,14 +2288,6 @@
       "blockerCode": "RELEASE_REQUIRED_GATE_OPEN",
       "externalInputIds": [],
       "safeAction": "在对应证据层级创建新的追加验收运行；不得改写历史 NOT_RUN。"
-    },
-    {
-      "gapId": "REQUIRED_CASE_FAILURES",
-      "scope": "DAT-005、JOB-003、JOB-006、JOB-007、SEC-009、UPD-001",
-      "status": "BLOCKED",
-      "blockerCode": "RELEASE_REQUIRED_CASE_FAILED",
-      "externalInputIds": [],
-      "safeAction": "保留失败证据，修复根因后创建新的追加验收运行；不得把 FAIL 改写为 BLOCKED 或 PASS。"
     },
     {
       "gapId": "SOURCE_RUN_DIRTY",

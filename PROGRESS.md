@@ -305,6 +305,13 @@
 - **判定边界**：修复不会重写 `run-20260920-5c0de04-01`，也不会把其六个 FAIL 降级；必须提交后从新 clean commit 重建候选并创建第三个追加运行才能形成新证据。
 - **E08 验证与发行实况**：全量 **631 passed / 1 skipped（632 total，68 files）**；typecheck、lint、build、合同和 diff 均通过。发行链聚合当前失败运行后仍为 `BLOCKED / RELEASE_REQUIRED_CASE_FAILED`，签名 `UNSIGNED`、13 个缺口，最终验证按预期退出 2；验收和发行报告秘密模式扫描无命中。
 
+## G11-E09 第三轮追加验收与供应链来源统一 — 验收通过，clean 事务复验待提交
+
+- [x] **第三轮追加验收**：clean commit `5d5fe7825355e2420ce1ed8284ee19616734d264` 生成 **131,024,555 bytes** 候选，SHA-256 `6d04a8a1871d2bb4ad45ab8b43464d3a9b5f0dd138e11ac60ed8cdb0c84d0b75`。`run-20260920-5d5fe78-01` 在开始时 `repositoryDirty=false`，完整测试通过，结果恢复为 **6 PASS / 0 FAIL / 38 BLOCKED / 126 NOT_RUN**；前两轮 FAIL 保持历史记录。
+- [x] **E06 事务根因确定**：clean-source `release:evidence` 得到 `RELEASE_WINDOWS_EVIDENCE_REQUIRED`，紧接 `release:sbom` 稳定失败于 `$.supplyChain.sbomStatus`。供应链脚本单独维护的 dirty-path allowlist 漏掉本轮 AcceptanceRun 引用的 Vitest 证据；它把环境记录为 dirty，而聚合器的权威路径集合把同一证据认作允许，事务提交前重算因此得到互相矛盾的 SBOM 状态。
+- [x] **单一来源修复**：供应链脚本不再复制 dirty-path 规则，改为在生成环境记录前调用经过完整 run/candidate/map 校验的 `loadReleaseAggregationInputs`，直接复用其 `repositoryProvenance`；后续 prospective 聚合也复用同一输入。新增源码级回归先 RED 后 GREEN，禁止重新引入第二份 allowlist。当前 dirty 源码下八文件事务已成功，真实状态为 `RELEASE_SOURCE_DIRTY`；提交后仍须用新候选验证 clean source 路径。
+- **E09 验证**：新增回归后全量 **632 passed / 1 skipped（633 total，68 files）**；typecheck、lint、build、合同和 diff 均通过。当前 dirty-source 发行验证按预期退出 2，没有把事务成功误写为正式发布通过。
+
 ## 下一步
 
-见 `HANDOFF.md`。提交 E08 后从 clean commit 重建候选并创建第三个追加运行；若通过，再在 clean source 上运行完整发行证据链，利用 E06 诊断定位事务临时路径。能安全实际执行的案例才追加证据；干净标准用户 VM、Grok 定义、签名/时间戳、分发、真人教师复核及当前不可控的 WPS 操作继续 `BLOCKED_EXTERNAL/NOT_RUN`。
+见 `HANDOFF.md`。提交 E09 后从 clean commit 重建候选、创建第四个追加运行并立即执行完整发行证据链，验证八文件事务在 clean source 上收敛。能安全实际执行的案例才追加证据；干净标准用户 VM、Grok 定义、签名/时间戳、分发、真人教师复核及当前不可控的 WPS 操作继续 `BLOCKED_EXTERNAL/NOT_RUN`。
