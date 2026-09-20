@@ -1472,6 +1472,14 @@ export class IpcService {
 
   private async health(): Promise<IpcResponse<HealthData>> {
     const probe = await this.ctx.store.probeWritable();
+    const protectedReason = this.ctx.store.protectedReason();
+    const storageProtectionKind: HealthData['storage_protection_kind'] = !this.ctx.store.isProtected()
+      ? 'none'
+      : protectedReason?.startsWith('schema_newer:') || protectedReason?.startsWith('data_generation_newer:')
+        ? 'newer_data'
+        : protectedReason?.startsWith('migration_required:') || protectedReason === 'migration_recovery_required'
+          ? 'migration_recovery'
+          : 'other';
     return {
       ok: true,
       data: {
@@ -1487,6 +1495,7 @@ export class IpcService {
         platform_target_supported: this.ctx.platformTargetSupported,
         platform_identity: this.ctx.platformIdentity,
         storage_protected: this.ctx.store.isProtected(),
+        storage_protection_kind: storageProtectionKind,
         credential_encryption: this.ctx.store.credentialEncryptionAvailable() ? 'available' : 'unavailable'
       }
     };

@@ -20,7 +20,12 @@ import {
   isTrustedIpcSender,
   lockdownSession
 } from './security';
-import { SqliteStore, SQLITE_SCHEMA_TARGET } from './db/sqliteStore';
+import {
+  migrateSqliteDatabaseToTarget,
+  SqliteStore,
+  SQLITE_DATA_GENERATION,
+  SQLITE_SCHEMA_TARGET
+} from './db/sqliteStore';
 import { BackupCoordinator, BackupService } from './protection/backup';
 import { ProtectionService } from './protection/service';
 import { applyPendingRestoreBeforeOpen } from './protection/restore';
@@ -28,6 +33,7 @@ import { SourcePrivacyService } from './protection/sourcePrivacy';
 import { DiagnosticsService } from './protection/diagnostics';
 import { UpdateService } from './update/service';
 import { trustedUpdateKeys } from './update/trust';
+import { DatabaseMigrationCoordinator } from './update/migration';
 
 const APP_NAME_ZH = '语文备课工作台';
 
@@ -235,9 +241,29 @@ async function bootstrap(): Promise<void> {
     }
   });
 
+  const migration = await new DatabaseMigrationCoordinator({
+    userDataDir,
+    // 旧数据没有可信的历史应用版本字段时明确记录 unknown，不据此虚构来源版本。
+    sourceAppVersion: 'unknown',
+    targetAppVersion: app.getVersion(),
+    targetSchema: SQLITE_SCHEMA_TARGET,
+    targetGeneration: SQLITE_DATA_GENERATION,
+    migrateCandidate: (candidate) => {
+      const current = Number(candidate.pragma('user_version', { simple: true }));
+      migrateSqliteDatabaseToTarget(candidate, current, SQLITE_SCHEMA_TARGET);
+    }
+  }).run();
+  if (migration.state === 'blocked') {
+    console.warn(`[YuwenDesk] migration protected state: ${migration.code}`);
+  }
+
   // 注入 Electron safeStorage 用于凭据/敏感 payload 保护（不可用时拒绝落明文，见 T03）。
   store = new SqliteStore(userDataDir, {
     safeStorage,
+    supportedDataGeneration: SQLITE_DATA_GENERATION,
+    startupProtectionReason: migration.state === 'blocked' ? 'migration_recovery_required' : undefined,
+    // 既有数据库只能由上面的旁路协调器升级；全新数据库仍需创建当前 schema。
+    allowInPlaceMigrations: migration.state === 'not_required' && migration.schema === 0,
     // 耗时原始文件解析放到 worker 线程，避免阻塞主进程。
     parseFile: createWorkerParser(join(__dirname, 'sources', 'parseWorker.js'))
   });

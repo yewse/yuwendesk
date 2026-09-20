@@ -68,6 +68,7 @@ describe('app.health 状态证据（F04：设计保证/运行探针/未知分离
       expect(d.sandbox_enabled).toBe(true);
       expect(d.platform_dev_override).toBe(false);
       expect(d.recovered_from_corruption).toBe(false);
+      expect(d.storage_protection_kind).toBe('none');
     }
   });
 });

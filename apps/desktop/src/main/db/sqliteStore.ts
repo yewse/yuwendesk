@@ -159,6 +159,12 @@ export interface SqliteStoreOptions {
   sourcePrivacyFaults?: SourcePrivacyFaultHooks;
   // 可注入的解析实现：生产可注入 worker 线程后端使耗时解析不阻塞主进程；缺省内联 extractBuffer。
   parseFile?: (buf: Buffer, format: string, opts: ExtractOpts) => Promise<ExtractResult>;
+  // G10：旧版只支持较低数据世代时保持可读但拒绝写入；生产使用当前常量，测试可模拟旧版。
+  supportedDataGeneration?: number;
+  // 生产启动先走旁路迁移，因此禁止在活动数据库上原地迁移；旧单元测试缺省保留原有行为。
+  allowInPlaceMigrations?: boolean;
+  // 启动迁移 journal/lock 无法安全调和时，由主进程注入闭集保护原因；不得来自 renderer。
+  startupProtectionReason?: 'migration_recovery_required';
 }
 
 export type CredentialSetResult = { ok: true; last4: string } | { ok: false; reason: 'encryption_unavailable' };
@@ -698,6 +704,24 @@ const MIGRATIONS: Migration[] = [
 ];
 
 const SCHEMA_TARGET = Math.max(...MIGRATIONS.map((m) => m.version));
+const DATA_GENERATION_TARGET = 1;
+
+export function migrateSqliteDatabaseToTarget(
+  db: Database.Database,
+  current: number,
+  target = SCHEMA_TARGET
+): void {
+  if (target !== SCHEMA_TARGET || current > target) throw new Error('migration_target_unsupported');
+  const ordered = [...MIGRATIONS].sort((a, b) => a.version - b.version);
+  for (const migration of ordered) {
+    if (migration.version <= current) continue;
+    const apply = db.transaction(() => {
+      migration.up(db);
+      db.pragma(`user_version = ${migration.version}`);
+    });
+    apply.immediate();
+  }
+}
 
 export interface MigrationStatus {
   migratedFromJson: boolean; // 有效旧 JSON 已成功迁入
@@ -713,6 +737,7 @@ export class SqliteStore {
   private readonly legacyJsonPath: string;
   private db: Database.Database | null = null;
   private protectedState = false;
+  private protectedReadAllowed = false;
   private protectedReasonText: string | null = null;
   private migratedFromJsonFlag = false;
   private recoveredFromCorruptionFlag = false;
@@ -726,6 +751,9 @@ export class SqliteStore {
   private readonly feedbackFaults?: FeedbackCommitFaultHooks;
   private readonly sourcePrivacyFaults?: SourcePrivacyFaultHooks;
   private readonly parseFile: (buf: Buffer, format: string, opts: ExtractOpts) => Promise<ExtractResult>;
+  private readonly supportedDataGeneration: number;
+  private readonly allowInPlaceMigrations: boolean;
+  private readonly startupProtectionReason?: 'migration_recovery_required';
   private readonly cancelRegistry = new Map<string, CancelSignal>();
 
   constructor(userDataDir: string, opts: SqliteStoreOptions = {}) {
@@ -740,15 +768,23 @@ export class SqliteStore {
     this.feedbackFaults = opts.feedbackFaults;
     this.sourcePrivacyFaults = opts.sourcePrivacyFaults;
     this.parseFile = opts.parseFile ?? ((buf, format, o) => extractBuffer(buf, format, o));
+    this.supportedDataGeneration = opts.supportedDataGeneration ?? DATA_GENERATION_TARGET;
+    this.allowInPlaceMigrations = opts.allowInPlaceMigrations ?? true;
+    this.startupProtectionReason = opts.startupProtectionReason;
+    if (!Number.isSafeInteger(this.supportedDataGeneration) || this.supportedDataGeneration < 0) {
+      throw new Error('data_generation_target_invalid');
+    }
   }
 
   async load(): Promise<void> {
     mkdirSync(dirname(this.dbPath), { recursive: true });
+    if (this.startupProtectionReason && !existsSync(this.dbPath)) {
+      this.enterProtected(this.startupProtectionReason);
+      return;
+    }
     try {
       this.db = new Database(this.dbPath);
-      this.db.pragma('journal_mode = WAL');
       this.db.pragma('foreign_keys = ON');
-      this.db.pragma('secure_delete = ON');
       this.db.pragma('busy_timeout = 5000');
       const integrity = this.db.pragma('integrity_check', { simple: true });
       if (integrity !== 'ok') {
@@ -761,7 +797,31 @@ export class SqliteStore {
         this.enterProtected(`schema_newer:db=${version}>app=${SCHEMA_TARGET}`);
         return;
       }
+      if (version < SCHEMA_TARGET && !this.allowInPlaceMigrations) {
+        this.enterProtected(`migration_required:db=${version}<app=${SCHEMA_TARGET}`);
+        return;
+      }
       this.runMigrations(version);
+      let generation: number;
+      try { generation = this.dataGeneration(); } catch {
+        this.enterProtected('data_generation_invalid');
+        return;
+      }
+      if (generation > this.supportedDataGeneration) {
+        this.protectedReadAllowed = true;
+        this.enterProtected(`data_generation_newer:db=${generation}>app=${this.supportedDataGeneration}`);
+        return;
+      }
+      if (this.startupProtectionReason) {
+        this.protectedReadAllowed = true;
+        this.enterProtected(this.startupProtectionReason);
+        return;
+      }
+      // 在任何当前版本启动维护或业务写之前推进世代；旧版随后只能只读，不会覆盖新版触碰过的数据。
+      this.ensureDataGenerationInDb(this.requireDb());
+      // 持久化 pragma 只能在 schema/世代兼容门通过后设置，避免受保护的旧库被新程序改写文件头或生成 sidecar。
+      this.db.pragma('journal_mode = WAL');
+      this.db.pragma('secure_delete = ON');
       this.enableFtsSecureDelete();
       this.reconcilePrivacyFileQuarantine();
       if (!this.verifyRequiredRows()) {
@@ -779,16 +839,7 @@ export class SqliteStore {
   }
 
   private runMigrations(current: number): void {
-    const db = this.requireDb();
-    const ordered = [...MIGRATIONS].sort((a, b) => a.version - b.version);
-    for (const m of ordered) {
-      if (m.version <= current) continue;
-      const apply = db.transaction(() => {
-        m.up(db);
-        db.pragma(`user_version = ${m.version}`);
-      });
-      apply.immediate();
-    }
+    migrateSqliteDatabaseToTarget(this.requireDb(), current);
   }
 
   // 校验必需单例记录存在（未知/被篡改结构下拒写）。
@@ -903,12 +954,12 @@ export class SqliteStore {
   }
 
   getDraft(): DraftState {
-    if (!this.db || this.protectedState) return { content: '', revision: 0, updated_at: null };
+    if (!this.db || (this.protectedState && !this.protectedReadAllowed)) return { content: '', revision: 0, updated_at: null };
     return this.readDraft();
   }
 
   getWindow(): WindowState {
-    if (!this.db || this.protectedState) return { width: 1180, height: 800 };
+    if (!this.db || (this.protectedState && !this.protectedReadAllowed)) return { width: 1180, height: 800 };
     return this.readWindow();
   }
 
@@ -3335,6 +3386,17 @@ export class SqliteStore {
     return Number(this.db.pragma('user_version', { simple: true }));
   }
 
+  dataGeneration(): number {
+    if (!this.db) return 0;
+    const table = this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='app_meta'").get();
+    if (!table) return 0;
+    const row = this.db.prepare("SELECT value FROM app_meta WHERE key='data_generation'").get() as { value: string } | undefined;
+    if (!row) return 0;
+    const value = Number(row.value);
+    if (!Number.isSafeInteger(value) || value < 0) throw new StoreProtectedError('data_generation_invalid');
+    return value;
+  }
+
   diagnosticsSnapshot(): DiagnosticsStorageSnapshot {
     const db = this.requireDb();
     const count = (table: string): number => Number(db.prepare(`SELECT COUNT(*) FROM ${table}`).pluck().get());
@@ -3459,10 +3521,24 @@ export class SqliteStore {
     return this.db;
   }
 
+  private ensureDataGenerationInDb(db: Database.Database): void {
+    const generation = this.dataGeneration();
+    if (generation > this.supportedDataGeneration) {
+      this.enterProtected(`data_generation_newer:db=${generation}>app=${this.supportedDataGeneration}`);
+      throw new StoreProtectedError(this.protectedReasonText!);
+    }
+    if (generation < this.supportedDataGeneration) {
+      db.prepare(
+        "INSERT INTO app_meta(key,value) VALUES('data_generation',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+      ).run(String(this.supportedDataGeneration));
+    }
+  }
+
   private assertWritable(): void {
     if (this.protectedState || !this.db) {
       throw new StoreProtectedError(this.protectedReasonText ?? 'protected');
     }
+    this.ensureDataGenerationInDb(this.db);
   }
 
   private enterProtected(reason: string): void {
@@ -3472,3 +3548,4 @@ export class SqliteStore {
 }
 
 export const SQLITE_SCHEMA_TARGET = SCHEMA_TARGET;
+export const SQLITE_DATA_GENERATION = DATA_GENERATION_TARGET;

@@ -30,3 +30,10 @@ export function buildUpdateSummaryRows<T extends UpdateSummary>(summary: T): Upd
     { label: '清单时间', value: summary.createdAt }
   ];
 }
+
+export function downgradeProtectionNotice(reason: string | null): string {
+  if (reason?.startsWith('schema_newer:') || reason?.startsWith('data_generation_newer:')) {
+    return '旧版未覆盖新数据：当前数据由更高版本写入，已保持只读保护并保留原副本。请使用受支持的新版本导出，或按支持流程恢复；系统不会回灌数据库，旧程序二进制回退仍需签名安装器和 Windows 验证。';
+  }
+  return '升级迁移只在旁路副本验证后切换；发生不兼容时保留数据副本，并通过受支持的导出或恢复流程处理。';
+}

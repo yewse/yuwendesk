@@ -475,6 +475,7 @@ export interface DraftStore {
   saveWindow(win: WindowState): Promise<void>;
   probeWritable(): Promise<boolean>;
   isProtected(): boolean;
+  protectedReason(): string | null;
   recoveredFromCorruption(): boolean;
   corruptBackup(): string | null;
   credentialEncryptionAvailable(): boolean;

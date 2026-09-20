@@ -186,7 +186,7 @@ async function fileSha256(path: string): Promise<string | null> {
 }
 
 interface RestoreComponent {
-  name: 'database' | 'wal' | 'shm' | 'materials';
+  name: 'database' | 'wal' | 'shm' | 'materials' | 'migration_journal' | 'migration_journal_partial' | 'migration_lock';
   current: string;
   rollback: string;
   wasPresent: boolean;
@@ -231,6 +231,9 @@ export async function applyPendingRestoreBeforeOpen(
   if (existsSync(rollback)) throw new Error('restore_recovery_required');
   const currentDb = join(userDataDir, 'yuwendesk.db');
   const currentMaterials = join(userDataDir, 'materials');
+  const currentMigrationJournal = join(userDataDir, 'migration-journal.json');
+  const currentMigrationJournalPartial = `${currentMigrationJournal}.partial`;
+  const currentMigrationLock = join(userDataDir, 'migration-maintenance.lock');
   const stagedDb = join(staged, 'yuwendesk.db');
   if (!databaseLooksUsable(stagedDb)) throw new Error('restore_stage_invalid');
   const originalDatabasePresent = existsSync(currentDb);
@@ -242,7 +245,19 @@ export async function applyPendingRestoreBeforeOpen(
     { name: 'database', current: currentDb, rollback: join(rollback, 'yuwendesk.db'), wasPresent: existsSync(currentDb) },
     { name: 'wal', current: `${currentDb}-wal`, rollback: join(rollback, 'yuwendesk.db-wal'), wasPresent: existsSync(`${currentDb}-wal`) },
     { name: 'shm', current: `${currentDb}-shm`, rollback: join(rollback, 'yuwendesk.db-shm'), wasPresent: existsSync(`${currentDb}-shm`) },
-    { name: 'materials', current: currentMaterials, rollback: join(rollback, 'materials'), wasPresent: existsSync(currentMaterials) }
+    { name: 'materials', current: currentMaterials, rollback: join(rollback, 'materials'), wasPresent: existsSync(currentMaterials) },
+    {
+      name: 'migration_journal', current: currentMigrationJournal,
+      rollback: join(rollback, 'migration-journal.json'), wasPresent: existsSync(currentMigrationJournal)
+    },
+    {
+      name: 'migration_journal_partial', current: currentMigrationJournalPartial,
+      rollback: join(rollback, 'migration-journal.json.partial'), wasPresent: existsSync(currentMigrationJournalPartial)
+    },
+    {
+      name: 'migration_lock', current: currentMigrationLock,
+      rollback: join(rollback, 'migration-maintenance.lock'), wasPresent: existsSync(currentMigrationLock)
+    }
   ];
   const movedOld = new Set<RestoreComponent['name']>();
   let oldMoveComplete = false;

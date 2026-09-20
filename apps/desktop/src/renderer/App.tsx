@@ -34,7 +34,13 @@ import {
   PRINTED_COPY_WARNING,
   type LessonChangeViewDiff
 } from './lessonChangeView';
-import { buildUpdateSummaryRows, canStageUpdate, updateReadyNotice, updateTrustNotice } from './updateView';
+import {
+  buildUpdateSummaryRows,
+  canStageUpdate,
+  downgradeProtectionNotice,
+  updateReadyNotice,
+  updateTrustNotice
+} from './updateView';
 import { buildBackupRows, portableBackupNotice, restorePreviewNotice } from './protectionView';
 import { buildSourceDeleteSummary, sensitiveSourceNotice, type SourceDeleteSummary } from './sourcePrivacyView';
 import type { DiagnosticsPreview } from '../main/protection/diagnostics';
@@ -198,7 +204,13 @@ function HealthPanel({ health }: { health: HealthData | null }): JSX.Element {
         {
           label: '数据保护',
           ok: !health.storage_protected,
-          text: health.storage_protected ? '已暂停写入（源文件待恢复）' : '正常'
+          text: health.storage_protection_kind === 'newer_data'
+            ? '已暂停写入（旧版未覆盖新版数据）'
+            : health.storage_protection_kind === 'migration_recovery'
+              ? '已暂停写入（迁移恢复状态待处理）'
+              : health.storage_protected
+                ? '已暂停写入（请按恢复说明处理）'
+                : '正常'
         },
         {
           label: '凭据加密',
@@ -2177,7 +2189,7 @@ function DiagnosticsPanel(): JSX.Element {
   );
 }
 
-function UpdatePanel(): JSX.Element {
+function UpdatePanel({ protectionKind }: { protectionKind: HealthData['storage_protection_kind'] | undefined }): JSX.Element {
   const [trustConfigured, setTrustConfigured] = useState(false);
   const [summary, setSummary] = useState<UpdateSummary | null>(null);
   const [confirmationToken, setConfirmationToken] = useState<string | null>(null);
@@ -2230,6 +2242,11 @@ function UpdatePanel(): JSX.Element {
     <div className="card update-card">
       <div className="card-title">可信离线更新</div>
       <p className="muted small">{updateTrustNotice(trustConfigured)}</p>
+      {protectionKind && protectionKind !== 'none' && (
+        <p className="notice warn small" role="status">
+          {downgradeProtectionNotice(protectionKind === 'newer_data' ? 'data_generation_newer:' : null)}
+        </p>
+      )}
       <div className="confirm-actions">
         <button className="btn small" disabled={busy || !trustConfigured} onClick={() => void inspect()}>
           选择并验证离线更新包
@@ -2250,7 +2267,7 @@ function UpdatePanel(): JSX.Element {
   );
 }
 
-function SettingsPage({ boot }: { boot: BootstrapData | null }): JSX.Element {
+function SettingsPage({ boot, health }: { boot: BootstrapData | null; health: HealthData | null }): JSX.Element {
   return (
     <div className="page">
       <h1>帮助与设置</h1>
@@ -2258,7 +2275,7 @@ function SettingsPage({ boot }: { boot: BootstrapData | null }): JSX.Element {
       <div className="grid">
         <ModelPanel />
         <ProtectionPanel />
-        <UpdatePanel />
+        <UpdatePanel protectionKind={health?.storage_protection_kind} />
         <DiagnosticsPanel />
         <div className="card">
           <div className="card-title">关于</div>
@@ -2337,7 +2354,7 @@ export function App(): JSX.Element {
           {nav === 'prepare' && <PreparePage boot={boot} health={health} />}
           {nav === 'courses' && <CoursesPage />}
           {nav === 'resources' && <ResourcesPage />}
-          {nav === 'settings' && <SettingsPage boot={boot} />}
+          {nav === 'settings' && <SettingsPage boot={boot} health={health} />}
         </div>
       </main>
     </div>
