@@ -201,6 +201,7 @@ describe('白名单与目录一致性', () => {
       'lesson.buildDemo',
       'lesson.list',
       'lesson.get',
+      'review.run',
       'materials.generate',
       'materials.list'
     ];

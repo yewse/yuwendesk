@@ -152,6 +152,15 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     required: ['planId'],
     additionalProperties: false
   },
+  'review.run': {
+    type: 'object',
+    properties: {
+      planId: { type: 'string', minLength: 1, maxLength: 80 },
+      revisionId: { type: 'string', minLength: 1, maxLength: 80 }
+    },
+    required: ['planId'],
+    additionalProperties: false
+  },
   'materials.generate': {
     type: 'object',
     properties: { planId: { type: 'string', minLength: 1, maxLength: 80 } },

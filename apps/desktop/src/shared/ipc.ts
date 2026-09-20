@@ -57,6 +57,7 @@ export const IMPLEMENTED_OPERATIONS = [
   'lesson.buildDemo',
   'lesson.list',
   'lesson.get',
+  'review.run',
   'materials.generate',
   'materials.list'
 ] as const;

@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import * as nodefs from 'node:fs';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { ReviewReport } from './review/types';
 
 // G01 本地持久化：只保存教师自己的备课草稿与窗口状态，不含任何 AI 生成正文或密钥。
 // 使用「临时文件 → 原子改名」保证崩溃时不产生半成品（规范 7.2）。后续 G02 以 SQLite 单写入者替换。
@@ -234,12 +235,21 @@ export interface MaterialArtifactRecord {
   contentOrigin: string;
   createdAt: string;
 }
+export interface ReviewReportRecord {
+  reportId: string;
+  planId: string;
+  revisionId: string;
+  report: ReviewReport;
+  createdAt: string;
+}
 export interface LessonStore {
   saveLessonRevision(rec: LessonRevisionRecord, makeCurrent: boolean): void;
   getLessonRevision(planId: string, revisionId?: string): LessonRevisionRecord | null;
   listLessonPlans(): LessonPlanListItem[];
   saveMaterialArtifacts(recs: MaterialArtifactRecord[]): void;
   listMaterialArtifacts(planId: string, revisionId?: string): MaterialArtifactRecord[];
+  saveReviewReport(rec: ReviewReportRecord): void;
+  getLatestReviewReport(planId: string, revisionId: string): ReviewReportRecord | null;
 }
 
 export interface ModelStore {

@@ -23,6 +23,8 @@ import type {
   WindowState
 } from '../store';
 import { DEFAULT_CLASSIFICATION, SOURCE_CLASSIFICATIONS, StoreProtectedError } from '../store';
+import { validateReviewReport } from '../review/review';
+import type { ReviewReport } from '../review/types';
 import { extractBuffer, ExtractError, extractText, type CancelSignal, type ExtractOpts, type ExtractResult } from '../sources/extract';
 import {
   CredentialProtector,
@@ -320,6 +322,55 @@ const MIGRATIONS: Migration[] = [
           created_at     TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_artifact_plan ON material_artifact(plan_id, revision_id);
+      `);
+    }
+  },
+  {
+    version: 9,
+    up: (db) => {
+      // G07 审查、一处修改与成品包：一次建齐表，后续工作包不再拆分数据库结构。
+      db.exec(`
+        CREATE TABLE review_report (
+          report_id    TEXT PRIMARY KEY,
+          plan_id      TEXT NOT NULL,
+          revision_id  TEXT NOT NULL,
+          report_json  TEXT NOT NULL,
+          created_at   TEXT NOT NULL
+        );
+        CREATE INDEX idx_review_revision ON review_report(plan_id, revision_id, created_at);
+
+        CREATE TABLE change_proposal (
+          change_id             TEXT PRIMARY KEY,
+          plan_id               TEXT NOT NULL,
+          base_revision_id      TEXT NOT NULL,
+          candidate_revision_id TEXT,
+          change_kind           TEXT NOT NULL,
+          proposal_json         TEXT NOT NULL,
+          status                TEXT NOT NULL,
+          created_at            TEXT NOT NULL,
+          accepted_at           TEXT
+        );
+
+        CREATE TABLE material_bundle (
+          bundle_id              TEXT PRIMARY KEY,
+          plan_id                TEXT NOT NULL,
+          revision_id            TEXT NOT NULL,
+          presentation_spec_hash TEXT NOT NULL,
+          directory              TEXT NOT NULL,
+          status                 TEXT NOT NULL,
+          created_at             TEXT NOT NULL
+        );
+        ALTER TABLE material_artifact ADD COLUMN bundle_id TEXT;
+
+        CREATE TABLE lesson_change_idempotency (
+          key           TEXT PRIMARY KEY,
+          fingerprint   TEXT NOT NULL,
+          status        TEXT NOT NULL,
+          result_json   TEXT,
+          failure_count INTEGER NOT NULL DEFAULT 0,
+          error_code    TEXT,
+          updated_at    TEXT NOT NULL
+        );
       `);
     }
   }
@@ -1186,6 +1237,53 @@ export class SqliteStore {
       ? this.db.prepare('SELECT id,plan_id planId,revision_id revisionId,role,format,filename,path,sha256,byte_size byteSize,content_origin contentOrigin,created_at createdAt FROM material_artifact WHERE plan_id=? AND revision_id=? ORDER BY created_at').all(planId, revisionId)
       : this.db.prepare('SELECT id,plan_id planId,revision_id revisionId,role,format,filename,path,sha256,byte_size byteSize,content_origin contentOrigin,created_at createdAt FROM material_artifact WHERE plan_id=? ORDER BY created_at').all(planId);
     return rows as import('../store').MaterialArtifactRecord[];
+  }
+
+  // ===== G07 审查报告持久化 =====
+  saveReviewReport(rec: import('../store').ReviewReportRecord): void {
+    this.assertWritable();
+    const errors = validateReviewReport(rec.report);
+    if (errors.length) throw new Error(`invalid_review_report:${errors.join('|')}`);
+    this.requireDb()
+      .prepare(
+        `INSERT INTO review_report(report_id,plan_id,revision_id,report_json,created_at)
+         VALUES(@reportId,@planId,@revisionId,@reportJson,@createdAt)`
+      )
+      .run({
+        reportId: rec.reportId,
+        planId: rec.planId,
+        revisionId: rec.revisionId,
+        reportJson: JSON.stringify(rec.report),
+        createdAt: rec.createdAt
+      });
+  }
+
+  getLatestReviewReport(planId: string, revisionId: string): import('../store').ReviewReportRecord | null {
+    if (!this.db) return null;
+    const row = this.db
+      .prepare(
+        `SELECT report_id reportId, plan_id planId, revision_id revisionId, report_json reportJson, created_at createdAt
+         FROM review_report WHERE plan_id=? AND revision_id=? ORDER BY created_at DESC, report_id DESC LIMIT 1`
+      )
+      .get(planId, revisionId) as
+      | { reportId: string; planId: string; revisionId: string; reportJson: string; createdAt: string }
+      | undefined;
+    if (!row) return null;
+    let report: unknown;
+    try {
+      report = JSON.parse(row.reportJson);
+    } catch {
+      throw new Error(`invalid_stored_review_report:${row.reportId}:json`);
+    }
+    const errors = validateReviewReport(report);
+    if (errors.length) throw new Error(`invalid_stored_review_report:${row.reportId}:${errors.join('|')}`);
+    return {
+      reportId: row.reportId,
+      planId: row.planId,
+      revisionId: row.revisionId,
+      report: report as ReviewReport,
+      createdAt: row.createdAt
+    };
   }
 
   // ===== G04 模型配置/作业持久化 =====

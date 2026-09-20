@@ -145,10 +145,18 @@
 
 - 任务/方法示例/**课时计划合同** `lesson_outline.v1`（objectives/steps[stage,minutes,activity,citations]/notes），受同一输出合同校验；资料页“生成课时计划”按获准片段生成，**模拟结果明确标注“测试替身（非真实模型）”**，不冒充真实备课；教师不写提示词。无授权不调用真实 API。
 
-## G07–G11 — NOT_STARTED
+## G07 审查与一处修改 — IN_PROGRESS（四包设计，第 1 包完成）
 
-G05 完整课时计划与 G06 三类五文件确定性生成已在上方记录。审查与一处修改（G07）、反馈与教学纠正（G08）、保护与恢复（G09）、升级与性能（G10）、完整发行验收（G11）尚未开始。界面相应后续能力仍标注“后续版本开放”。
+- [x] **G07-T01 确定性审查层与严格 ReviewReport**：新增 `reviewLessonPlan`，将现有结构/引用/时间/来源核验问题映射到明确返回模块；冲突来源阻断发布，待核验来源保留教师审查；`is_effectiveness_proof` 固定为 `false`，不把软件就绪冒充教学有效。运行时校验拒绝缺字段、多余字段、非法枚举/类型与效果证明声明。
+- [x] **审查持久化与窄 IPC**：SQLite migration v9 一次建齐 G07 的 `review_report/change_proposal/material_bundle/lesson_change_idempotency` 表及 `material_artifact.bundle_id`；审查报告保存、跨重启读取前重新严格校验。`review.run` 支持指定修订，Schema 门拒绝多余字段，缺修订返回 `SOURCE_MISSING`，保护态返回 `DATABASE_LOCKED`。
+- **本包实测（Node 22.23.2）**：`review.test.ts` 6 + `g07-review-store.test.ts` 5 定向通过；主/渲染 TypeScript、ESLint、`verify:contracts` 通过；全量 Vitest **237 passed / 1 skipped（238 total，25 files）**。跳过项为既有 LibreOffice 环境条件用例，不改为通过。
+- **未执行/外部门**：真实模型语义审查、教师专业复核、Office/WPS 保真分别保持 `NOT_RUN` / `BLOCKED_EXTERNAL`；Windows 目标安装、真实 API、正式签名门不因本包改变。npm 原生依赖重装在本机缺 ClangCL 工具链时失败，但锁定 Node 22 的现有 `better-sqlite3` 绑定已由真实 SQLite 测试通过；不把安装失败写成通过。
+- [ ] **下一包 G07-T02**：依赖失效/最小重算、严格 `ChangeProposal`、原子接纳与成品包发布。
+
+## G08–G11 — NOT_STARTED
+
+反馈与教学纠正（G08）、保护与恢复（G09）、升级与性能（G10）、完整发行验收（G11）尚未开始。界面相应后续能力仍标注“后续版本开放”。
 
 ## 下一步
 
-见 `HANDOFF.md`。优先 G07 跨成品自动重生成与审查；扫描件 OCR 未接入则继续阻塞。外部门保留：G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课质量、公开上传授权。
+见 `HANDOFF.md`。继续 G07-T02 依赖失效/最小重算与跨成品原子发布；扫描件 OCR 未接入则继续阻塞。外部门保留：G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课质量、公开上传授权。

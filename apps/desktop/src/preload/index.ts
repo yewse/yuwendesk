@@ -14,6 +14,7 @@ import type {
   SourceVersionDTO,
   StatusData
 } from '../shared/ipc';
+import type { ReviewReport } from '../main/review/types';
 
 // 预加载在 sandbox=true 下不能 require 本地模块，因此保持完全自包含：
 // 仅使用类型导入（编译期擦除）与本地常量，运行时只依赖 electron。
@@ -109,6 +110,10 @@ const api = {
   lessonBuildDemo: () => call<{ planId: string; revisionId: string; title: string; valid: boolean; contentOrigin: string }>('lesson.buildDemo'),
   lessonList: () => call<{ plans: { planId: string; title: string; currentRevisionId: string | null; updatedAt: string }[] }>('lesson.list'),
   lessonGet: (planId: string) => call<{ plan: unknown; contentOrigin: string; valid: boolean; revisionId: string }>('lesson.get', { payload: { planId } }),
+  reviewRun: (planId: string, revisionId?: string) =>
+    call<{ report: ReviewReport }>('review.run', {
+      payload: revisionId ? { planId, revisionId } : { planId }
+    }),
   materialsGenerate: (planId: string) =>
     call<{ planId: string; revisionId: string; contentOrigin: string; versionStamp: string; files: { role: string; format: string; filename: string; path: string; sha256: string; byteSize: number }[] }>('materials.generate', { payload: { planId } }),
   materialsList: (planId: string) => call<{ artifacts: { role: string; format: string; filename: string; path: string; sha256: string; byteSize: number; revisionId: string; contentOrigin: string }[] }>('materials.list', { payload: { planId } }),

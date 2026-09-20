@@ -15,6 +15,7 @@ import { StoreProtectedError } from './store';
 import { checkPayload } from './schemaGate';
 import { buildLessonPlan, demoLessonSpec, validateLessonPlan } from './lesson/build';
 import { buildMaterialSet } from './materials/generate';
+import { reviewLessonPlan } from './review/review';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -163,6 +164,8 @@ export class IpcService {
         return this.ctx.lessonStore ? { ok: true, data: { plans: this.ctx.lessonStore.listLessonPlans() } } : { ok: true, data: { plans: [] } };
       case 'lesson.get':
         return this.lessonGet(request);
+      case 'review.run':
+        return this.reviewRun(request);
       case 'materials.generate':
         return this.materialsGenerate(request);
       case 'materials.list':
@@ -340,6 +343,45 @@ export class IpcService {
     const rec = ls.getLessonRevision((req.payload as { planId: string }).planId);
     if (!rec) return errorResponse('SOURCE_MISSING', '课时计划不存在。', '请先组建计划。');
     return { ok: true, data: { plan: JSON.parse(rec.contentJson), contentOrigin: rec.contentOrigin, valid: rec.valid, revisionId: rec.revisionId } };
+  }
+
+  private reviewRun(req: IpcRequest): IpcResponse {
+    const ls = this.ctx.lessonStore;
+    if (!ls) return errorResponse('SOURCE_MISSING', '课时审查功能不可用。', '请重启应用。');
+    if (this.ctx.store.isProtected()) {
+      return errorResponse('DATABASE_LOCKED', '本地数据库处于保护状态，未写入审查结果。', '请先恢复或备份数据库。');
+    }
+    const payload = req.payload as { planId: string; revisionId?: string };
+    const rec = ls.getLessonRevision(payload.planId, payload.revisionId);
+    if (!rec) return errorResponse('SOURCE_MISSING', '课时计划或指定修订不存在。', '请刷新计划后重试。');
+
+    let plan: ReturnType<typeof buildLessonPlan>;
+    try {
+      plan = JSON.parse(rec.contentJson) as ReturnType<typeof buildLessonPlan>;
+    } catch {
+      return errorResponse('EXPORT_INVALID', '课时计划数据损坏，无法审查。', '请恢复该修订或重新组建计划。');
+    }
+    const report = reviewLessonPlan(plan, {
+      ids: {
+        reportId: () => `report_${randomUUID()}`,
+        issueId: () => `issue_${randomUUID()}`
+      }
+    });
+    try {
+      ls.saveReviewReport({
+        reportId: report.report_id,
+        planId: rec.planId,
+        revisionId: rec.revisionId,
+        report,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      if (error instanceof StoreProtectedError) {
+        return errorResponse('DATABASE_LOCKED', '本地数据库处于保护状态，未写入审查结果。', '请先恢复或备份数据库。');
+      }
+      throw error;
+    }
+    return { ok: true, data: { report } };
   }
 
   // G06：由当前修订确定性生成三类五文件，写入 userData 并登记清单（版本一致记录）。
