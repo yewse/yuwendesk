@@ -254,6 +254,13 @@
 - **验证**：新增 4 项回归先 RED 后 GREEN；G11 验收定向与 DeepSeek 协议定向 **38/38**，全量 Vitest **625 passed / 1 skipped（626 total，67 files）**；typecheck、lint、合同、desktop build、`git diff --check` 均退出 0。既有 pdfjs/canvas/字体告警和一个环境跳过项保持原样。
 - **边界**：冻结 `AI-001` 仍明确要求 Grok，而当前产品与用户授权为 DeepSeek；本轮可记录 DeepSeek 真实工程证据，但不得把该旧定义冒充 PASS。GPT 生成资料只算合成测试材料，GPT 复核只算 `model_reviewed`，不替代 EXT05 合法现用教材或 EXT09 真人教师专业复核。当前 Windows 主机也尚未证明为干净标准用户 VM。
 
+## G11-E02 Windows 候选构建修复 — 本地实现完成，待干净提交重建
+
+- [x] **可选原生依赖边界**：Windows 打包首次实际执行发现 electron-builder 会连同 `pdfjs-dist` 的可选 `canvas` 一起重建，并因本机无 Cairo/GTK 失败；未把失败写成通过。新增打包合同回归先以 2 项失败复现，再配置 `npmRebuild: false`、从应用包排除 `canvas`，并用 `electron-rebuild --only better-sqlite3 --types prod` 只重建唯一必需的原生运行依赖。
+- [x] **Windows 11 工程构建**：修复后在 Windows 11 Pro `10.0.26200` x64 上，renderer/main 构建、定向原生重建、win-x64 解包和 NSIS 安装器生成均退出 0。临时候选 `YuwenDesk-Setup-0.1.0-x64.exe` 为 **131,024,560 bytes**，Authenticode 实测 `NotSigned`；它生成于尚未提交的修复工作树，只是构建验证，**不得用于追加验收或分发**。必须提交本包后从 clean commit 再构建并重新计算 hash/size。
+- **验证**：打包/G11 候选边界定向 **51/51**，全量 Vitest **627 passed / 1 skipped（628 total，68 files）**；typecheck、lint、合同与 `git diff --check` 均退出 0。把无构建来源的临时 EXE 放在固定候选路径时，既有 G11 测试和合同检查按设计以 `CANDIDATE_BUILD_PROVENANCE_MISSING` 失败；移至隔离的 ignored provisional 目录后恢复全绿，没有放宽门禁。
+- **安全边界**：底层失败日志曾显示会展开子进程环境，因此后续构建在子进程环境中移除凭据型变量并关闭 debug；报告、源码和候选元数据不记录密钥。正式签名身份/时间戳与可信分发地址仍为 `BLOCKED_EXTERNAL`。
+
 ## 下一步
 
 见 `HANDOFF.md`。G10 与 G11 四个本地工程包均已完成，不重做 G00–G11 或篡改冻结定义。下一步是外部门闭环：在锁定环境生成新候选，并补齐干净 Win11 8GB/SSD、正式签名/时间戳、可信分发身份、Office/WPS、真实 API/预算、学生资料隐私授权/逐次外发许可、缺陷审计和教学专业复核。缺输入继续标 `BLOCKED_EXTERNAL`；完成后创建绑定同一候选 commit 的追加验收运行，不覆盖本次 BLOCKED/NOT_RUN 记录。

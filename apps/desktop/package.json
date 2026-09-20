@@ -14,8 +14,8 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test:unit": "vitest run",
-    "build:dir": "npm run build && electron-builder --dir --publish never --config electron-builder.yml",
-    "build:win": "npm run build && electron-builder --win nsis --x64 --publish never --config electron-builder.yml"
+    "build:dir": "npm run build && electron-rebuild -f --only better-sqlite3 --types prod && electron-builder --dir --publish never --config electron-builder.yml",
+    "build:win": "npm run build && electron-rebuild -f --only better-sqlite3 --types prod && electron-builder --win nsis --x64 --publish never --config electron-builder.yml"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",

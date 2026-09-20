@@ -12,6 +12,11 @@ directories:
 files:
   - dist/**/*
   - package.json
+  # pdfjs-dist 的 canvas 是可选 Node 绘图后端；本应用仅使用 PDF 文本提取，不将其打包。
+  - "!node_modules/canvas/**/*"
+
+# 自动重建会连同可选 canvas 一起编译并要求系统级 Cairo/GTK。必需的原生模块由构建脚本定向重建。
+npmRebuild: false
 
 # 随应用打包内置许可 CJK 字体（不依赖目标机系统字体路径）。运行期在 resources/assets/fonts 解析。
 extraResources:

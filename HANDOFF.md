@@ -36,6 +36,9 @@
 - **T04 验证**：G11 定向 **71/71**；全量 **621 passed / 1 skipped（622 total，67 files）**；typecheck、lint、合同、desktop build、diff 全部退出 0。冻结哈希未变，发行目录隐私扫描无命中；篡改/恢复演练为 1→2。完整证据见 `reports/G11_EVIDENCE.md`。G11 四个本地工程包已完成，但不可称为正式 G11 DONE 或可分发。
 - **G11-E01 追加验收入口已实现，实际运行待候选**：runner 可从被忽略的 `apps/desktop/release/acceptance/` 接收外部执行输入，只把绑定当前 commit、固定候选字节、有效执行时窗及已 `PROVIDED` 外部条件的映射案例提升为 `PASS/FAIL`；其余保持 `BLOCKED/NOT_RUN`。来源/候选漂移、机器绝对路径、路径逃逸、重复案例、未提供条件和 API key/Bearer 内容会整轮拒绝。DeepSeek 默认预算费率已改为官方 2026-09-10 峰值（输入 ¥2/百万、输出 ¥8/百万），用户硬上限 10 元。新增 4 项回归；全量 **625 passed / 1 skipped（626 total，67 files）**，typecheck/lint/contracts/build/diff 均通过。
 - **E01 证据边界**：冻结 `AI-001` 仍写 Grok，当前实现/授权是 DeepSeek，故 DeepSeek 实网结果只作真实工程证据，不能冒充该旧案例 PASS。GPT 合成材料/模型自审不能替代合法现用教材或真人教师专业复核；当前 Windows 11 主机也未证明为干净标准用户 VM。EXT07/EXT08 仍未提供。
+- **G11-E02 Windows 候选构建修复已实现，待 clean commit 重建**：实际 `build:win` 首轮因 electron-builder 重建 `pdfjs-dist` 可选 `canvas`、缺 Cairo/GTK 而失败；新增 2 项先 RED 后 GREEN 的打包合同测试，现关闭 broad rebuild、排除 `canvas`，并只用 `--only better-sqlite3 --types prod` 定向重建必需原生模块。修复后 Windows 11 Pro `10.0.26200` x64 实际生成 131,024,560-byte NSIS 安装器，Authenticode `NotSigned`；因该次构建来自未提交工作树，只证明构建路径已恢复，不可进入追加验收。提交 E02 后必须从 clean commit 重建固定候选。
+- **E02 验证**：打包/G11 候选边界定向 51/51；全量 **627 passed / 1 skipped（628 total，68 files）**；typecheck、lint、合同、diff 均退出 0。无构建来源的临时候选一度使 G11 测试/合同按设计拒绝，已隔离到 ignored provisional 目录，未放宽候选来源门禁。
+- **E02 日志安全**：原生构建失败输出可能展开子进程环境；后续构建先在子进程移除凭据型变量并关闭 debug。不得把任何密钥写入命令、仓库、验收输入或证据。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -51,9 +54,9 @@ npm run -w @yuwendesk/desktop build         # vite 渲染层 + tsc 主/预加载
 npm run verify:contracts                    # 轻量合同校验
 
 # 原生依赖（better-sqlite3）ABI：Node 测试用 Node ABI 预编译；真实 Electron/打包用 Electron ABI。
-npx electron-rebuild -f -w better-sqlite3    # 真实 Electron 运行前按 Electron ABI 重建
+npx electron-rebuild -f --only better-sqlite3 --types prod  # 真实 Electron 运行前按 Electron ABI 定向重建
 npm rebuild better-sqlite3                    # 恢复 Node ABI 以再跑 test:unit
-# （打包 build:win 会自动执行 @electron/rebuild；node_modules 不入库，锁文件固定版本）
+# （打包 build:win 会定向重建 better-sqlite3；可选 canvas 不进入应用包）
 
 # 无头环境运行演示（开发/CI 用；教师不使用命令行）
 scripts/dev-run-xvfb.sh                      # 启动 Xvfb :99 + Electron（设 YUWENDESK_DEV_ALLOW_PLATFORM=1）
@@ -81,7 +84,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 
 ## 下一个有界工作包建议
 
-1. 提交 G11-E01 后从该干净 commit 构建固定的未签名工程候选；不得复用历史 EXE 或哈希。
+1. 提交 G11-E02 后从该干净 commit 重建固定的未签名工程候选；不得复用本次 dirty 工作树候选、历史 EXE 或哈希。
 2. 对同一候选执行 DeepSeek 最小真实调用和 WPS 商业版打开/编辑/保存/分页/放映；密钥只进受保护应用输入，证据不得含密钥。
 3. 生成新的追加验收运行；只提升实际满足原定义的案例。干净标准用户 VM、Grok 旧定义、合法现用教材、真人教师复核、签名与分发继续保持阻断，随后重新运行发行证据链。
 
