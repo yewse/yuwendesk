@@ -30,6 +30,8 @@
 - **G11-T01 本地工程范围已完成**：`AcceptanceRunV1`、170 项显式映射、冻结 130+40 的固定 SHA-256、map/evidence-level/time-window 交叉校验、symlink-safe 路径与 SHA-256/size 回读、完整 Vitest 名匹配、追加 no-clobber、候选盘点和两份固定报告的失败回滚均已落地。首个运行 `run-20260920-b5dba42-01` 绑定源码 `b5dba42579cbb325e1b3cbeadc582865256f88e4`（运行时工作树 dirty），结果 **6 PASS / 0 FAIL / 38 BLOCKED / 126 NOT_RUN**。逐项语义审计后只保留 `SEC-009/JOB-003/JOB-006/JOB-007/DAT-005/UPD-001` 为工程 PASS；其余覆盖不足者没有冒充通过。固定候选 EXE 缺失，`artifactClass=NONE`，hash/size/build provenance 均为 null；新增 EXT10/EXT11 只登记非秘密外部条件。
 - T01 定向测试 **24/24**，runner 全量 Vitest **574 passed / 1 skipped（575 total，64 files）**；Windows 11 开发主机、Node 24.15.0/npm 11.12.1，全为虚构/工程夹具。typecheck、lint、`verify:contracts`、desktop build 均退出 0。发布路径已覆盖唯一临时文件、追加记录 no-clobber、候选/发行输入成组事务恢复，以及 NTFS ADS、symlink/junction、历史借证和倒序时间拒绝。既有跳过项没有转为通过；T02 已如实聚合为 BLOCKED，当前仍不能称为发布就绪。G09 提交序列：`be728a2`、`3536a8e`、`0560bad`、`27cbe9e`；G10 设计/计划：`4d5ee39`、`f1b76d6`；T01：`4b542a0`；T02：`aef8bbd`；T03：`2861c68`；T04：`61ba230`。G11 设计/计划：`c993c9e`、`b5dba42`。
 - **G11-T02 本地工程范围已完成**：`release:evidence` 从显式选择的 T01 run/candidate、冻结定义、两份需求追踪、EXT01–11 固定闭集和严格 v1 缺陷审计派生报告；完整覆盖 60+24 个需求、170 个案例和 11 个固定交付物。当前五维状态为 `BLOCKED / BLOCKED / NOT_REVIEWED / NONE / BLOCKED`，理由 `RELEASE_ARTIFACT_MISSING`，共 18 个排序缺口（含 dirty run）；有效 BLOCKED 报告可生成，但不等于正式门通过。候选固定字节每次重算，输出做绝对路径/秘密模式扫描，三文件以受限 journal 成组发布；缺陷审计保持 `NOT_RUN`，空列表不冒充零 P0/P1。定向 **16/16**（与 T01 合计 40/40）；全量 **590 passed / 1 skipped（591 total，65 files）**；typecheck、lint、`verify:contracts`、desktop build、`git diff --check` 均退出 0。
+- **G11-T03 本地工程范围已完成**：实际 npm CLI 生成并解析 CycloneDX 1.5；`package-lock.json` SHA-256 `81444aa6fe366746defc6ccd5de13fec244a1e0297e7246b381c93c1415795ed`，锁定组件与 SBOM 精确核对为 **663/663**，依赖图为 **664 个节点 / 1,133 条 lock 边**，并做 root 可达、完整 purl 身份、workspace scoped 短名白名单及双向边集合校验。11 项固定输入的规范 `SHA256SUMS.txt` 已逐文件 realpath/hash 复读，拒绝绝对/穿越/反斜杠/大小写别名、链接逃逸和自引用；SBOM/环境/签名输出还递归拒绝本机路径和秘密模式；四文件成组原子发布。当前聚合为 `SBOM=PASS / checksum=PASS / signature=NOT_RUN`，总发行状态仍 `BLOCKED / RELEASE_ARTIFACT_MISSING`，缺口 16 个。
+- **T03 真实边界与门禁**：本机 Node **24.15.0** / npm **11.12.1** 不等于 ENV_LOCK 的 Node **22.14.0** / npm **10.9.7**，因此 `formalEnvironmentMatch=false`；工程 SBOM 不冒充锁定环境证据。生成器和聚合器重新核对 live HEAD 与相关工作树，修改签名脚本、lockfile 或其他非生成输入会保持源码门阻断。固定候选安装器仍不存在，未拿历史包或任意 EXE 代替，Authenticode 为 `NOT_RUN / RELEASE_ARTIFACT_MISSING`；Windows 检查仅接受内核锚定 `GLOBALROOT\\SystemRoot` 的系统 PowerShell，不信任 `SystemRoot` 环境变量或 PATH，并从 `$PSHOME` 显式加载/限定签名与哈希 cmdlet；EXT07 签名身份仍未提供。T03 定向 **17/17**，T02+T03 **39/39**，T01–T03 **63/63**；全量 **613 passed / 1 skipped（614 total，66 files）**；typecheck、lint、合同、desktop build、`git diff --check` 均退出 0。独立最终复核 Critical 0 / Important 0、Ready。下一包必须先保持这些阻断，再生成最终状态。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -75,8 +77,8 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 
 ## 下一个有界工作包建议
 
-1. 内联执行 G11-T03：使用实际 npm SBOM 输出核对传递依赖，生成规范校验和与签名状态；当前开发机 Node/npm 偏离 ENV_LOCK、候选 EXE 缺失且 EXT07 未提供，必须保留工程/外部阻断边界。
-2. 随后执行 G11-T04 的中文教师指南、最终状态和正式 `release:verify`。补齐锁定 Electron 二进制、干净 Win11、Office/WPS、签名/分发、真实 API/预算、学生资料授权/逐次外发许可和教师专业复核后，才可重跑相应外部门。
+1. 内联执行 G11-T04：完成中文教师指南、最终状态和正式 `release:verify`；校验器必须从现有证据派生 `BLOCKED`，不得因 SBOM/checksum 工程通过而输出 `RELEASE_READY`。
+2. 补齐锁定 Electron 二进制、干净 Win11、Office/WPS、签名/分发、真实 API/预算、学生资料授权/逐次外发许可和教师专业复核后，才可重跑相应外部门与创建新候选/验收运行。
 
 ## 重要纪律
 

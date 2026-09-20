@@ -20,33 +20,9 @@
 - 外部输入：无；属于尚未执行的本地发行步骤
 - 安全下一步：在候选 commit 上完成缺陷审计；空 items 只有在 COMPLETE 时才表示未发现已知缺陷。
 
-## DELIVERABLE_CHECKSUM_MANIFEST_MISSING
-
-- 范围：reports/release/SHA256SUMS.txt
-- 状态：NOT_RUN
-- 阻断码：`RELEASE_REQUIRED_DELIVERABLE_MISSING`
-- 外部输入：无；属于尚未执行的本地发行步骤
-- 安全下一步：执行负责该固定交付物的后续 G11 工作包，并在生成后重新归集证据。
-
-## DELIVERABLE_CYCLONEDX_SBOM_MISSING
-
-- 范围：reports/release/yuwendesk.cdx.json
-- 状态：NOT_RUN
-- 阻断码：`RELEASE_REQUIRED_DELIVERABLE_MISSING`
-- 外部输入：无；属于尚未执行的本地发行步骤
-- 安全下一步：执行负责该固定交付物的后续 G11 工作包，并在生成后重新归集证据。
-
 ## DELIVERABLE_FINAL_STATUS_MISSING
 
 - 范围：reports/release/FINAL_STATUS.md
-- 状态：NOT_RUN
-- 阻断码：`RELEASE_REQUIRED_DELIVERABLE_MISSING`
-- 外部输入：无；属于尚未执行的本地发行步骤
-- 安全下一步：执行负责该固定交付物的后续 G11 工作包，并在生成后重新归集证据。
-
-## DELIVERABLE_SIGNING_STATUS_MISSING
-
-- 范围：reports/release/signing-status.json
 - 状态：NOT_RUN
 - 阻断码：`RELEASE_REQUIRED_DELIVERABLE_MISSING`
 - 外部输入：无；属于尚未执行的本地发行步骤
@@ -147,4 +123,12 @@
 - 阻断码：`RELEASE_SOURCE_DIRTY`
 - 外部输入：无；属于尚未执行的本地发行步骤
 - 安全下一步：在干净工作树对同一候选 commit 创建新的追加验收运行；不得改写本次 dirty 运行。
+
+## SUPPLY_CHAIN_ENVIRONMENT_MISMATCH
+
+- 范围：SBOM 生成工具链与 ENV_LOCK.json 锁定版本不一致
+- 状态：BLOCKED
+- 阻断码：`RELEASE_FORMAL_ENVIRONMENT_MISMATCH`
+- 外部输入：无；属于尚未执行的本地发行步骤
+- 安全下一步：在 ENV_LOCK.json 锁定的 Node/npm 环境重新生成供应链证据；当前 SBOM 仅作工程证据。
 

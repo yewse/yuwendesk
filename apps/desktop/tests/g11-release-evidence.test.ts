@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +13,7 @@ import {
   aggregateReleaseEvidence,
   buildRequirementCoverage,
   decideReleaseDisposition,
+  inspectRepositoryProvenance,
   loadReleaseAggregationInputs,
   validateReleaseEvidence,
   verifyCandidateArtifactSnapshot,
@@ -72,6 +74,9 @@ function minimalInput(overrides: Record<string, unknown> = {}) {
     defectAudit: {
       status: 'NOT_RUN', assessedCommit: null, executedAt: null, items: [],
       blockerCode: 'RELEASE_DEFECT_AUDIT_REQUIRED'
+    },
+    repositoryProvenance: {
+      head: 'abcdef0123456789', headMatchesSource: true, relevantTreeClean: true
     },
     inputFiles: [],
     deliverables: [{ id: 'acceptance_run', path: 'reports/acceptance-runs/run-20260920-abcdef0-01.json', status: 'PRESENT' }],
@@ -139,9 +144,82 @@ describe('G11-T02 release disposition priority', () => {
       artifactClass: 'SIGNED_TEST_BUILD', releaseDisposition: 'BLOCKED', reasonCode: 'RELEASE_SOURCE_DIRTY'
     });
   });
+
+  it('cannot become release ready while any verified supply-chain gate is open', () => {
+    expect(decideReleaseDisposition({
+      requiredCaseResults: Array.from({ length: 170 }, (_, index) => ({
+        caseId: `CASE-${index}`, severity: 'P1', status: 'PASS'
+      })),
+      artifactPresent: true, artifactSigned: true, sourceTreeClean: true,
+      cleanWindowsPassed: true, distributionAuthorized: true, controlledTrialAuthorized: false,
+      dataBoundaryApproved: true, costBoundaryApproved: true, defectAuditStatus: 'COMPLETE',
+      supplyChainReady: false, knownDefects: []
+    })).toEqual({
+      artifactClass: 'SIGNED_TEST_BUILD',
+      releaseDisposition: 'BLOCKED',
+      reasonCode: 'RELEASE_SUPPLY_CHAIN_NOT_READY'
+    });
+  });
 });
 
 describe('G11-T02 release aggregation boundary', () => {
+  it('requires the live repository HEAD and relevant worktree to match the source commit', () => {
+    const base = minimalInput();
+    const acceptanceRun = base.acceptanceRun as Record<string, unknown>;
+    const cleanRun = {
+      ...acceptanceRun,
+      value: { ...(acceptanceRun.value as object), repositoryDirty: false }
+    };
+    const mismatch = aggregateReleaseEvidence(minimalInput({
+      acceptanceRun: cleanRun,
+      repositoryProvenance: { head: 'deadbeef', headMatchesSource: false, relevantTreeClean: true }
+    }));
+    expect(mismatch.gates.sourceTreeClean).toBe(false);
+
+    const matching = aggregateReleaseEvidence(minimalInput({
+      acceptanceRun: cleanRun,
+      repositoryProvenance: {
+        head: 'abcdef0123456789', headMatchesSource: true, relevantTreeClean: true
+      }
+    }));
+    expect(matching.gates.sourceTreeClean).toBe(true);
+  });
+
+  it('detects dirty source files while allowing only declared generated outputs', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const git = (...args: string[]) => spawnSync('git', args, { cwd: fixtureRoot, encoding: 'utf8' });
+    expect(git('init').status).toBe(0);
+    expect(git('config', 'user.email', 'g11-test@example.invalid').status).toBe(0);
+    expect(git('config', 'user.name', 'G11 Test').status).toBe(0);
+    mkdirSync(join(fixtureRoot, 'scripts'), { recursive: true });
+    mkdirSync(join(fixtureRoot, 'reports', 'release'), { recursive: true });
+    writeFileSync(join(fixtureRoot, 'scripts', 'verify.mjs'), 'export const ok = true;\n', 'utf8');
+    writeFileSync(join(fixtureRoot, 'reports', 'release', 'release-evidence.json'), '{}\n', 'utf8');
+    expect(git('add', '.').status).toBe(0);
+    expect(git('commit', '-m', 'fixture').status).toBe(0);
+    const head = git('rev-parse', 'HEAD').stdout.trim();
+    const clean = inspectRepositoryProvenance({
+      root: fixtureRoot,
+      sourceCommit: head,
+      allowedDirtyPaths: ['reports/release/release-evidence.json']
+    });
+    expect(clean).toMatchObject({ head, headMatchesSource: true, relevantTreeClean: true });
+
+    writeFileSync(join(fixtureRoot, 'reports', 'release', 'release-evidence.json'), '{"generated":true}\n', 'utf8');
+    expect(inspectRepositoryProvenance({
+      root: fixtureRoot,
+      sourceCommit: head,
+      allowedDirtyPaths: ['reports/release/release-evidence.json']
+    }).relevantTreeClean).toBe(true);
+
+    writeFileSync(join(fixtureRoot, 'scripts', 'verify.mjs'), 'export const ok = false;\n', 'utf8');
+    expect(inspectRepositoryProvenance({
+      root: fixtureRoot,
+      sourceCommit: head,
+      allowedDirtyPaths: ['reports/release/release-evidence.json']
+    }).relevantTreeClean).toBe(false);
+  });
+
   it('keeps software, resource, teaching, artifact, and release dimensions separate', () => {
     const evidence = aggregateReleaseEvidence(minimalInput());
     expect(evidence.statuses).toEqual({
@@ -335,6 +413,25 @@ describe('G11-T02 release aggregation boundary', () => {
     expect(readFileSync(victimPath, 'utf8')).toBe('{"must":"survive"}\n');
   });
 
+  it('rolls every target back when the grouped postcondition fails before commit', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const transactionPath = join(fixtureRoot, '.supply-transaction.json');
+    const firstPath = join(fixtureRoot, 'first.json');
+    const secondPath = join(fixtureRoot, 'second.json');
+    writeFileSync(firstPath, '{"version":"old-first"}\n', 'utf8');
+    writeFileSync(secondPath, '{"version":"old-second"}\n', 'utf8');
+    expect(() => writeFileSetAtomic({
+      transactionPath,
+      entries: [
+        { targetPath: firstPath, content: '{"version":"new-first"}\n', validateContent: () => true },
+        { targetPath: secondPath, content: '{"version":"new-second"}\n', validateContent: () => true }
+      ],
+      beforeCommit: () => { throw new Error('postcondition-drift'); }
+    })).toThrow(/postcondition-drift/);
+    expect(readFileSync(firstPath, 'utf8')).toBe('{"version":"old-first"}\n');
+    expect(readFileSync(secondPath, 'utf8')).toBe('{"version":"old-second"}\n');
+  });
+
   it('re-reads aggregate input files and rejects changed evidence bytes', () => {
     const fixtureRoot = makeFixtureRoot();
     mkdirSync(join(fixtureRoot, 'reports'), { recursive: true });
@@ -403,5 +500,41 @@ describe('G11-T02 release aggregation boundary', () => {
     expect(forgedValidation.ok).toBe(false);
     expect(forgedValidation.errors.map((error: { code: string }) => error.code))
       .toContain('RELEASE_AGGREGATE_DERIVATION_MISMATCH');
+  });
+
+  it('keeps the generated supply-chain object inside the closed JSON Schema', () => {
+    const schema = JSON.parse(readFileSync(join(root, 'contracts', 'G11ReleaseEvidence.schema.json'), 'utf8'));
+    const evidence = JSON.parse(readFileSync(join(root, 'reports', 'release', 'release-evidence.json'), 'utf8'));
+    const supplySchema = schema.properties.supplyChain;
+    expect(supplySchema.additionalProperties).toBe(false);
+    expect(Object.keys(evidence.supplyChain).sort()).toEqual(Object.keys(supplySchema.properties).sort());
+    expect([...supplySchema.required].sort()).toEqual(Object.keys(evidence.supplyChain).sort());
+    expect(supplySchema.properties.sbomStatus.enum).toContain(evidence.supplyChain.sbomStatus);
+    expect(supplySchema.properties.checksumStatus.enum).toContain(evidence.supplyChain.checksumStatus);
+    expect(supplySchema.properties.signatureStatus.enum).toContain(evidence.supplyChain.signatureStatus);
+  });
+
+  it('adds a signing gap when a present candidate is not backed by a valid signature result', () => {
+    const base = minimalInput();
+    const evidence = aggregateReleaseEvidence(minimalInput({
+      candidateArtifact: {
+        ...base.candidateArtifact,
+        value: {
+          ...base.candidateArtifact.value,
+          artifactPresent: true,
+          artifactClass: 'UNSIGNED_TEST_BUILD',
+          sha256: 'a'.repeat(64),
+          sizeBytes: 42
+        }
+      },
+      supplyChain: {
+        sbomStatus: 'PASS', checksumStatus: 'PASS', signatureStatus: 'NOT_RUN',
+        sbomPath: 'reports/release/yuwendesk.cdx.json', checksumPath: 'reports/release/SHA256SUMS.txt',
+        signingStatusPath: 'reports/release/signing-status.json', formalEnvironmentMatch: true,
+        componentCount: 1, dependencyCount: 2
+      }
+    }));
+    expect(evidence.knownGaps.map((item: { gapId: string }) => item.gapId))
+      .toContain('SUPPLY_CHAIN_SIGNATURE_NOT_RUN');
   });
 });

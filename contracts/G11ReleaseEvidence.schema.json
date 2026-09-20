@@ -157,11 +157,20 @@
     "supplyChain": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sbomStatus", "checksumStatus", "signatureStatus"],
+      "required": [
+        "sbomStatus", "checksumStatus", "signatureStatus", "sbomPath", "checksumPath", "signingStatusPath",
+        "formalEnvironmentMatch", "componentCount", "dependencyCount"
+      ],
       "properties": {
-        "sbomStatus": { "enum": ["NOT_RUN", "PASS", "FAIL", "BLOCKED"] },
-        "checksumStatus": { "enum": ["NOT_RUN", "PASS", "FAIL", "BLOCKED"] },
-        "signatureStatus": { "enum": ["NOT_RUN", "SIGNED_VALID", "SIGNED_INVALID", "UNSIGNED", "BLOCKED"] }
+        "sbomStatus": { "enum": ["NOT_RUN", "PASS", "FAIL"] },
+        "checksumStatus": { "enum": ["NOT_RUN", "PASS", "FAIL"] },
+        "signatureStatus": { "enum": ["NOT_RUN", "SIGNED_VALID", "SIGNED_INVALID", "UNSIGNED"] },
+        "sbomPath": { "const": "reports/release/yuwendesk.cdx.json" },
+        "checksumPath": { "const": "reports/release/SHA256SUMS.txt" },
+        "signingStatusPath": { "const": "reports/release/signing-status.json" },
+        "formalEnvironmentMatch": { "type": ["boolean", "null"] },
+        "componentCount": { "type": ["integer", "null"], "minimum": 0 },
+        "dependencyCount": { "type": ["integer", "null"], "minimum": 0 }
       }
     },
     "inputFiles": { "type": "array", "items": { "$ref": "#/$defs/fileDescriptor" } },

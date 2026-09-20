@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "b5dba42579cbb325e1b3cbeadc582865256f88e4",
+  "expectedPath": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
+  "artifactPresent": false,
+  "status": "NOT_RUN",
+  "reasonCode": "RELEASE_ARTIFACT_MISSING",
+  "signerSubject": null,
+  "timestampPresent": false,
+  "timestampSubject": null,
+  "checkedAt": "2026-09-20T16:48:23.189Z",
+  "artifactSha256": null,
+  "environment": "win32 10.0.26200"
+}

@@ -532,7 +532,7 @@ export function recoverJsonSetAtomic({ transactionPath, expectedTargetNames = nu
 }
 
 export function writeFileSetAtomic({
-  entries, transactionPath, beforePublish = () => {}, recoverOnError = true
+  entries, transactionPath, beforePublish = () => {}, beforeCommit = () => {}, recoverOnError = true
 }) {
   if (!isNonEmptyString(transactionPath)) throw new Error('JSON_SET_TRANSACTION_PATH_REQUIRED');
   const expectedTargetNames = entries.map((entry) => basename(entry.targetPath));
@@ -575,6 +575,7 @@ export function writeFileSetAtomic({
       const paths = transactionEntryPaths(directory, entry);
       renameSync(paths.stagePath, paths.targetPath);
     }
+    beforeCommit();
     writeJsonAtomic({
       targetPath: transactionPath,
       value: { ...journalValue, phase: 'COMMITTED' },
@@ -592,11 +593,12 @@ export function writeFileSetAtomic({
 }
 
 export function writeJsonSetAtomic({
-  entries, transactionPath, beforePublish = () => {}, recoverOnError = true
+  entries, transactionPath, beforePublish = () => {}, beforeCommit = () => {}, recoverOnError = true
 }) {
   return writeFileSetAtomic({
     transactionPath,
     beforePublish,
+    beforeCommit,
     recoverOnError,
     entries: entries.map((entry) => ({
       targetPath: entry.targetPath,

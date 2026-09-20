@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T16:04:44.042Z",
+  "generatedAt": "2026-09-20T16:48:20.591Z",
   "sourceCommit": "b5dba42579cbb325e1b3cbeadc582865256f88e4",
   "acceptanceRun": {
     "runId": "run-20260920-b5dba42-01",
@@ -2006,17 +2006,17 @@
     {
       "id": "cyclonedx_sbom",
       "path": "reports/release/yuwendesk.cdx.json",
-      "status": "MISSING"
+      "status": "PRESENT"
     },
     {
       "id": "checksum_manifest",
       "path": "reports/release/SHA256SUMS.txt",
-      "status": "MISSING"
+      "status": "PRESENT"
     },
     {
       "id": "signing_status",
       "path": "reports/release/signing-status.json",
-      "status": "MISSING"
+      "status": "PRESENT"
     },
     {
       "id": "teacher_guide",
@@ -2140,9 +2140,15 @@
     "items": []
   },
   "supplyChain": {
-    "sbomStatus": "NOT_RUN",
-    "checksumStatus": "NOT_RUN",
-    "signatureStatus": "NOT_RUN"
+    "sbomStatus": "PASS",
+    "checksumStatus": "PASS",
+    "signatureStatus": "NOT_RUN",
+    "sbomPath": "reports/release/yuwendesk.cdx.json",
+    "checksumPath": "reports/release/SHA256SUMS.txt",
+    "signingStatusPath": "reports/release/signing-status.json",
+    "formalEnvironmentMatch": false,
+    "componentCount": 663,
+    "dependencyCount": 664
   },
   "inputFiles": [
     {
@@ -2209,32 +2215,8 @@
       "safeAction": "在候选 commit 上完成缺陷审计；空 items 只有在 COMPLETE 时才表示未发现已知缺陷。"
     },
     {
-      "gapId": "DELIVERABLE_CHECKSUM_MANIFEST_MISSING",
-      "scope": "reports/release/SHA256SUMS.txt",
-      "status": "NOT_RUN",
-      "blockerCode": "RELEASE_REQUIRED_DELIVERABLE_MISSING",
-      "externalInputIds": [],
-      "safeAction": "执行负责该固定交付物的后续 G11 工作包，并在生成后重新归集证据。"
-    },
-    {
-      "gapId": "DELIVERABLE_CYCLONEDX_SBOM_MISSING",
-      "scope": "reports/release/yuwendesk.cdx.json",
-      "status": "NOT_RUN",
-      "blockerCode": "RELEASE_REQUIRED_DELIVERABLE_MISSING",
-      "externalInputIds": [],
-      "safeAction": "执行负责该固定交付物的后续 G11 工作包，并在生成后重新归集证据。"
-    },
-    {
       "gapId": "DELIVERABLE_FINAL_STATUS_MISSING",
       "scope": "reports/release/FINAL_STATUS.md",
-      "status": "NOT_RUN",
-      "blockerCode": "RELEASE_REQUIRED_DELIVERABLE_MISSING",
-      "externalInputIds": [],
-      "safeAction": "执行负责该固定交付物的后续 G11 工作包，并在生成后重新归集证据。"
-    },
-    {
-      "gapId": "DELIVERABLE_SIGNING_STATUS_MISSING",
-      "scope": "reports/release/signing-status.json",
       "status": "NOT_RUN",
       "blockerCode": "RELEASE_REQUIRED_DELIVERABLE_MISSING",
       "externalInputIds": [],
@@ -2355,6 +2337,14 @@
       "blockerCode": "RELEASE_SOURCE_DIRTY",
       "externalInputIds": [],
       "safeAction": "在干净工作树对同一候选 commit 创建新的追加验收运行；不得改写本次 dirty 运行。"
+    },
+    {
+      "gapId": "SUPPLY_CHAIN_ENVIRONMENT_MISMATCH",
+      "scope": "SBOM 生成工具链与 ENV_LOCK.json 锁定版本不一致",
+      "status": "BLOCKED",
+      "blockerCode": "RELEASE_FORMAL_ENVIRONMENT_MISMATCH",
+      "externalInputIds": [],
+      "safeAction": "在 ENV_LOCK.json 锁定的 Node/npm 环境重新生成供应链证据；当前 SBOM 仅作工程证据。"
     }
   ]
 }

@@ -7,5 +7,5 @@
   "defectAuditPath": "reports/release/defect-audit.json",
   "releaseEvidencePath": "reports/release/release-evidence.json",
   "knownLimitationsPath": "reports/release/KNOWN_LIMITATIONS.md",
-  "releaseEvidenceGeneratedAt": "2026-09-20T16:04:44.042Z"
+  "releaseEvidenceGeneratedAt": "2026-09-20T16:48:20.591Z"
 }

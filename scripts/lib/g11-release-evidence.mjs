@@ -1,13 +1,27 @@
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { platform } from 'node:os';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import {
   loadAcceptanceDefinitions,
   inspectCandidateArtifact,
+  npmCliPathForNodeExecutable,
   validateAcceptanceMap,
   validateAcceptanceRun,
   validateCandidateArtifact
 } from './g11-acceptance.mjs';
+import {
+  allowedScopedDisplayNamesFromPackageLock,
+  G11_T03_FIXED_CHECKSUM_PATHS,
+  inspectAuthenticodeStatus,
+  lockedComponentsFromPackageLock,
+  lockedDependencyGraphFromPackageLock,
+  validateSbomEnvironmentRecord,
+  validateCycloneDxSbom,
+  validateSigningStatusRecord,
+  verifyChecksumManifest
+} from './g11-supply-chain.mjs';
 
 export const SOFTWARE_STATUSES = Object.freeze(['PASS', 'PARTIAL', 'BLOCKED', 'FAIL']);
 export const RESOURCE_STATUSES = Object.freeze(['VERIFIED', 'PARTIAL', 'BLOCKED', 'NOT_VERIFIED']);
@@ -18,6 +32,17 @@ export const RELEASE_DISPOSITIONS = Object.freeze(['RELEASE_READY', 'CONTROLLED_
 const INPUT_PREFIXES = ['reports/', 'planning/', 'acceptance/', 'docs/', 'apps/'];
 const INPUT_FILES = new Set(['ENV_LOCK.json', 'package-lock.json']);
 const DELIVERY_STATUSES = new Set(['PRESENT', 'GENERATED', 'MISSING']);
+
+export const G11_GENERATED_OUTPUT_PATHS = Object.freeze([
+  'reports/release/release-evidence.json',
+  'reports/release/KNOWN_LIMITATIONS.md',
+  'reports/release/release-input.json',
+  'reports/release/yuwendesk.cdx.json',
+  'reports/release/sbom-environment.json',
+  'reports/release/signing-status.json',
+  'reports/release/SHA256SUMS.txt',
+  'reports/release/FINAL_STATUS.md'
+]);
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -61,6 +86,33 @@ function assertSafeReleaseOutput(value) {
 function isWithin(parent, child) {
   const path = relative(parent, child);
   return path === '' || (!path.startsWith(`..${sep}`) && path !== '..' && !isAbsolute(path));
+}
+
+export function inspectRepositoryProvenance({ root, sourceCommit, allowedDirtyPaths = [] }) {
+  const rootReal = realpathSync(root);
+  const normalizedAllowed = [];
+  for (const path of allowedDirtyPaths) {
+    if (normalizeInputPath(path) === null) fail('RELEASE_REPOSITORY_PATH_REJECTED', path ?? '');
+    normalizedAllowed.push(path);
+  }
+  const runGit = (args) => spawnSync('git', ['-C', rootReal, ...args], {
+    cwd: rootReal,
+    encoding: 'utf8',
+    shell: false,
+    windowsHide: true,
+    maxBuffer: 4 * 1024 * 1024
+  });
+  const headResult = runGit(['rev-parse', '--verify', 'HEAD']);
+  const statusResult = runGit([
+    'status', '--porcelain=v1', '--untracked-files=all', '--', '.',
+    ...normalizedAllowed.map((path) => `:(exclude)${path}`)
+  ]);
+  const head = headResult.status === 0 ? headResult.stdout.trim().toLowerCase() : null;
+  return {
+    head,
+    headMatchesSource: typeof sourceCommit === 'string' && head === sourceCommit.toLowerCase(),
+    relevantTreeClean: statusResult.status === 0 && statusResult.stdout.length === 0
+  };
 }
 
 function normalizeInputPath(value) {
@@ -236,11 +288,25 @@ export function decideReleaseDisposition(input) {
       reasonCode: 'RELEASE_WINDOWS_EVIDENCE_REQUIRED'
     };
   }
+  if (input.defectAuditStatus !== 'COMPLETE') {
+    return {
+      artifactClass: input.artifactSigned ? 'SIGNED_TEST_BUILD' : 'UNSIGNED_TEST_BUILD',
+      releaseDisposition: 'BLOCKED',
+      reasonCode: 'RELEASE_REQUIRED_GATE_OPEN'
+    };
+  }
   if (!input.artifactSigned) {
     return {
       artifactClass: 'UNSIGNED_TEST_BUILD',
       releaseDisposition: 'UNSIGNED_TEST_BUILD',
       reasonCode: 'RELEASE_SIGNATURE_MISSING'
+    };
+  }
+  if (input.supplyChainReady !== true) {
+    return {
+      artifactClass: 'SIGNED_TEST_BUILD',
+      releaseDisposition: 'BLOCKED',
+      reasonCode: 'RELEASE_SUPPLY_CHAIN_NOT_READY'
     };
   }
   if (input.defectAuditStatus === 'COMPLETE' && input.controlledTrialAuthorized &&
@@ -278,7 +344,7 @@ function externalProvided(externalInputs, id) {
   return externalInputs.find((item) => item.id === id)?.status === 'PROVIDED';
 }
 
-function deriveKnownGaps({ cases, candidate, externalInputs, defectAudit, deliverables, sourceTreeClean }) {
+function deriveKnownGaps({ cases, candidate, externalInputs, defectAudit, deliverables, sourceTreeClean, supplyChain }) {
   const gaps = externalInputs.filter((item) => item.status !== 'PROVIDED').map((item) => ({
     gapId: `EXTERNAL_${item.id}`,
     scope: item.blocks.length > 0 ? item.blocks.join('；') : item.description,
@@ -350,6 +416,67 @@ function deriveKnownGaps({ cases, candidate, externalInputs, defectAudit, delive
       safeAction: '在对应证据层级创建新的追加验收运行；不得改写历史 NOT_RUN。'
     });
   }
+  if (supplyChain.sbomStatus === 'FAIL') {
+    gaps.push({
+      gapId: 'SUPPLY_CHAIN_SBOM_INVALID',
+      scope: supplyChain.sbomPath,
+      status: 'BLOCKED',
+      blockerCode: 'RELEASE_SBOM_INVALID',
+      externalInputIds: [],
+      safeAction: '修复 SBOM 生成或锁文件覆盖错误，重新生成并验证；不得把不完整 SBOM 标记为通过。'
+    });
+  }
+  if (supplyChain.checksumStatus === 'FAIL') {
+    gaps.push({
+      gapId: 'SUPPLY_CHAIN_CHECKSUM_INVALID',
+      scope: supplyChain.checksumPath,
+      status: 'BLOCKED',
+      blockerCode: 'RELEASE_CHECKSUM_INVALID',
+      externalInputIds: [],
+      safeAction: '从固定输入重新生成校验清单并逐项复读验证；不得手工替换单条哈希。'
+    });
+  }
+  if (supplyChain.formalEnvironmentMatch === false) {
+    gaps.push({
+      gapId: 'SUPPLY_CHAIN_ENVIRONMENT_MISMATCH',
+      scope: 'SBOM 生成工具链与 ENV_LOCK.json 锁定版本不一致',
+      status: 'BLOCKED',
+      blockerCode: 'RELEASE_FORMAL_ENVIRONMENT_MISMATCH',
+      externalInputIds: [],
+      safeAction: '在 ENV_LOCK.json 锁定的 Node/npm 环境重新生成供应链证据；当前 SBOM 仅作工程证据。'
+    });
+  }
+  if (candidate.artifactPresent && supplyChain.signatureStatus !== 'SIGNED_VALID') {
+    const signatureGap = {
+      NOT_RUN: {
+        gapId: 'SUPPLY_CHAIN_SIGNATURE_NOT_RUN',
+        blockerCode: 'RELEASE_SIGNATURE_CHECK_NOT_RUN',
+        safeAction: '在受支持的 Windows 环境对固定候选运行 Authenticode 与时间戳检查。'
+      },
+      UNSIGNED: {
+        gapId: 'SUPPLY_CHAIN_SIGNATURE_MISSING',
+        blockerCode: 'RELEASE_SIGNATURE_MISSING',
+        safeAction: '由获授权的发布身份签名固定候选并加入可信时间戳，再重新检查。'
+      },
+      SIGNED_INVALID: {
+        gapId: 'SUPPLY_CHAIN_SIGNATURE_INVALID',
+        blockerCode: 'RELEASE_SIGNATURE_INVALID',
+        safeAction: '保留失败证据，修复签名或时间戳链后生成新候选并重新检查。'
+      }
+    }[supplyChain.signatureStatus] ?? {
+      gapId: 'SUPPLY_CHAIN_SIGNATURE_INVALID',
+      blockerCode: 'RELEASE_SIGNATURE_INVALID',
+      safeAction: '修复签名状态记录并重新检查固定候选。'
+    };
+    gaps.push({
+      gapId: signatureGap.gapId,
+      scope: supplyChain.signingStatusPath,
+      status: 'BLOCKED',
+      blockerCode: signatureGap.blockerCode,
+      externalInputIds: [],
+      safeAction: signatureGap.safeAction
+    });
+  }
   for (const item of deliverables.filter((entry) => entry.status === 'MISSING' && entry.id !== 'candidate_installer')) {
     gaps.push({
       gapId: `DELIVERABLE_${item.id.toUpperCase()}_MISSING`,
@@ -405,10 +532,25 @@ export function aggregateReleaseEvidence(input) {
   }
 
   const externalInputs = normalizedExternal.sort((left, right) => left.id.localeCompare(right.id, 'en'));
-  const artifactSigned = ['SIGNED_TEST_BUILD', 'SIGNED_RELEASE_CANDIDATE'].includes(candidate.artifactClass);
+  const supplyChain = input.supplyChain ?? {
+    sbomStatus: 'NOT_RUN',
+    checksumStatus: 'NOT_RUN',
+    signatureStatus: 'NOT_RUN',
+    sbomPath: 'reports/release/yuwendesk.cdx.json',
+    checksumPath: 'reports/release/SHA256SUMS.txt',
+    signingStatusPath: 'reports/release/signing-status.json',
+    formalEnvironmentMatch: null,
+    componentCount: null,
+    dependencyCount: null
+  };
+  const artifactSigned = supplyChain.signatureStatus === 'SIGNED_VALID';
+  const supplyChainReady = supplyChain.sbomStatus === 'PASS' && supplyChain.checksumStatus === 'PASS' &&
+    supplyChain.signatureStatus === 'SIGNED_VALID' && supplyChain.formalEnvironmentMatch === true;
   const allCasesPassed = cases.length > 0 && cases.every((item) => item.status === 'PASS');
   const gates = {
-    sourceTreeClean: run.repositoryDirty === false,
+    sourceTreeClean: run.repositoryDirty === false &&
+      input.repositoryProvenance?.headMatchesSource === true &&
+      input.repositoryProvenance?.relevantTreeClean === true,
     cleanWindowsPassed: externalProvided(externalInputs, 'EXT02') && allCasesPassed,
     artifactSigned,
     distributionAuthorized: externalProvided(externalInputs, 'EXT08'),
@@ -421,6 +563,7 @@ export function aggregateReleaseEvidence(input) {
     requiredCaseResults: cases,
     artifactPresent: candidate.artifactPresent,
     ...gates,
+    supplyChainReady,
     knownDefects: input.defectAudit.items
   });
   const resourceIds = ['EXT05', 'EXT06', 'EXT11'];
@@ -475,11 +618,12 @@ export function aggregateReleaseEvidence(input) {
       blockerCode: input.defectAudit.blockerCode,
       items: input.defectAudit.items.map((item) => ({ ...item }))
     },
-    supplyChain: { sbomStatus: 'NOT_RUN', checksumStatus: 'NOT_RUN', signatureStatus: 'NOT_RUN' },
+    supplyChain: { ...supplyChain },
     inputFiles: input.inputFiles.map((item) => ({ ...item })).sort((left, right) => left.path.localeCompare(right.path, 'en')),
     knownGaps: deriveKnownGaps({
       cases, candidate, externalInputs, defectAudit: input.defectAudit, deliverables: input.deliverables,
-      sourceTreeClean: gates.sourceTreeClean
+      sourceTreeClean: gates.sourceTreeClean,
+      supplyChain
     })
   };
   assertSafeReleaseOutput(evidence);
@@ -521,8 +665,22 @@ export function validateReleaseEvidence({ root, evidence }) {
       ])) ||
       !hasOnlyKeys(evidence?.caseSummary, new Set(['PASS', 'FAIL', 'BLOCKED', 'NOT_RUN'])) ||
       !hasOnlyKeys(evidence?.requirements, new Set(['base', 'cr001'])) ||
-      !hasOnlyKeys(evidence?.supplyChain, new Set(['sbomStatus', 'checksumStatus', 'signatureStatus']))) {
+      !hasOnlyKeys(evidence?.supplyChain, new Set([
+        'sbomStatus', 'checksumStatus', 'signatureStatus', 'sbomPath', 'checksumPath', 'signingStatusPath',
+        'formalEnvironmentMatch', 'componentCount', 'dependencyCount'
+      ]))) {
     add('RELEASE_EVIDENCE_INVALID');
+  }
+  if (!['PASS', 'FAIL', 'NOT_RUN'].includes(evidence?.supplyChain?.sbomStatus) ||
+      !['PASS', 'FAIL', 'NOT_RUN'].includes(evidence?.supplyChain?.checksumStatus) ||
+      !['SIGNED_VALID', 'SIGNED_INVALID', 'UNSIGNED', 'NOT_RUN'].includes(evidence?.supplyChain?.signatureStatus) ||
+      evidence?.supplyChain?.sbomPath !== 'reports/release/yuwendesk.cdx.json' ||
+      evidence?.supplyChain?.checksumPath !== 'reports/release/SHA256SUMS.txt' ||
+      evidence?.supplyChain?.signingStatusPath !== 'reports/release/signing-status.json' ||
+      ![true, false, null].includes(evidence?.supplyChain?.formalEnvironmentMatch) ||
+      ![evidence?.supplyChain?.componentCount, evidence?.supplyChain?.dependencyCount]
+        .every((value) => value === null || (Number.isInteger(value) && value >= 0))) {
+    add('RELEASE_SUPPLY_CHAIN_INVALID');
   }
   if (!SOFTWARE_STATUSES.includes(evidence?.statuses?.softwareStatus) ||
       !RESOURCE_STATUSES.includes(evidence?.statuses?.resourceCoverageStatus) ||
@@ -591,6 +749,10 @@ export function validateReleaseEvidence({ root, evidence }) {
     dataBoundaryApproved: evidence?.gates?.dataBoundaryApproved,
     costBoundaryApproved: evidence?.gates?.costBoundaryApproved,
     defectAuditStatus: evidence?.gates?.defectAuditStatus,
+    supplyChainReady: evidence?.supplyChain?.sbomStatus === 'PASS' &&
+      evidence?.supplyChain?.checksumStatus === 'PASS' &&
+      evidence?.supplyChain?.signatureStatus === 'SIGNED_VALID' &&
+      evidence?.supplyChain?.formalEnvironmentMatch === true,
     knownDefects: evidence?.defectAudit?.items ?? []
   });
   if (recomputed.artifactClass !== evidence?.statuses?.artifactClass ||
@@ -634,6 +796,109 @@ export function verifyCandidateArtifactSnapshot({ root, candidateArtifact }) {
     fail('RELEASE_CANDIDATE_ARTIFACT_DRIFT');
   }
   return actual;
+}
+
+function loadSupplyChainEvidence(root, sourceCommit, candidateArtifact, acceptanceRunPath, repositoryProvenance) {
+  const sbomPath = 'reports/release/yuwendesk.cdx.json';
+  const environmentPath = 'reports/release/sbom-environment.json';
+  const checksumPath = 'reports/release/SHA256SUMS.txt';
+  const signingStatusPath = 'reports/release/signing-status.json';
+  let sbomStatus = 'NOT_RUN';
+  let checksumStatus = 'NOT_RUN';
+  let signatureStatus = 'NOT_RUN';
+  let formalEnvironmentMatch = null;
+  let componentCount = null;
+  let dependencyCount = null;
+  if (existsSync(resolve(root, sbomPath)) || existsSync(resolve(root, environmentPath))) {
+    try {
+      const sbom = readJson(root, sbomPath);
+      const environment = readJson(root, environmentPath);
+      const packageLock = readJson(root, 'package-lock.json');
+      const packageValue = readJson(root, 'package.json');
+      const environmentLock = readJson(root, 'ENV_LOCK.json');
+      const npmCliPath = npmCliPathForNodeExecutable(process.execPath);
+      const installedNpm = readJson(dirname(dirname(npmCliPath)), 'package.json');
+      const lockedComponents = lockedComponentsFromPackageLock(packageLock);
+      const lockedDependencyGraph = lockedDependencyGraphFromPackageLock(packageLock);
+      const allowedScopedDisplayNames = allowedScopedDisplayNamesFromPackageLock(packageLock);
+      const validation = validateCycloneDxSbom({
+        sbom,
+        lockedComponents,
+        lockedDependencyGraph,
+        allowedScopedDisplayNames,
+        expectedRoot: { name: packageValue.name, version: packageValue.version }
+      });
+      const environmentValidation = validateSbomEnvironmentRecord({
+        record: environment,
+        sourceCommit,
+        sbom,
+        lockedComponentCount: lockedComponents.length,
+        packageLockSha256: sha256(readFileSync(resolve(root, 'package-lock.json'))),
+        actualToolchain: { node: process.version.replace(/^v/, ''), npm: installedNpm.version },
+        requiredToolchain: {
+          node: String(environmentLock?.build_host?.node ?? '').replace(/^v/, ''),
+          npm: String(environmentLock?.build_host?.npm ?? '').replace(/^v/, '')
+        },
+        repositoryProvenance
+      });
+      sbomStatus = validation.ok && environmentValidation.ok ? 'PASS' : 'FAIL';
+      if (environmentValidation.ok) {
+        formalEnvironmentMatch = environment.formalEnvironmentMatch;
+        componentCount = environment.componentCount;
+        dependencyCount = environment.dependencyCount;
+      }
+    } catch {
+      sbomStatus = 'FAIL';
+    }
+  }
+  if (existsSync(resolve(root, checksumPath))) {
+    try {
+      const manifestText = readFileSync(resolve(root, checksumPath), 'utf8');
+      const checksumValidation = verifyChecksumManifest({
+        root,
+        manifestText
+      });
+      const actualPaths = manifestText.trimEnd().split('\n').map((line) => line.slice(66));
+      const expectedPaths = [...G11_T03_FIXED_CHECKSUM_PATHS, acceptanceRunPath];
+      if (candidateArtifact.artifactPresent) expectedPaths.push(candidateArtifact.expectedPath);
+      const exactPathSet = actualPaths.length === expectedPaths.length &&
+        JSON.stringify([...actualPaths].sort()) === JSON.stringify([...expectedPaths].sort());
+      checksumStatus = checksumValidation.ok && exactPathSet ? 'PASS' : 'FAIL';
+    } catch {
+      checksumStatus = 'FAIL';
+    }
+  }
+  if (existsSync(resolve(root, signingStatusPath))) {
+    try {
+      const signing = readJson(root, signingStatusPath);
+      const observedSigning = inspectAuthenticodeStatus({
+        root,
+        candidate: candidateArtifact,
+        checkedAt: signing?.checkedAt
+      });
+      const signingValidation = validateSigningStatusRecord({
+        record: signing,
+        sourceCommit,
+        candidate: candidateArtifact,
+        platform: platform(),
+        observed: observedSigning
+      });
+      signatureStatus = signingValidation.ok ? signing.status : 'SIGNED_INVALID';
+    } catch {
+      signatureStatus = 'SIGNED_INVALID';
+    }
+  }
+  return {
+    sbomStatus,
+    checksumStatus,
+    signatureStatus,
+    sbomPath,
+    checksumPath,
+    signingStatusPath,
+    formalEnvironmentMatch,
+    componentCount,
+    dependencyCount
+  };
 }
 
 export function loadReleaseAggregationInputs({ root, releaseInput, generatedAt }) {
@@ -680,6 +945,18 @@ export function loadReleaseAggregationInputs({ root, releaseInput, generatedAt }
     'reports/release/defect-audit.json'
   ];
   if (candidateArtifact.artifactPresent) inputs.push(candidateArtifact.expectedPath);
+  const allowedDirtyPaths = [
+    ...G11_GENERATED_OUTPUT_PATHS,
+    runPath,
+    candidatePath,
+    'reports/release/defect-audit.json'
+  ];
+  if (candidateArtifact.artifactPresent) allowedDirtyPaths.push(candidateArtifact.expectedPath);
+  const repositoryProvenance = inspectRepositoryProvenance({
+    root,
+    sourceCommit: acceptanceRun.sourceCommit,
+    allowedDirtyPaths
+  });
   return {
     generatedAt,
     acceptanceRun: { ...readDescriptor(root, runPath), value: acceptanceRun },
@@ -688,6 +965,10 @@ export function loadReleaseAggregationInputs({ root, releaseInput, generatedAt }
     caseDefinitions: loaded.definitions.map((item) => ({ caseId: item.id, severity: item.severity })),
     externalInputs,
     defectAudit,
+    repositoryProvenance,
+    supplyChain: loadSupplyChainEvidence(
+      root, acceptanceRun.sourceCommit, candidateArtifact, runPath, repositoryProvenance
+    ),
     inputFiles: inputs.map((path) => readDescriptor(root, path)),
     deliverables: [
       deliverable(root, 'acceptance_run', runPath),
