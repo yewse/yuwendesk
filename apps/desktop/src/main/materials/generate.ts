@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import JSZip from 'jszip';
 import PptxGenJS from 'pptxgenjs';
 import type { LessonPlan, Task } from '../lesson/types';
+import type { PresentationSpec } from '../change/types';
 
 export type MaterialRole = 'presentation' | 'student' | 'teacher';
 export type MaterialFormat = 'pptx' | 'docx' | 'pdf';
@@ -25,6 +26,12 @@ export interface MaterialSet {
   versionStamp: string;
   files: GeneratedFile[];
 }
+
+const DEFAULT_PRESENTATION_SPEC: PresentationSpec = {
+  fontScale: 1,
+  paperSize: 'A4',
+  theme: 'light'
+};
 
 export class FontMissingError extends Error {
   constructor() {
@@ -145,14 +152,18 @@ function esc(s: string): string {
 }
 
 // ---- DOCX：段落 + 表格 + 书写留白（可编辑） ----
-async function makeDocx(sections: Section[]): Promise<Buffer> {
+async function makeDocx(sections: Section[], spec: PresentationSpec): Promise<Buffer> {
   const zip = new JSZip();
   zip.file(
     '[Content_Types].xml',
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'
   );
   zip.folder('_rels')!.file('.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
-  const para = (text: string, bold = false): string => `<w:p>${bold ? '<w:pPr><w:rPr><w:b/></w:rPr></w:pPr>' : ''}<w:r>${bold ? '<w:rPr><w:b/></w:rPr>' : ''}<w:t xml:space="preserve">${esc(text)}</w:t></w:r></w:p>`;
+  const para = (text: string, bold = false): string => {
+    const halfPoints = Math.round((bold ? 28 : 22) * spec.fontScale);
+    const color = spec.theme === 'high_contrast' ? '000000' : bold ? '203040' : '202020';
+    return `<w:p><w:r><w:rPr>${bold ? '<w:b/>' : ''}<w:sz w:val="${halfPoints}"/><w:color w:val="${color}"/></w:rPr><w:t xml:space="preserve">${esc(text)}</w:t></w:r></w:p>`;
+  };
   const tableXml = (rows: string[][]): string => {
     const trs = rows
       .map((r) => `<w:tr>${r.map((c) => `<w:tc><w:tcPr><w:tcW w:w="2600" w:type="dxa"/></w:tcPr><w:p><w:r><w:t xml:space="preserve">${esc(c || ' ')}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`)
@@ -168,21 +179,44 @@ async function makeDocx(sections: Section[]): Promise<Buffer> {
       return x;
     })
     .join('');
-  zip.folder('word')!.file('document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr/></w:body></w:document>`);
+  const pageSize = spec.paperSize === 'Letter' ? { width: 12240, height: 15840 } : { width: 11906, height: 16838 };
+  zip.folder('word')!.file(
+    'document.xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="${pageSize.width}" w:h="${pageSize.height}"/></w:sectPr></w:body></w:document>`
+  );
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
 // ---- PPTX：PptxGenJS 生成标准可编辑课件（16:9、标题与正文文本框、揭示页配色区分） ----
-async function makePptx(slides: Slide[]): Promise<Buffer> {
+async function makePptx(slides: Slide[], spec: PresentationSpec): Promise<Buffer> {
   const pptx = new PptxGenJS();
   pptx.defineLayout({ name: 'YW16x9', width: 10, height: 5.63 });
   pptx.layout = 'YW16x9';
   for (const s of slides) {
     const slide = pptx.addSlide();
-    if (s.reveal) slide.background = { color: 'FFF7E6' };
-    slide.addText(s.title, { x: 0.4, y: 0.3, w: 9.2, h: 0.8, fontSize: 24, bold: true, fontFace: 'Microsoft YaHei', color: '203040' });
+    const highContrast = spec.theme === 'high_contrast';
+    slide.background = { color: highContrast ? '000000' : s.reveal ? 'FFF7E6' : 'FFFFFF' };
+    slide.addText(s.title, {
+      x: 0.4,
+      y: 0.3,
+      w: 9.2,
+      h: 0.8,
+      fontSize: Math.round(24 * spec.fontScale),
+      bold: true,
+      fontFace: 'Microsoft YaHei',
+      color: highContrast ? 'FFFFFF' : '203040'
+    });
     slide.addText(
-      s.body.map((t) => ({ text: t, options: { bullet: true, fontSize: 16, fontFace: 'Microsoft YaHei', color: '202020', breakLine: true } })),
+      s.body.map((t) => ({
+        text: t,
+        options: {
+          bullet: true,
+          fontSize: Math.round(16 * spec.fontScale),
+          fontFace: 'Microsoft YaHei',
+          color: highContrast ? 'FFFFFF' : '202020',
+          breakLine: true
+        }
+      })),
       { x: 0.6, y: 1.3, w: 8.8, h: 4.0, valign: 'top' }
     );
   }
@@ -191,21 +225,26 @@ async function makePptx(slides: Slide[]): Promise<Buffer> {
 }
 
 // ---- PDF：pdfkit + 内置 CJK 字体（缺失即失败，不静默成功） ----
-export async function renderSectionsPdf(sections: Section[], fontPath: string | null): Promise<Buffer> {
+export async function renderSectionsPdf(
+  sections: Section[],
+  fontPath: string | null,
+  spec: PresentationSpec = DEFAULT_PRESENTATION_SPEC
+): Promise<Buffer> {
   if (!fontPath) throw new FontMissingError(); // 目标平台字体缺失 → 阻止成为合格成品
   // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
   const PDFDocument = require('pdfkit');
   return new Promise<Buffer>((resolve, reject) => {
     try {
-      const doc = new PDFDocument({ margin: 48 });
+      const doc = new PDFDocument({ margin: 48, size: spec.paperSize });
       const chunks: Buffer[] = [];
       doc.on('data', (c: Buffer) => chunks.push(c));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.registerFont('cjk', fontPath);
       doc.font('cjk');
+      doc.fillColor(spec.theme === 'high_contrast' ? '#000000' : '#202020');
       for (const s of sections) {
-        doc.fontSize(15).text(s.heading, { width: 500 });
-        doc.fontSize(12);
+        doc.fontSize(15 * spec.fontScale).text(s.heading, { width: 500 });
+        doc.fontSize(12 * spec.fontScale);
         for (const l of s.lines) doc.text(l, { width: 500 });
         if (s.table) for (const row of s.table) doc.text(row.join('  |  '), { width: 500 });
         if (s.writeLines) for (let i = 0; i < s.writeLines; i++) doc.text('＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿＿', { width: 500 });
@@ -222,18 +261,22 @@ function withHash(role: MaterialRole, format: MaterialFormat, filename: string, 
   return { role, format, filename, bytes, sha256: createHash('sha256').update(bytes).digest('hex') };
 }
 
-export async function buildMaterialSet(plan: LessonPlan, contentOrigin: string): Promise<MaterialSet> {
+export async function buildMaterialSet(
+  plan: LessonPlan,
+  contentOrigin: string,
+  presentationSpec: PresentationSpec = DEFAULT_PRESENTATION_SPEC
+): Promise<MaterialSet> {
   const stamp = versionStamp(plan, contentOrigin);
   const student = studentSections(plan, stamp);
   const teacher = teacherSections(plan, stamp);
   const slides = presentationSlides(plan, stamp);
   const base = plan.title.replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 40) || 'lesson';
   const files: GeneratedFile[] = [
-    withHash('presentation', 'pptx', `${base}-课堂.pptx`, await makePptx(slides)),
-    withHash('student', 'docx', `${base}-学生讲义.docx`, await makeDocx(student)),
-    withHash('student', 'pdf', `${base}-学生讲义.pdf`, await renderSectionsPdf(student, resolveCjkFont())),
-    withHash('teacher', 'docx', `${base}-教师讲义.docx`, await makeDocx(teacher)),
-    withHash('teacher', 'pdf', `${base}-教师讲义.pdf`, await renderSectionsPdf(teacher, resolveCjkFont()))
+    withHash('presentation', 'pptx', `${base}-课堂.pptx`, await makePptx(slides, presentationSpec)),
+    withHash('student', 'docx', `${base}-学生讲义.docx`, await makeDocx(student, presentationSpec)),
+    withHash('student', 'pdf', `${base}-学生讲义.pdf`, await renderSectionsPdf(student, resolveCjkFont(), presentationSpec)),
+    withHash('teacher', 'docx', `${base}-教师讲义.docx`, await makeDocx(teacher, presentationSpec)),
+    withHash('teacher', 'pdf', `${base}-教师讲义.pdf`, await renderSectionsPdf(teacher, resolveCjkFont(), presentationSpec))
   ];
   return { planId: plan.plan_id, revisionId: plan.revision_id, contentOrigin, versionStamp: stamp, files };
 }

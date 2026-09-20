@@ -15,6 +15,8 @@ import type {
   StatusData
 } from '../shared/ipc';
 import type { ReviewReport } from '../main/review/types';
+import type { ChangePreview, LessonChange } from '../main/change/types';
+import type { LessonChangeApplyResult } from '../main/store';
 
 // 预加载在 sandbox=true 下不能 require 本地模块，因此保持完全自包含：
 // 仅使用类型导入（编译期擦除）与本地常量，运行时只依赖 electron。
@@ -114,6 +116,15 @@ const api = {
     call<{ report: ReviewReport }>('review.run', {
       payload: revisionId ? { planId, revisionId } : { planId }
     }),
+  changePreview: (planId: string, baseRevisionId: string, change: LessonChange) =>
+    call<{ preview: ChangePreview }>('change.preview', { payload: { planId, baseRevisionId, change } }),
+  changeApply: (planId: string, baseRevisionId: string, change: LessonChange, idempotencyKey: string) =>
+    call<{ result: LessonChangeApplyResult }>('change.apply', {
+      idempotency_key: idempotencyKey,
+      payload: { planId, baseRevisionId, change }
+    }),
+  changeHistory: (planId: string) =>
+    call<{ revisions: unknown[]; proposals: unknown[]; bundles: unknown[] }>('change.history', { payload: { planId } }),
   materialsGenerate: (planId: string) =>
     call<{ planId: string; revisionId: string; contentOrigin: string; versionStamp: string; files: { role: string; format: string; filename: string; path: string; sha256: string; byteSize: number }[] }>('materials.generate', { payload: { planId } }),
   materialsList: (planId: string) => call<{ artifacts: { role: string; format: string; filename: string; path: string; sha256: string; byteSize: number; revisionId: string; contentOrigin: string }[] }>('materials.list', { payload: { planId } }),

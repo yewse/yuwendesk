@@ -9,6 +9,7 @@ export type FieldSchema =
   | { type: 'string'; maxLength?: number; minLength?: number }
   | { type: 'integer'; min?: number; nonNegative?: boolean }
   | { type: 'boolean' }
+  | { type: 'object' }
   // 浅校验数组：仅检查是否数组与条目上限；条目结构由处理函数进一步校验。
   | { type: 'array'; maxItems?: number }
   | { type: 'number'; min?: number; max?: number };
@@ -161,6 +162,32 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     required: ['planId'],
     additionalProperties: false
   },
+  'change.preview': {
+    type: 'object',
+    properties: {
+      planId: { type: 'string', minLength: 1, maxLength: 80 },
+      baseRevisionId: { type: 'string', minLength: 1, maxLength: 80 },
+      change: { type: 'object' }
+    },
+    required: ['planId', 'baseRevisionId', 'change'],
+    additionalProperties: false
+  },
+  'change.apply': {
+    type: 'object',
+    properties: {
+      planId: { type: 'string', minLength: 1, maxLength: 80 },
+      baseRevisionId: { type: 'string', minLength: 1, maxLength: 80 },
+      change: { type: 'object' }
+    },
+    required: ['planId', 'baseRevisionId', 'change'],
+    additionalProperties: false
+  },
+  'change.history': {
+    type: 'object',
+    properties: { planId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['planId'],
+    additionalProperties: false
+  },
   'materials.generate': {
     type: 'object',
     properties: { planId: { type: 'string', minLength: 1, maxLength: 80 } },
@@ -209,6 +236,8 @@ function validateField(name: string, schema: FieldSchema, value: unknown, errors
       return;
     }
     if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`字段 ${name} 条目过多`);
+  } else if (schema.type === 'object') {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) errors.push(`字段 ${name} 应为对象`);
   }
 }
 

@@ -65,6 +65,39 @@ export interface Activity {
   priority: 'essential' | 'compressible' | 'optional';
   fallback: string;
 }
+export interface TimelineFact {
+  label: string;
+  date_or_period: string | null;
+  certainty: 'supported' | 'disputed' | 'unknown';
+  anchor_ids: string[];
+}
+export interface LinkCard {
+  link_id: string;
+  current_anchor_ids: string[];
+  related_anchor_ids: string[];
+  relation_type:
+    | 'same_author'
+    | 'same_topic_difference'
+    | 'image_context'
+    | 'genre'
+    | 'word_context'
+    | 'reading_writing'
+    | 'cross_subject';
+  similarities: string[];
+  differences: string[];
+  purpose: string;
+  author_timeline: TimelineFact[];
+  text_timeline: string[];
+  student_learning_status: 'confirmed_learned' | 'current' | 'confirmed_future' | 'enrichment' | 'unknown';
+  prerequisite_support: string;
+  student_action: string;
+  return_to_text_task_id: string;
+  estimated_sec: number;
+  replaces_activity_ids: string[];
+  next_recurrence: string | null;
+  disconfirming_observation: string;
+  decision: 'include' | 'teacher_background_only' | 'discard';
+}
 export interface Homework {
   homework_id: string;
   description: string;
@@ -88,7 +121,7 @@ export interface LessonPlan {
   tasks: Task[]; // ≥1
   rubrics: Rubric[]; // ≥1
   activities: Activity[]; // ≥1
-  links: unknown[];
+  links: LinkCard[];
   homework: Homework[];
   teacher_summary: string;
   unknowns: string[];

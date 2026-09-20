@@ -58,6 +58,9 @@ export const IMPLEMENTED_OPERATIONS = [
   'lesson.list',
   'lesson.get',
   'review.run',
+  'change.preview',
+  'change.apply',
+  'change.history',
   'materials.generate',
   'materials.list'
 ] as const;

@@ -3,6 +3,7 @@ import * as nodefs from 'node:fs';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { ReviewReport } from './review/types';
+import type { ChangeProposal, LessonChange } from './change/types';
 
 // G01 本地持久化：只保存教师自己的备课草稿与窗口状态，不含任何 AI 生成正文或密钥。
 // 使用「临时文件 → 原子改名」保证崩溃时不产生半成品（规范 7.2）。后续 G02 以 SQLite 单写入者替换。
@@ -234,6 +235,7 @@ export interface MaterialArtifactRecord {
   byteSize: number;
   contentOrigin: string;
   createdAt: string;
+  bundleId?: string | null;
 }
 export interface ReviewReportRecord {
   reportId: string;
@@ -241,6 +243,77 @@ export interface ReviewReportRecord {
   revisionId: string;
   report: ReviewReport;
   createdAt: string;
+}
+export interface MaterialBundleRecord {
+  bundleId: string;
+  planId: string;
+  revisionId: string;
+  presentationSpecHash: string;
+  directory: string;
+  status: 'published' | 'failed';
+  createdAt: string;
+}
+export interface StoredChangeProposal {
+  changeId: string;
+  planId: string;
+  baseRevisionId: string;
+  candidateRevisionId: string | null;
+  changeKind: LessonChange['kind'];
+  proposal: ChangeProposal;
+  status: ChangeProposal['status'];
+  createdAt: string;
+  acceptedAt: string | null;
+}
+export interface LessonChangeApplyResult {
+  changeId: string;
+  planId: string;
+  revisionId: string;
+  bundleId: string;
+  reviewReportId: string;
+  semanticRevisionChanged: boolean;
+  presentationSpecHash: string;
+  files: Array<{
+    role: string;
+    format: string;
+    filename: string;
+    path: string;
+    sha256: string;
+    byteSize: number;
+  }>;
+}
+export interface LessonChangeIdempotencyRecord {
+  key: string;
+  fingerprint: string;
+  status: string;
+  resultJson: string | null;
+  failureCount: number;
+  errorCode: string | null;
+  updatedAt: string;
+}
+export interface LessonChangeCommitInput {
+  idempotencyKey: string;
+  fingerprint: string;
+  baseRevisionId: string;
+  revision: LessonRevisionRecord | null;
+  proposal: StoredChangeProposal;
+  report: ReviewReportRecord;
+  bundle: MaterialBundleRecord;
+  artifacts: MaterialArtifactRecord[];
+  result: LessonChangeApplyResult;
+}
+
+export class LessonChangeConflictError extends Error {
+  constructor() {
+    super('LESSON_CHANGE_VERSION_CONFLICT');
+    this.name = 'LessonChangeConflictError';
+  }
+}
+
+export class LessonChangeKeyReuseError extends Error {
+  constructor() {
+    super('LESSON_CHANGE_IDEMPOTENCY_KEY_REUSE');
+    this.name = 'LessonChangeKeyReuseError';
+  }
 }
 export interface LessonStore {
   saveLessonRevision(rec: LessonRevisionRecord, makeCurrent: boolean): void;
@@ -250,6 +323,13 @@ export interface LessonStore {
   listMaterialArtifacts(planId: string, revisionId?: string): MaterialArtifactRecord[];
   saveReviewReport(rec: ReviewReportRecord): void;
   getLatestReviewReport(planId: string, revisionId: string): ReviewReportRecord | null;
+  commitLessonChange(input: LessonChangeCommitInput): LessonChangeApplyResult;
+  findLessonChangeIdempotency(key: string): LessonChangeIdempotencyRecord | null;
+  listLessonChangeHistory(planId: string): {
+    revisions: LessonRevisionRecord[];
+    proposals: StoredChangeProposal[];
+    bundles: MaterialBundleRecord[];
+  };
 }
 
 export interface ModelStore {

@@ -22,9 +22,17 @@ import type {
   StoreIo,
   WindowState
 } from '../store';
-import { DEFAULT_CLASSIFICATION, SOURCE_CLASSIFICATIONS, StoreProtectedError } from '../store';
+import {
+  DEFAULT_CLASSIFICATION,
+  LessonChangeConflictError,
+  LessonChangeKeyReuseError,
+  SOURCE_CLASSIFICATIONS,
+  StoreProtectedError
+} from '../store';
 import { validateReviewReport } from '../review/review';
 import type { ReviewReport } from '../review/types';
+import { validateChangeProposal } from '../change/change';
+import type { ChangeProposal, LessonChange } from '../change/types';
 import { extractBuffer, ExtractError, extractText, type CancelSignal, type ExtractOpts, type ExtractResult } from '../sources/extract';
 import {
   CredentialProtector,
@@ -1225,18 +1233,23 @@ export class SqliteStore {
   saveMaterialArtifacts(recs: import('../store').MaterialArtifactRecord[]): void {
     this.assertWritable();
     const db = this.requireDb();
-    const ins = db.prepare('INSERT INTO material_artifact(id,plan_id,revision_id,role,format,filename,path,sha256,byte_size,content_origin,created_at) VALUES(@id,@planId,@revisionId,@role,@format,@filename,@path,@sha256,@byteSize,@contentOrigin,@createdAt)');
+    const ins = db.prepare('INSERT INTO material_artifact(id,plan_id,revision_id,role,format,filename,path,sha256,byte_size,content_origin,created_at,bundle_id) VALUES(@id,@planId,@revisionId,@role,@format,@filename,@path,@sha256,@byteSize,@contentOrigin,@createdAt,@bundleId)');
     const tx = db.transaction(() => {
-      for (const r of recs) ins.run(r);
+      for (const r of recs) ins.run({ ...r, bundleId: r.bundleId ?? null });
     });
     tx.immediate();
   }
   listMaterialArtifacts(planId: string, revisionId?: string): import('../store').MaterialArtifactRecord[] {
     if (!this.db) return [];
     const rows = revisionId
-      ? this.db.prepare('SELECT id,plan_id planId,revision_id revisionId,role,format,filename,path,sha256,byte_size byteSize,content_origin contentOrigin,created_at createdAt FROM material_artifact WHERE plan_id=? AND revision_id=? ORDER BY created_at').all(planId, revisionId)
-      : this.db.prepare('SELECT id,plan_id planId,revision_id revisionId,role,format,filename,path,sha256,byte_size byteSize,content_origin contentOrigin,created_at createdAt FROM material_artifact WHERE plan_id=? ORDER BY created_at').all(planId);
-    return rows as import('../store').MaterialArtifactRecord[];
+      ? this.db.prepare('SELECT id,plan_id planId,revision_id revisionId,role,format,filename,path,sha256,byte_size byteSize,content_origin contentOrigin,created_at createdAt,bundle_id bundleId FROM material_artifact WHERE plan_id=? AND revision_id=? ORDER BY created_at').all(planId, revisionId)
+      : this.db.prepare('SELECT id,plan_id planId,revision_id revisionId,role,format,filename,path,sha256,byte_size byteSize,content_origin contentOrigin,created_at createdAt,bundle_id bundleId FROM material_artifact WHERE plan_id=? ORDER BY created_at').all(planId);
+    return (rows as import('../store').MaterialArtifactRecord[]).map((row) => {
+      if (row.bundleId !== null) return row;
+      const legacy = { ...row };
+      delete legacy.bundleId;
+      return legacy;
+    });
   }
 
   // ===== G07 审查报告持久化 =====
@@ -1284,6 +1297,185 @@ export class SqliteStore {
       report: report as ReviewReport,
       createdAt: row.createdAt
     };
+  }
+
+  findLessonChangeIdempotency(key: string): import('../store').LessonChangeIdempotencyRecord | null {
+    if (!this.db) return null;
+    return (
+      (this.db
+        .prepare(
+          `SELECT key,fingerprint,status,result_json resultJson,failure_count failureCount,
+                  error_code errorCode,updated_at updatedAt
+           FROM lesson_change_idempotency WHERE key=?`
+        )
+        .get(key) as import('../store').LessonChangeIdempotencyRecord | undefined) ?? null
+    );
+  }
+
+  commitLessonChange(input: import('../store').LessonChangeCommitInput): import('../store').LessonChangeApplyResult {
+    this.assertWritable();
+    if (input.artifacts.length !== 5) throw new Error('lesson_change_requires_five_artifacts');
+    if (input.proposal.status !== 'accepted' || input.proposal.proposal.status !== 'accepted') {
+      throw new Error('lesson_change_proposal_not_accepted');
+    }
+    const proposalErrors = validateChangeProposal(input.proposal.proposal);
+    if (proposalErrors.length) throw new Error(`invalid_change_proposal:${proposalErrors.join('|')}`);
+    const reviewErrors = validateReviewReport(input.report.report);
+    if (reviewErrors.length) throw new Error(`invalid_review_report:${reviewErrors.join('|')}`);
+    if (
+      input.bundle.planId !== input.result.planId ||
+      input.bundle.revisionId !== input.result.revisionId ||
+      input.bundle.bundleId !== input.result.bundleId ||
+      input.artifacts.some(
+        (artifact) =>
+          artifact.planId !== input.result.planId ||
+          artifact.revisionId !== input.result.revisionId ||
+          artifact.bundleId !== input.result.bundleId
+      )
+    ) {
+      throw new Error('lesson_change_record_mismatch');
+    }
+
+    const db = this.requireDb();
+    const tx = db.transaction((): import('../store').LessonChangeApplyResult => {
+      const existing = this.findLessonChangeIdempotency(input.idempotencyKey);
+      if (existing) {
+        if (existing.fingerprint !== input.fingerprint) throw new LessonChangeKeyReuseError();
+        if (existing.status !== 'succeeded' || !existing.resultJson) throw new LessonChangeConflictError();
+        return JSON.parse(existing.resultJson) as import('../store').LessonChangeApplyResult;
+      }
+
+      const current = db
+        .prepare('SELECT current_revision_id currentRevisionId FROM lesson_plan WHERE plan_id=?')
+        .get(input.result.planId) as { currentRevisionId: string | null } | undefined;
+      if (!current || current.currentRevisionId !== input.baseRevisionId) throw new LessonChangeConflictError();
+
+      if (input.revision) {
+        if (
+          input.revision.planId !== input.result.planId ||
+          input.revision.revisionId !== input.result.revisionId ||
+          input.revision.previousRevisionId !== input.baseRevisionId
+        ) {
+          throw new Error('lesson_change_revision_mismatch');
+        }
+        db.prepare(
+          `INSERT INTO lesson_revision(revision_id,plan_id,previous_revision_id,title,content_json,content_origin,valid,created_at)
+           VALUES(@revisionId,@planId,@previousRevisionId,@title,@contentJson,@contentOrigin,@valid,@createdAt)`
+        ).run({ ...input.revision, valid: input.revision.valid ? 1 : 0 });
+      } else if (input.result.revisionId !== input.baseRevisionId) {
+        throw new Error('lesson_change_presentation_revision_mismatch');
+      }
+
+      db.prepare(
+        `INSERT INTO material_bundle(bundle_id,plan_id,revision_id,presentation_spec_hash,directory,status,created_at)
+         VALUES(@bundleId,@planId,@revisionId,@presentationSpecHash,@directory,@status,@createdAt)`
+      ).run(input.bundle);
+      const artifactInsert = db.prepare(
+        `INSERT INTO material_artifact(id,plan_id,revision_id,role,format,filename,path,sha256,byte_size,content_origin,created_at,bundle_id)
+         VALUES(@id,@planId,@revisionId,@role,@format,@filename,@path,@sha256,@byteSize,@contentOrigin,@createdAt,@bundleId)`
+      );
+      for (const artifact of input.artifacts) artifactInsert.run(artifact);
+
+      db.prepare(
+        `INSERT INTO review_report(report_id,plan_id,revision_id,report_json,created_at)
+         VALUES(@reportId,@planId,@revisionId,@reportJson,@createdAt)`
+      ).run({
+        reportId: input.report.reportId,
+        planId: input.report.planId,
+        revisionId: input.report.revisionId,
+        reportJson: JSON.stringify(input.report.report),
+        createdAt: input.report.createdAt
+      });
+      db.prepare(
+        `INSERT INTO change_proposal(change_id,plan_id,base_revision_id,candidate_revision_id,change_kind,proposal_json,status,created_at,accepted_at)
+         VALUES(@changeId,@planId,@baseRevisionId,@candidateRevisionId,@changeKind,@proposalJson,@status,@createdAt,@acceptedAt)`
+      ).run({
+        ...input.proposal,
+        proposalJson: JSON.stringify(input.proposal.proposal)
+      });
+
+      if (input.revision) {
+        const updated = db
+          .prepare(
+            `UPDATE lesson_plan SET current_revision_id=?,title=?,updated_at=?
+             WHERE plan_id=? AND current_revision_id=?`
+          )
+          .run(
+            input.revision.revisionId,
+            input.revision.title,
+            input.proposal.acceptedAt,
+            input.revision.planId,
+            input.baseRevisionId
+          );
+        if (updated.changes !== 1) throw new LessonChangeConflictError();
+      }
+
+      db.prepare(
+        `INSERT INTO lesson_change_idempotency(key,fingerprint,status,result_json,failure_count,error_code,updated_at)
+         VALUES(?,?, 'succeeded', ?,0,NULL,?)`
+      ).run(input.idempotencyKey, input.fingerprint, JSON.stringify(input.result), input.proposal.acceptedAt);
+      return input.result;
+    });
+    return tx.immediate();
+  }
+
+  listLessonChangeHistory(planId: string): {
+    revisions: import('../store').LessonRevisionRecord[];
+    proposals: import('../store').StoredChangeProposal[];
+    bundles: import('../store').MaterialBundleRecord[];
+  } {
+    if (!this.db) return { revisions: [], proposals: [], bundles: [] };
+    const revisions = (
+      this.db
+        .prepare(
+          `SELECT revision_id revisionId,plan_id planId,previous_revision_id previousRevisionId,title,
+                  content_json contentJson,content_origin contentOrigin,valid,created_at createdAt
+           FROM lesson_revision WHERE plan_id=? ORDER BY created_at,revision_id`
+        )
+        .all(planId) as Array<Omit<import('../store').LessonRevisionRecord, 'valid'> & { valid: number }>
+    ).map((revision) => ({ ...revision, valid: revision.valid === 1 }));
+    const proposalRows = this.db
+      .prepare(
+        `SELECT change_id changeId,plan_id planId,base_revision_id baseRevisionId,
+                candidate_revision_id candidateRevisionId,change_kind changeKind,proposal_json proposalJson,
+                status,created_at createdAt,accepted_at acceptedAt
+         FROM change_proposal WHERE plan_id=? ORDER BY created_at,change_id`
+      )
+      .all(planId) as Array<{
+      changeId: string;
+      planId: string;
+      baseRevisionId: string;
+      candidateRevisionId: string | null;
+      changeKind: LessonChange['kind'];
+      proposalJson: string;
+      status: ChangeProposal['status'];
+      createdAt: string;
+      acceptedAt: string | null;
+    }>;
+    const proposals = proposalRows.map((row) => {
+      const proposal = JSON.parse(row.proposalJson) as ChangeProposal;
+      const errors = validateChangeProposal(proposal);
+      if (errors.length) throw new Error(`invalid_stored_change_proposal:${row.changeId}:${errors.join('|')}`);
+      return {
+        changeId: row.changeId,
+        planId: row.planId,
+        baseRevisionId: row.baseRevisionId,
+        candidateRevisionId: row.candidateRevisionId,
+        changeKind: row.changeKind,
+        status: row.status,
+        createdAt: row.createdAt,
+        acceptedAt: row.acceptedAt,
+        proposal
+      };
+    });
+    const bundles = this.db
+      .prepare(
+        `SELECT bundle_id bundleId,plan_id planId,revision_id revisionId,presentation_spec_hash presentationSpecHash,
+                directory,status,created_at createdAt
+         FROM material_bundle WHERE plan_id=? ORDER BY created_at,bundle_id`
+      )
+      .all(planId) as import('../store').MaterialBundleRecord[];
+    return { revisions, proposals, bundles };
   }
 
   // ===== G04 模型配置/作业持久化 =====

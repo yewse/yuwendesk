@@ -145,13 +145,18 @@
 
 - 任务/方法示例/**课时计划合同** `lesson_outline.v1`（objectives/steps[stage,minutes,activity,citations]/notes），受同一输出合同校验；资料页“生成课时计划”按获准片段生成，**模拟结果明确标注“测试替身（非真实模型）”**，不冒充真实备课；教师不写提示词。无授权不调用真实 API。
 
-## G07 审查与一处修改 — IN_PROGRESS（四包设计，第 1 包完成）
+## G07 审查与一处修改 — IN_PROGRESS（四包设计，第 1–2 包完成）
 
 - [x] **G07-T01 确定性审查层与严格 ReviewReport**：新增 `reviewLessonPlan`，将现有结构/引用/时间/来源核验问题映射到明确返回模块；冲突来源阻断发布，待核验来源保留教师审查；`is_effectiveness_proof` 固定为 `false`，不把软件就绪冒充教学有效。运行时校验拒绝缺字段、多余字段、非法枚举/类型与效果证明声明。
 - [x] **审查持久化与窄 IPC**：SQLite migration v9 一次建齐 G07 的 `review_report/change_proposal/material_bundle/lesson_change_idempotency` 表及 `material_artifact.bundle_id`；审查报告保存、跨重启读取前重新严格校验。`review.run` 支持指定修订，Schema 门拒绝多余字段，缺修订返回 `SOURCE_MISSING`，保护态返回 `DATABASE_LOCKED`。
 - **本包实测（Node 22.23.2）**：`review.test.ts` 6 + `g07-review-store.test.ts` 5 定向通过；主/渲染 TypeScript、ESLint、`verify:contracts` 通过；全量 Vitest **237 passed / 1 skipped（238 total，25 files）**。跳过项为既有 LibreOffice 环境条件用例，不改为通过。
 - **未执行/外部门**：真实模型语义审查、教师专业复核、Office/WPS 保真分别保持 `NOT_RUN` / `BLOCKED_EXTERNAL`；Windows 目标安装、真实 API、正式签名门不因本包改变。npm 原生依赖重装在本机缺 ClangCL 工具链时失败，但锁定 Node 22 的现有 `better-sqlite3` 绑定已由真实 SQLite 测试通过；不把安装失败写成通过。
-- [ ] **下一包 G07-T02**：依赖失效/最小重算、严格 `ChangeProposal`、原子接纳与成品包发布。
+- [x] **G07-T02 依赖失效与受控一处修改**：`change_duration` / `increase_independent_time` / `remove_link` / `edit_task` / `edit_rubric` / `presentation_only` 为闭合请求联合；运行时拒绝未知字段、未知枚举、越界时长/字号与超长文本。修改基于 `structuredClone` 保持无关稳定 ID；缩短课时先处理非核心活动且不自动增加作业；联读删除同步清理专属任务、量规、时间线引用；题意与合理答案范围同步。严格 `ChangeProposal` 不塞伴随元数据，失效模块按设计固定映射。
+- [x] **原子接纳与跨成品发布**：五文件先写入 `.staging/<bundleId>`，逐文件重读并核对 SHA-256，再提升到 `<revisionId>/<bundleId>`；SQLite 单一 `IMMEDIATE` 事务提交候选修订（仅语义变更）、accepted proposal、ReviewReport、bundle、五条 artifact、幂等结果与 current pointer。旧修订/旧包保留；同键同指纹跨重启重放原结果，同键异载荷拒绝，两个键竞争同一基础修订恰一成功。纯呈现修改保持语义 revision，并让字号/纸张/主题实际进入 PPTX/DOCX/PDF 生成与新的呈现规格哈希。
+- [x] **窄 IPC**：新增 `change.preview` / `change.apply` / `change.history`；预加载仅暴露命名方法。`change.apply` 强制幂等键；嵌套 change 多余字段也拒绝；版本冲突/键复用/来源缺失/审查阻断/存储保护/文件写入分别映射到现有错误码，不暴露任意文件系统能力。
+- **本包实测（Node 22.23.2）**：`change.test.ts` 6 + `g07-change-sqlite.test.ts` 5 定向通过；全量 Vitest **248 passed / 1 skipped（249 total，27 files）**；主/渲染 TypeScript、ESLint、`verify:contracts`、Vite renderer build 与 main/preload build 均退出 0。真实临时目录验证五文件存在且哈希一致。JOB-002/003/006 与 CLS-021/022/023/038 获得机器可执行覆盖，但冻结验收状态未擅自改为 PASS。
+- **未执行/外部门**：真实 Office/WPS 打开与视觉保真、真实模型复核、Windows 目标运行仍为 `NOT_RUN` / `BLOCKED_EXTERNAL`；正式签名与真实 API 门不变。
+- [ ] **下一包 G07-T03**：在“我的课程”接入单一方案、最少选择、差异摘要、一次确认、历史与纸本重印提醒。
 
 ## G08–G11 — NOT_STARTED
 
@@ -159,4 +164,4 @@
 
 ## 下一步
 
-见 `HANDOFF.md`。继续 G07-T02 依赖失效/最小重算与跨成品原子发布；扫描件 OCR 未接入则继续阻塞。外部门保留：G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课质量、公开上传授权。
+见 `HANDOFF.md`。继续 G07-T03 最少选择 UI 与差异/历史提示；扫描件 OCR 未接入则继续阻塞。外部门保留：G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课质量、公开上传授权。

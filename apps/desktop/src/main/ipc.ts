@@ -16,6 +16,17 @@ import { checkPayload } from './schemaGate';
 import { buildLessonPlan, demoLessonSpec, validateLessonPlan } from './lesson/build';
 import { buildMaterialSet } from './materials/generate';
 import { reviewLessonPlan } from './review/review';
+import {
+  LessonChangeConflictError,
+  LessonChangeDiskError,
+  LessonChangeKeyReuseError,
+  LessonChangeReviewError,
+  LessonChangeService,
+  LessonChangeSourceMissingError
+} from './change/service';
+import { ChangeBlockedError, ChangeValidationError } from './change/change';
+import type { LessonChange } from './change/types';
+import { FontMissingError } from './materials/generate';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -51,6 +62,8 @@ export interface IpcServiceContext {
   lessonStore?: LessonStore;
   // 成品文件输出根目录（userData）。
   userDataDir?: string;
+  // G07 一处修改服务；生产缺省时由 lessonStore + userDataDir 构造，测试可注入。
+  lessonChangeService?: LessonChangeService;
 }
 
 // 仅声明 IPC 需要的模型服务形状（避免主进程强耦合）。
@@ -98,7 +111,15 @@ export function validateEnvelope(op: string, req: unknown): IpcResponse<never> |
 }
 
 export class IpcService {
-  constructor(private readonly ctx: IpcServiceContext) {}
+  private readonly lessonChangeService?: LessonChangeService;
+
+  constructor(private readonly ctx: IpcServiceContext) {
+    this.lessonChangeService =
+      ctx.lessonChangeService ??
+      (ctx.lessonStore && ctx.userDataDir
+        ? new LessonChangeService(ctx.lessonStore, { rootDir: join(ctx.userDataDir, 'materials') })
+        : undefined);
+  }
 
   async handle(op: string, req: unknown): Promise<IpcResponse> {
     const invalid = validateEnvelope(op, req);
@@ -166,6 +187,12 @@ export class IpcService {
         return this.lessonGet(request);
       case 'review.run':
         return this.reviewRun(request);
+      case 'change.preview':
+        return this.changePreview(request);
+      case 'change.apply':
+        return this.changeApply(request);
+      case 'change.history':
+        return this.changeHistory(request);
       case 'materials.generate':
         return this.materialsGenerate(request);
       case 'materials.list':
@@ -382,6 +409,76 @@ export class IpcService {
       throw error;
     }
     return { ok: true, data: { report } };
+  }
+
+  private changePreview(req: IpcRequest): IpcResponse {
+    if (!this.lessonChangeService) return errorResponse('SOURCE_MISSING', '一处修改功能不可用。', '请重启应用。');
+    const payload = req.payload as { planId: string; baseRevisionId: string; change: LessonChange };
+    try {
+      return {
+        ok: true,
+        data: {
+          preview: this.lessonChangeService.preview(payload.planId, payload.baseRevisionId, payload.change)
+        }
+      };
+    } catch (error) {
+      return this.lessonChangeError(error);
+    }
+  }
+
+  private async changeApply(req: IpcRequest): Promise<IpcResponse> {
+    if (!this.lessonChangeService) return errorResponse('SOURCE_MISSING', '一处修改功能不可用。', '请重启应用。');
+    if (typeof req.idempotency_key !== 'string' || req.idempotency_key.trim().length === 0) {
+      return errorResponse('INPUT_INVALID', '接纳修改缺少幂等键。', '请重试当前操作。');
+    }
+    const payload = req.payload as { planId: string; baseRevisionId: string; change: LessonChange };
+    try {
+      const result = await this.lessonChangeService.apply({
+        ...payload,
+        idempotencyKey: req.idempotency_key
+      });
+      return { ok: true, data: { result } };
+    } catch (error) {
+      return this.lessonChangeError(error);
+    }
+  }
+
+  private changeHistory(req: IpcRequest): IpcResponse {
+    if (!this.lessonChangeService) return errorResponse('SOURCE_MISSING', '修改历史功能不可用。', '请重启应用。');
+    try {
+      return {
+        ok: true,
+        data: this.lessonChangeService.history((req.payload as { planId: string }).planId)
+      };
+    } catch (error) {
+      return this.lessonChangeError(error);
+    }
+  }
+
+  private lessonChangeError(error: unknown): IpcResponse<never> {
+    if (error instanceof LessonChangeConflictError) {
+      return errorResponse('VERSION_CONFLICT', '计划已被其他修改更新，本次接纳未提交。', '请刷新最新版本后重试。');
+    }
+    if (error instanceof LessonChangeKeyReuseError || error instanceof ChangeValidationError) {
+      return errorResponse('INPUT_INVALID', '修改请求或幂等键无效。', '请检查修改内容后重试。');
+    }
+    if (error instanceof LessonChangeSourceMissingError) {
+      return errorResponse('SOURCE_MISSING', '课时计划或指定基线修订不存在。', '请刷新计划后重试。');
+    }
+    if (error instanceof LessonChangeReviewError || error instanceof ChangeBlockedError || error instanceof FontMissingError) {
+      return errorResponse('EXPORT_INVALID', '修改后的计划未通过发布前审查。', '请返回建议模块修正后重试。');
+    }
+    if (error instanceof StoreProtectedError) {
+      return errorResponse('DATABASE_LOCKED', '本地数据库处于保护状态，本次修改未提交。', '请先恢复或备份数据库。');
+    }
+    if (error instanceof LessonChangeDiskError) {
+      return errorResponse('DISK_FULL', '成品写入失败，本次修改未提交。', '请检查磁盘空间与目录权限后重试。');
+    }
+    const code = (error as { code?: unknown } | null)?.code;
+    if (code === 'ENOSPC' || code === 'EDQUOT' || code === 'EACCES' || code === 'EROFS') {
+      return errorResponse('DISK_FULL', '成品写入失败，本次修改未提交。', '请检查磁盘空间与目录权限后重试。');
+    }
+    return errorResponse('EXPORT_INVALID', '修改未能安全提交。', '请保留旧版本并重试；持续失败请联系支持。');
   }
 
   // G06：由当前修订确定性生成三类五文件，写入 userData 并登记清单（版本一致记录）。
