@@ -212,6 +212,17 @@
       "arbitrary_path_allowed": false
     },
     {
+      "operation": "feedback.history",
+      "kind": "read",
+      "scope": "workspace",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": false,
+      "output_contract": "反馈流版本与授课事件历史",
+      "semantic_guard": "未知保持未知，不把授课记录解释为有效性",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
       "operation": "jobs.get",
       "kind": "read",
       "scope": "workspace",

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { BootstrapData, HealthData, SourceHitDTO, SourceListItemDTO, SourceReadDTO, SourceVersionDTO } from '../shared/ipc';
 import type { ChangePreview, LessonChange } from '../main/change/types';
+import type { ImplementationState, TeachingEvent } from '../main/feedback/types';
 import type { LessonPlan } from '../main/lesson/types';
 import type { LessonChangeApplyResult } from '../main/store';
 import { DraftController, DraftSnapshot, getDraftController } from './draftController';
+import { buildTeachingStatus, teachingSubmissionKey } from './feedbackView';
 import {
   buildChangeSummary,
   needsPrintedCopyWarning,
@@ -266,6 +268,10 @@ function displayValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function localDateTimeValue(date = new Date()): string {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
 function CoursesPage(): JSX.Element {
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [manifest, setManifest] = useState<{ planId: string; revisionId: string; contentOrigin: string; versionStamp: string; files: ArtifactItem[] } | null>(null);
@@ -287,8 +293,18 @@ function CoursesPage(): JSX.Element {
   const [applyResult, setApplyResult] = useState<LessonChangeApplyResult | null>(null);
   const [changeMessage, setChangeMessage] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  const [teachingEvents, setTeachingEvents] = useState<TeachingEvent[]>([]);
+  const [feedbackRevision, setFeedbackRevision] = useState(0);
+  const [taughtAt, setTaughtAt] = useState(() => localDateTimeValue());
+  const [teachingDurationMinutes, setTeachingDurationMinutes] = useState('45');
+  const [implementationState, setImplementationState] = useState<ImplementationState>('completed');
+  const [adjustmentSummary, setAdjustmentSummary] = useState('');
+  const [teachingMessage, setTeachingMessage] = useState<string | null>(null);
+  const [recordingTeaching, setRecordingTeaching] = useState(false);
   const applyKeyRef = useRef<string | null>(null);
   const applyingRef = useRef(false);
+  const teachingRequestRef = useRef<{ signature: string; key: string } | null>(null);
+  const recordingTeachingRef = useRef(false);
 
   async function reload(): Promise<void> {
     const r = await window.yuwen.lessonList();
@@ -321,6 +337,16 @@ function CoursesPage(): JSX.Element {
     if (response.ok) setHistory(response.data as LessonHistory);
   }
 
+  async function loadFeedbackHistory(planId: string): Promise<void> {
+    const response = await window.yuwen.feedbackHistory(planId);
+    if (!response.ok) {
+      setTeachingMessage(`授课历史读取失败：${response.error.message_zh}`);
+      return;
+    }
+    setTeachingEvents(response.data.teachingEvents);
+    setFeedbackRevision(response.data.streamRevision);
+  }
+
   async function openPlan(planId: string): Promise<void> {
     const response = await window.yuwen.lessonGet(planId);
     if (!response.ok) {
@@ -330,6 +356,12 @@ function CoursesPage(): JSX.Element {
     const plan = response.data.plan as LessonPlan;
     setSelectedPlan(plan);
     setDurationMinutes(String(Math.round(plan.declared_duration_sec / 60)));
+    setTeachingDurationMinutes(String(Math.round(plan.declared_duration_sec / 60)));
+    setTaughtAt(localDateTimeValue());
+    setImplementationState('completed');
+    setAdjustmentSummary('');
+    setTeachingMessage(null);
+    teachingRequestRef.current = null;
     const studentActivity = plan.activities.find((activity) => activity.actor === 'student');
     setActivityId(studentActivity?.activity_id ?? '');
     setLinkId(plan.links.find((link) => link.decision === 'include')?.link_id ?? '');
@@ -340,7 +372,56 @@ function CoursesPage(): JSX.Element {
     const rubric = plan.rubrics.find((item) => item.rubric_id === firstTask?.rubric_id);
     setVariants(rubric?.criteria[0]?.acceptable_variants.join('；') ?? '');
     invalidatePreview();
-    await loadHistory(planId);
+    await Promise.all([loadHistory(planId), loadFeedbackHistory(planId)]);
+  }
+
+  async function recordTeaching(): Promise<void> {
+    if (!selectedPlan || recordingTeachingRef.current) return;
+    const minutes = Number(teachingDurationMinutes);
+    const localTime = new Date(taughtAt);
+    if (!Number.isFinite(minutes) || !Number.isInteger(minutes) || minutes < 1 || minutes > 240) {
+      setTeachingMessage('实际时长须为 1–240 分钟的整数。');
+      return;
+    }
+    if (Number.isNaN(localTime.getTime())) {
+      setTeachingMessage('请填写有效的授课时间。');
+      return;
+    }
+    const payload = {
+      planId: selectedPlan.plan_id,
+      planRevisionId: selectedPlan.revision_id,
+      taughtAt: localTime.toISOString(),
+      actualDurationSec: minutes * 60,
+      implementationState,
+      adjustmentSummary
+    };
+    const signature = teachingSubmissionKey(payload);
+    if (teachingRequestRef.current?.signature !== signature) {
+      teachingRequestRef.current = { signature, key: `${signature}-${crypto.randomUUID()}` };
+    }
+    recordingTeachingRef.current = true;
+    setRecordingTeaching(true);
+    setTeachingMessage(null);
+    try {
+      const response = await window.yuwen.recordTeaching(
+        payload,
+        feedbackRevision,
+        teachingRequestRef.current.key
+      );
+      if (!response.ok) {
+        setTeachingMessage(`授课记录未写入：${response.error.message_zh}；${response.error.next_action}`);
+        if (response.error.code === 'VERSION_CONFLICT') await loadFeedbackHistory(selectedPlan.plan_id);
+        return;
+      }
+      setFeedbackRevision(response.data.streamRevision);
+      await loadFeedbackHistory(selectedPlan.plan_id);
+      setTeachingMessage('已记录实际授课；采用状态与教学效果未自动改变。');
+      setAdjustmentSummary('');
+      teachingRequestRef.current = null;
+    } finally {
+      recordingTeachingRef.current = false;
+      setRecordingTeaching(false);
+    }
   }
 
   function controlledChange(): LessonChange | null {
@@ -420,6 +501,7 @@ function CoursesPage(): JSX.Element {
 
   const viewDiff = previewed ? changeViewDiff(previewed.preview) : [];
   const printWarning = needsPrintedCopyWarning(viewDiff);
+  const teachingStatus = buildTeachingStatus({ adopted: false, events: teachingEvents });
 
   return (
     <div className="page">
@@ -443,7 +525,7 @@ function CoursesPage(): JSX.Element {
               </div>
               <div className="src-actions">
                 <button className="btn small" onClick={() => void openPlan(p.planId)}>
-                  打开一处修改
+                  打开课程与反馈
                 </button>
                 <button className="btn small" onClick={() => void generate(p.planId)}>
                   生成三类五文件
@@ -454,6 +536,72 @@ function CoursesPage(): JSX.Element {
           {plans.length === 0 && <p className="muted small">暂无课时计划。点击上方按钮组建自拟完整计划。</p>}
         </ul>
       </div>
+
+      {selectedPlan && (
+        <div className="card teaching-panel">
+          <div className="card-title">记录实际授课 · {selectedPlan.title}</div>
+          <div className="teaching-status">
+            <span className="tag">采用状态：{teachingStatus.adoptionLabel}</span>
+            <span className="tag">授课状态：{teachingStatus.teachingLabel}</span>
+          </div>
+          <p className="muted small">
+            当前版本尚无独立采用记录；即使记录了授课，也不会据此认定计划已采用或教学有效。
+          </p>
+          <div className="change-grid">
+            <label>
+              <span>授课时间</span>
+              <input className="search-input" type="datetime-local" value={taughtAt} onChange={(event) => setTaughtAt(event.target.value)} />
+            </label>
+            <label>
+              <span>实际时长（分钟）</span>
+              <input
+                className="search-input"
+                type="number"
+                min={1}
+                max={240}
+                step={1}
+                value={teachingDurationMinutes}
+                onChange={(event) => setTeachingDurationMinutes(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>实施情况</span>
+              <select className="search-input" value={implementationState} onChange={(event) => setImplementationState(event.target.value as ImplementationState)}>
+                <option value="completed">完整实施</option>
+                <option value="partial">部分实施</option>
+                <option value="stopped">中止</option>
+              </select>
+            </label>
+            <label className="wide">
+              <span>临场调整（可选，只写实施事实）</span>
+              <textarea
+                className="draft compact"
+                maxLength={4000}
+                value={adjustmentSummary}
+                placeholder="例如：删减教师讲解，保留核心学生任务。"
+                onChange={(event) => setAdjustmentSummary(event.target.value)}
+              />
+            </label>
+          </div>
+          <button className="btn" disabled={recordingTeaching || !teachingStatus.canRecordTeaching} onClick={() => void recordTeaching()}>
+            {recordingTeaching ? '正在记录…' : '记录已授课'}
+          </button>
+          {teachingMessage && <p className={`notice small ${teachingMessage.startsWith('授课记录未写入') ? 'warn' : ''}`}>{teachingMessage}</p>}
+          {teachingEvents.length > 0 && (
+            <ul className="history-list teaching-history">
+              {teachingEvents.map((event) => (
+                <li key={event.event_id}>
+                  <span>{new Date(event.taught_at).toLocaleString('zh-CN')} · {Math.round(event.actual_duration_sec / 60)} 分钟</span>
+                  <span>
+                    {event.implementation_state === 'completed' ? '完整实施' : event.implementation_state === 'partial' ? '部分实施' : '中止'}
+                    {event.adjustment_summary ? ` · ${event.adjustment_summary}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {selectedPlan && (
         <div className="card change-panel">

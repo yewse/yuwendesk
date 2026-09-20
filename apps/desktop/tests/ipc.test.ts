@@ -175,7 +175,7 @@ describe('ui.saveDraft 版本冲突：不覆盖、确定性', () => {
 });
 
 describe('白名单与目录一致性', () => {
-  it('实现操作白名单包含 G01 基础与 G03 资料操作，且无重复', () => {
+  it('实现操作白名单与已发布命名操作一致，且无重复', () => {
     const expected = [
       'app.bootstrap',
       'app.health',
@@ -201,6 +201,8 @@ describe('白名单与目录一致性', () => {
       'lesson.buildDemo',
       'lesson.list',
       'lesson.get',
+      'plans.recordTeaching',
+      'feedback.history',
       'review.run',
       'change.preview',
       'change.apply',

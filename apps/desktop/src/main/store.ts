@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { ReviewReport } from './review/types';
 import type { ChangeProposal, LessonChange } from './change/types';
+import type { FeedbackHistory, FeedbackWriteResult, RecordTeachingInput, TeachingEvent } from './feedback/types';
 
 // G01 本地持久化：只保存教师自己的备课草稿与窗口状态，不含任何 AI 生成正文或密钥。
 // 使用「临时文件 → 原子改名」保证崩溃时不产生半成品（规范 7.2）。后续 G02 以 SQLite 单写入者替换。
@@ -356,6 +357,12 @@ export interface LessonStore {
     proposals: StoredChangeProposal[];
     bundles: MaterialBundleRecord[];
   };
+}
+
+// ===== G08 反馈流（采用、授课、观察和效果保持分离） =====
+export interface FeedbackStore {
+  recordTeaching(input: RecordTeachingInput): FeedbackWriteResult<TeachingEvent>;
+  getFeedbackHistory(planId: string): FeedbackHistory;
 }
 
 export interface ModelStore {

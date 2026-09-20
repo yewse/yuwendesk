@@ -12,6 +12,7 @@ import { IMPLEMENTED_OPERATIONS, IPC_SCHEMA_VERSION } from '../shared/ipc';
 import type { ErrorCode } from '../shared/ipc';
 import type {
   DraftStore,
+  FeedbackStore,
   LessonStore,
   MaterialArtifactRecord,
   MaterialBundleRecord,
@@ -39,6 +40,13 @@ import { FontMissingError } from './materials/generate';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { nodeBundleIo, promoteStagedBundle, stageMaterialSet, type PublishedBundle } from './materials/publish';
+import { createTeachingEvent } from './feedback/teaching';
+import {
+  FeedbackKeyReuseError,
+  FeedbackSourceMissingError,
+  FeedbackVersionConflictError,
+  type ImplementationState
+} from './feedback/types';
 
 function errorResponse(
   code: ErrorCode,
@@ -69,6 +77,8 @@ export interface IpcServiceContext {
   modelService?: ModelServiceLike;
   // G05/G06 课时计划与成品存储（由 SqliteStore 提供）。
   lessonStore?: LessonStore;
+  // G08 采用/授课/观察反馈流（由 SqliteStore 提供）。
+  feedbackStore?: FeedbackStore;
   // 成品文件输出根目录（userData）。
   userDataDir?: string;
   // G07 一处修改服务；生产缺省时由 lessonStore + userDataDir 构造，测试可注入。
@@ -194,6 +204,10 @@ export class IpcService {
         return this.ctx.lessonStore ? { ok: true, data: { plans: this.ctx.lessonStore.listLessonPlans() } } : { ok: true, data: { plans: [] } };
       case 'lesson.get':
         return this.lessonGet(request);
+      case 'plans.recordTeaching':
+        return this.plansRecordTeaching(request);
+      case 'feedback.history':
+        return this.feedbackHistory(request);
       case 'review.run':
         return this.reviewRun(request);
       case 'change.preview':
@@ -379,6 +393,96 @@ export class IpcService {
     const rec = ls.getLessonRevision((req.payload as { planId: string }).planId);
     if (!rec) return errorResponse('SOURCE_MISSING', '课时计划不存在。', '请先组建计划。');
     return { ok: true, data: { plan: JSON.parse(rec.contentJson), contentOrigin: rec.contentOrigin, valid: rec.valid, revisionId: rec.revisionId } };
+  }
+
+  private plansRecordTeaching(req: IpcRequest): IpcResponse {
+    const feedback = this.ctx.feedbackStore;
+    if (!feedback) return errorResponse('SOURCE_MISSING', '授课记录功能不可用。', '请重启应用。');
+    if (!Number.isSafeInteger(req.expected_revision) || (req.expected_revision as number) < 0) {
+      return errorResponse('INPUT_INVALID', '授课记录缺少有效的反馈版本。', '请刷新课程后重试。');
+    }
+    if (typeof req.idempotency_key !== 'string' || req.idempotency_key.trim().length === 0) {
+      return errorResponse('INPUT_INVALID', '授课记录缺少幂等键。', '请重试当前操作。');
+    }
+    const payload = req.payload as {
+      planId: string;
+      planRevisionId: string;
+      taughtAt: string;
+      actualDurationSec: number;
+      implementationState: ImplementationState;
+      adjustmentSummary: string;
+    };
+    const workspaceId = typeof req.workspace_id === 'string' && req.workspace_id.trim() ? req.workspace_id.trim() : 'workspace_default';
+    try {
+      const event = createTeachingEvent(
+        {
+          workspaceId,
+          planId: payload.planId,
+          planRevisionId: payload.planRevisionId,
+          taughtAt: payload.taughtAt,
+          actualDurationSec: payload.actualDurationSec,
+          implementationState: payload.implementationState,
+          adjustmentSummary: payload.adjustmentSummary
+        },
+        { eventId: () => `teach_${randomUUID()}`, now: () => new Date().toISOString() }
+      );
+      const fingerprint = createHash('sha256')
+        .update(
+          JSON.stringify([
+            req.expected_revision,
+            workspaceId,
+            payload.planId,
+            payload.planRevisionId,
+            payload.taughtAt,
+            payload.actualDurationSec,
+            payload.implementationState,
+            payload.adjustmentSummary.trim()
+          ])
+        )
+        .digest('hex');
+      return {
+        ok: true,
+        data: feedback.recordTeaching({
+          workspaceId,
+          planId: payload.planId,
+          planRevisionId: payload.planRevisionId,
+          expectedRevision: req.expected_revision as number,
+          idempotencyKey: req.idempotency_key,
+          fingerprint,
+          event
+        })
+      };
+    } catch (error) {
+      if (error instanceof FeedbackVersionConflictError) {
+        return errorResponse('VERSION_CONFLICT', '授课记录已被其他操作更新，本次未覆盖。', '请刷新课程后重试。');
+      }
+      if (error instanceof FeedbackKeyReuseError) {
+        return errorResponse('INPUT_INVALID', '授课记录幂等键已用于不同内容。', '请重试当前操作。');
+      }
+      if (error instanceof FeedbackSourceMissingError) {
+        return errorResponse('SOURCE_MISSING', '课时计划或指定修订不存在。', '请刷新课程后重试。');
+      }
+      if (error instanceof StoreProtectedError) {
+        return errorResponse('DATABASE_LOCKED', '本地数据库处于保护状态，授课记录未写入。', '请先恢复或备份数据库。');
+      }
+      return errorResponse('INPUT_INVALID', '授课记录内容无效。', '请核对时间和实施状态后重试。');
+    }
+  }
+
+  private feedbackHistory(req: IpcRequest): IpcResponse {
+    const feedback = this.ctx.feedbackStore;
+    if (!feedback) return errorResponse('SOURCE_MISSING', '授课记录功能不可用。', '请重启应用。');
+    try {
+      return {
+        ok: true,
+        data: feedback.getFeedbackHistory((req.payload as { planId: string }).planId)
+      };
+    } catch (error) {
+      if (error instanceof StoreProtectedError) {
+        return errorResponse('DATABASE_LOCKED', '授课历史校验失败，已拒绝隐藏或覆盖损坏数据。', '请先备份并恢复本地数据库。');
+      }
+      throw error;
+    }
   }
 
   private reviewRun(req: IpcRequest): IpcResponse {

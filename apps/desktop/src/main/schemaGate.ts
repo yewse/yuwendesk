@@ -153,6 +153,25 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     required: ['planId'],
     additionalProperties: false
   },
+  'plans.recordTeaching': {
+    type: 'object',
+    properties: {
+      planId: { type: 'string', minLength: 1, maxLength: 128 },
+      planRevisionId: { type: 'string', minLength: 1, maxLength: 128 },
+      taughtAt: { type: 'string', minLength: 1, maxLength: 64 },
+      actualDurationSec: { type: 'integer', min: 60 },
+      implementationState: { type: 'string', minLength: 1, maxLength: 16 },
+      adjustmentSummary: { type: 'string', maxLength: 4000 }
+    },
+    required: ['planId', 'planRevisionId', 'taughtAt', 'actualDurationSec', 'implementationState', 'adjustmentSummary'],
+    additionalProperties: false
+  },
+  'feedback.history': {
+    type: 'object',
+    properties: { planId: { type: 'string', minLength: 1, maxLength: 128 } },
+    required: ['planId'],
+    additionalProperties: false
+  },
   'review.run': {
     type: 'object',
     properties: {

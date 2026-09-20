@@ -458,6 +458,17 @@ h1 {
 .change-panel {
   margin-top: 16px;
 }
+.teaching-panel {
+  margin-top: 16px;
+}
+.teaching-status {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.teaching-history li {
+  align-items: flex-start;
+}
 .change-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

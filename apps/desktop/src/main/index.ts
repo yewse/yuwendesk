@@ -215,6 +215,7 @@ async function bootstrap(): Promise<void> {
     sourceStore: store,
     modelService,
     lessonStore: store,
+    feedbackStore: store,
     userDataDir: app.getPath('userData'),
     appVersion: app.getVersion(),
     appNameZh: APP_NAME_ZH,

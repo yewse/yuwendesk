@@ -17,6 +17,7 @@ import type {
 import type { ReviewReport } from '../main/review/types';
 import type { ChangePreview, LessonChange } from '../main/change/types';
 import type { LessonChangeApplyOutcome } from '../main/store';
+import type { FeedbackHistory, FeedbackWriteResult, ImplementationState, TeachingEvent } from '../main/feedback/types';
 
 // 预加载在 sandbox=true 下不能 require 本地模块，因此保持完全自包含：
 // 仅使用类型导入（编译期擦除）与本地常量，运行时只依赖 electron。
@@ -112,6 +113,29 @@ const api = {
   lessonBuildDemo: () => call<{ planId: string; revisionId: string; title: string; valid: boolean; contentOrigin: string }>('lesson.buildDemo'),
   lessonList: () => call<{ plans: { planId: string; title: string; currentRevisionId: string | null; updatedAt: string }[] }>('lesson.list'),
   lessonGet: (planId: string) => call<{ plan: unknown; contentOrigin: string; valid: boolean; revisionId: string }>('lesson.get', { payload: { planId } }),
+  recordTeaching: (
+    payload: {
+      planId: string;
+      planRevisionId: string;
+      taughtAt: string;
+      actualDurationSec: number;
+      implementationState: ImplementationState;
+      adjustmentSummary: string;
+    },
+    expectedRevision: number,
+    idempotencyKey: string
+  ) =>
+    call<FeedbackWriteResult<TeachingEvent>>('plans.recordTeaching', {
+      workspace_id: 'workspace_default',
+      expected_revision: expectedRevision,
+      idempotency_key: idempotencyKey,
+      payload
+    }),
+  feedbackHistory: (planId: string) =>
+    call<FeedbackHistory>('feedback.history', {
+      workspace_id: 'workspace_default',
+      payload: { planId }
+    }),
   reviewRun: (planId: string, revisionId?: string) =>
     call<{ report: ReviewReport }>('review.run', {
       payload: revisionId ? { planId, revisionId } : { planId }

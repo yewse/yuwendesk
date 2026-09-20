@@ -57,6 +57,8 @@ export const IMPLEMENTED_OPERATIONS = [
   'lesson.buildDemo',
   'lesson.list',
   'lesson.get',
+  'plans.recordTeaching',
+  'feedback.history',
   'review.run',
   'change.preview',
   'change.apply',

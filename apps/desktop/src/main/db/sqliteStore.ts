@@ -33,6 +33,16 @@ import { validateReviewReport } from '../review/review';
 import type { ReviewReport } from '../review/types';
 import { validateChangeProposal } from '../change/change';
 import type { ChangeProposal, LessonChange } from '../change/types';
+import {
+  FeedbackKeyReuseError,
+  FeedbackSourceMissingError,
+  FeedbackVersionConflictError,
+  type FeedbackHistory,
+  type FeedbackWriteResult,
+  type RecordTeachingInput,
+  type TeachingEvent
+} from '../feedback/types';
+import { validateTeachingEvent } from '../feedback/teaching';
 import { extractBuffer, ExtractError, extractText, type CancelSignal, type ExtractOpts, type ExtractResult } from '../sources/extract';
 import {
   CredentialProtector,
@@ -390,6 +400,102 @@ const MIGRATIONS: Migration[] = [
           failure_count INTEGER NOT NULL DEFAULT 0,
           error_code    TEXT,
           updated_at    TEXT NOT NULL
+        );
+      `);
+    }
+  },
+  {
+    version: 10,
+    up: (db) => {
+      // G08 反馈、归因与纠正：先一次建齐结构；各工作包只开放已实现的行为。
+      db.exec(`
+        CREATE TABLE feedback_stream (
+          plan_id      TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL,
+          revision     INTEGER NOT NULL DEFAULT 0,
+          updated_at   TEXT NOT NULL
+        );
+        CREATE TABLE teaching_event (
+          event_id         TEXT PRIMARY KEY,
+          workspace_id     TEXT NOT NULL,
+          plan_id          TEXT NOT NULL,
+          plan_revision_id TEXT NOT NULL,
+          event_json       TEXT NOT NULL,
+          created_at       TEXT NOT NULL
+        );
+        CREATE INDEX idx_teaching_plan ON teaching_event(workspace_id, plan_id, created_at);
+        CREATE TABLE learning_observation (
+          observation_id   TEXT PRIMARY KEY,
+          workspace_id     TEXT NOT NULL,
+          plan_id          TEXT NOT NULL,
+          teaching_event_id TEXT NOT NULL,
+          observation_json TEXT NOT NULL,
+          created_at       TEXT NOT NULL
+        );
+        CREATE TABLE observation_outcome (
+          observation_id TEXT PRIMARY KEY,
+          outcome_json   TEXT NOT NULL
+        );
+        CREATE TABLE observation_tombstone (
+          observation_id  TEXT PRIMARY KEY,
+          workspace_id    TEXT NOT NULL,
+          plan_id         TEXT NOT NULL,
+          deleted_at      TEXT NOT NULL,
+          backup_scope_json TEXT NOT NULL
+        );
+        CREATE TABLE measurement_review (
+          review_id         TEXT PRIMARY KEY,
+          workspace_id      TEXT NOT NULL,
+          plan_id           TEXT NOT NULL,
+          teaching_event_id TEXT NOT NULL,
+          review_json       TEXT NOT NULL,
+          created_at        TEXT NOT NULL
+        );
+        CREATE TABLE attribution_run (
+          run_id            TEXT PRIMARY KEY,
+          workspace_id      TEXT NOT NULL,
+          plan_id           TEXT NOT NULL,
+          teaching_event_id TEXT NOT NULL,
+          input_hash        TEXT NOT NULL,
+          status            TEXT NOT NULL,
+          result_json       TEXT,
+          model_job_id      TEXT,
+          content_origin    TEXT,
+          created_at        TEXT NOT NULL,
+          updated_at        TEXT NOT NULL
+        );
+        CREATE TABLE correction_proposal (
+          proposal_id   TEXT PRIMARY KEY,
+          workspace_id  TEXT NOT NULL,
+          plan_id       TEXT NOT NULL,
+          proposal_json TEXT NOT NULL,
+          state_revision INTEGER NOT NULL,
+          created_at    TEXT NOT NULL,
+          updated_at    TEXT NOT NULL
+        );
+        CREATE TABLE preference_event (
+          event_id      TEXT PRIMARY KEY,
+          workspace_id  TEXT NOT NULL,
+          plan_id       TEXT NOT NULL,
+          proposal_id   TEXT NOT NULL,
+          event_json    TEXT NOT NULL,
+          created_at    TEXT NOT NULL
+        );
+        CREATE TABLE effect_evidence_event (
+          event_id      TEXT PRIMARY KEY,
+          workspace_id  TEXT NOT NULL,
+          plan_id       TEXT NOT NULL,
+          proposal_id   TEXT NOT NULL,
+          event_json    TEXT NOT NULL,
+          created_at    TEXT NOT NULL
+        );
+        CREATE TABLE feedback_idempotency (
+          key         TEXT PRIMARY KEY,
+          fingerprint TEXT NOT NULL,
+          operation   TEXT NOT NULL,
+          status      TEXT NOT NULL,
+          result_json TEXT,
+          updated_at  TEXT NOT NULL
         );
       `);
     }
@@ -1590,6 +1696,116 @@ export class SqliteStore {
       )
       .all(planId) as import('../store').MaterialBundleRecord[];
     return { revisions, proposals, bundles };
+  }
+
+  // ===== G08-T01 反馈流：实际授课独立于采用与效果 =====
+  recordTeaching(input: RecordTeachingInput): FeedbackWriteResult<TeachingEvent> {
+    this.assertWritable();
+    const eventErrors = validateTeachingEvent(input.event);
+    if (eventErrors.length) throw new Error(`invalid_teaching_event:${eventErrors.join('|')}`);
+    if (
+      input.event.workspace_id !== input.workspaceId ||
+      input.event.plan_id !== input.planId ||
+      input.event.plan_revision_id !== input.planRevisionId
+    ) {
+      throw new Error('teaching_event_identity_mismatch');
+    }
+    if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) {
+      throw new Error('invalid_feedback_revision');
+    }
+    if (!input.idempotencyKey.trim() || !input.fingerprint.trim()) throw new Error('invalid_feedback_idempotency');
+
+    const db = this.requireDb();
+    const tx = db.transaction((): FeedbackWriteResult<TeachingEvent> => {
+      const existing = db
+        .prepare('SELECT fingerprint,operation,status,result_json resultJson FROM feedback_idempotency WHERE key=?')
+        .get(input.idempotencyKey) as
+        | { fingerprint: string; operation: string; status: string; resultJson: string | null }
+        | undefined;
+      if (existing) {
+        if (existing.fingerprint !== input.fingerprint || existing.operation !== 'plans.recordTeaching') {
+          throw new FeedbackKeyReuseError();
+        }
+        if (existing.status !== 'succeeded' || !existing.resultJson) throw new Error('feedback_idempotency_incomplete');
+        const parsed = JSON.parse(existing.resultJson) as { streamRevision?: unknown; value?: unknown };
+        const errors = validateTeachingEvent(parsed.value);
+        if (!Number.isSafeInteger(parsed.streamRevision) || (parsed.streamRevision as number) < 1 || errors.length) {
+          throw new Error('invalid_feedback_idempotency_result');
+        }
+        return {
+          streamRevision: parsed.streamRevision as number,
+          value: parsed.value as TeachingEvent,
+          replayed: true
+        };
+      }
+
+      const lesson = db
+        .prepare('SELECT 1 FROM lesson_revision WHERE plan_id=? AND revision_id=?')
+        .get(input.planId, input.planRevisionId);
+      if (!lesson) throw new FeedbackSourceMissingError();
+
+      const stream = db
+        .prepare('SELECT workspace_id workspaceId,revision FROM feedback_stream WHERE plan_id=?')
+        .get(input.planId) as { workspaceId: string; revision: number } | undefined;
+      const currentRevision = stream?.revision ?? 0;
+      if (stream && stream.workspaceId !== input.workspaceId) throw new FeedbackSourceMissingError();
+      if (currentRevision !== input.expectedRevision) throw new FeedbackVersionConflictError();
+
+      db.prepare(
+        `INSERT INTO teaching_event(event_id,workspace_id,plan_id,plan_revision_id,event_json,created_at)
+         VALUES(?,?,?,?,?,?)`
+      ).run(
+        input.event.event_id,
+        input.workspaceId,
+        input.planId,
+        input.planRevisionId,
+        JSON.stringify(input.event),
+        input.event.created_at
+      );
+
+      const nextRevision = currentRevision + 1;
+      db.prepare(
+        `INSERT INTO feedback_stream(plan_id,workspace_id,revision,updated_at) VALUES(?,?,?,?)
+         ON CONFLICT(plan_id) DO UPDATE SET revision=excluded.revision,updated_at=excluded.updated_at`
+      ).run(input.planId, input.workspaceId, nextRevision, input.event.created_at);
+
+      const result = { streamRevision: nextRevision, value: input.event };
+      db.prepare(
+        `INSERT INTO feedback_idempotency(key,fingerprint,operation,status,result_json,updated_at)
+         VALUES(?,?,?,?,?,?)`
+      ).run(
+        input.idempotencyKey,
+        input.fingerprint,
+        'plans.recordTeaching',
+        'succeeded',
+        JSON.stringify(result),
+        input.event.created_at
+      );
+      return { ...result, replayed: false };
+    });
+    return tx.immediate();
+  }
+
+  getFeedbackHistory(planId: string): FeedbackHistory {
+    const db = this.requireDb();
+    const stream = db.prepare('SELECT revision FROM feedback_stream WHERE plan_id=?').get(planId) as
+      | { revision: number }
+      | undefined;
+    const rows = db
+      .prepare('SELECT event_json eventJson FROM teaching_event WHERE plan_id=? ORDER BY created_at,event_id')
+      .all(planId) as { eventJson: string }[];
+    const teachingEvents = rows.map((row) => {
+      let event: unknown;
+      try {
+        event = JSON.parse(row.eventJson) as unknown;
+      } catch {
+        throw new StoreProtectedError('invalid_stored_teaching_event:json');
+      }
+      const errors = validateTeachingEvent(event);
+      if (errors.length) throw new StoreProtectedError(`invalid_stored_teaching_event:${errors.join('|')}`);
+      return event as TeachingEvent;
+    });
+    return { streamRevision: stream?.revision ?? 0, teachingEvents, knowledgeState: 'unknown' };
   }
 
   // ===== G04 模型配置/作业持久化 =====
