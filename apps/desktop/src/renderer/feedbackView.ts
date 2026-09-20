@@ -1,4 +1,11 @@
-import type { FeedbackAnalysisResult, ImplementationState, ObservationOutcomeValue, TeachingEvent } from '../main/feedback/types';
+import type {
+  CorrectionRecord,
+  EffectEvidenceState,
+  FeedbackAnalysisResult,
+  ImplementationState,
+  ObservationOutcomeValue,
+  TeachingEvent
+} from '../main/feedback/types';
 
 export interface TeachingStatusInput {
   adopted: boolean;
@@ -128,5 +135,59 @@ export function buildAnalysisView(result: FeedbackAnalysisResult): AnalysisView 
     })) ?? [],
     notExecutedLabels,
     proofDisclaimer: '这些是待验证假设，不是教学有效性证明。'
+  };
+}
+
+export interface CorrectionCardView {
+  proposalId: string;
+  status: CorrectionRecord['currentStatus'];
+  stateRevision: number;
+  hypothesis: string;
+  replacementAction: string;
+  removedOrReduced: string;
+  predictedEvidence: string;
+  disconfirmingEvidence: string;
+  nextNormalTask: string;
+  returnModules: string[];
+  canAccept: boolean;
+  canReject: boolean;
+  canRevert: boolean;
+}
+
+export function buildCorrectionCard(record: CorrectionRecord): CorrectionCardView {
+  return {
+    proposalId: record.proposal.change_id,
+    status: record.currentStatus,
+    stateRevision: record.stateRevision,
+    hypothesis: record.proposal.hypothesis,
+    replacementAction: record.proposal.replacement_action,
+    removedOrReduced: record.proposal.removed_or_reduced,
+    predictedEvidence: record.proposal.predicted_evidence,
+    disconfirmingEvidence: record.proposal.disconfirming_evidence,
+    nextNormalTask: record.proposal.next_normal_task,
+    returnModules: [...record.proposal.return_modules],
+    canAccept: record.currentStatus === 'proposed',
+    canReject: record.currentStatus === 'proposed',
+    canRevert: record.currentStatus === 'accepted'
+  };
+}
+
+const EFFECT_LABELS: Record<EffectEvidenceState, string> = {
+  unknown: '尚无效果证据',
+  initial_support: '有限条件下的初步证据（非效果证明）',
+  repeated_support: '多个可比观察中的重复支持（仍非因果证明）',
+  disconfirmed: '后续观察不支持该纠偏'
+};
+
+export function buildEvidenceTrackView(input: {
+  preferenceState: Record<string, string | null>;
+  effectState: EffectEvidenceState;
+}): { preferenceLabel: string; effectLabel: string } {
+  const entries = Object.entries(input.preferenceState).filter((entry): entry is [string, string] => entry[1] !== null);
+  return {
+    preferenceLabel: entries.length
+      ? `表达偏好：${entries.map(([key, value]) => `${key}=${value}`).join('；')}`
+      : '尚无表达偏好',
+    effectLabel: EFFECT_LABELS[input.effectState]
   };
 }

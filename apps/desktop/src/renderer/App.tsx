@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { BootstrapData, HealthData, SourceHitDTO, SourceListItemDTO, SourceReadDTO, SourceVersionDTO } from '../shared/ipc';
 import type { ChangePreview, LessonChange } from '../main/change/types';
 import type {
+  CorrectionRecord,
+  EffectEvidenceState,
   FeedbackAnalysisResult,
   ImplementationState,
   ObservationMaterialRelation,
@@ -19,6 +21,8 @@ import { DraftController, DraftSnapshot, getDraftController } from './draftContr
 import {
   OBSERVATION_OUTCOME_OPTIONS,
   buildAnalysisView,
+  buildCorrectionCard,
+  buildEvidenceTrackView,
   buildObservationPrompt,
   buildTeachingStatus,
   teachingSubmissionKey
@@ -337,6 +341,11 @@ function CoursesPage(): JSX.Element {
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [dispatchConsent, setDispatchConsent] = useState(false);
+  const [corrections, setCorrections] = useState<CorrectionRecord[]>([]);
+  const [preferenceState, setPreferenceState] = useState<Record<string, string | null>>({});
+  const [effectState, setEffectState] = useState<EffectEvidenceState>('unknown');
+  const [correctionMessage, setCorrectionMessage] = useState<string | null>(null);
+  const [correctionInFlight, setCorrectionInFlight] = useState<string | null>(null);
   const applyKeyRef = useRef<string | null>(null);
   const applyingRef = useRef(false);
   const teachingRequestRef = useRef<{ signature: string; key: string } | null>(null);
@@ -346,6 +355,7 @@ function CoursesPage(): JSX.Element {
   const observationDeleteKeysRef = useRef(new Map<string, string>());
   const analysisRequestRef = useRef<{ signature: string; key: string } | null>(null);
   const analyzingRef = useRef(false);
+  const correctionKeysRef = useRef(new Map<string, string>());
 
   async function reload(): Promise<void> {
     const r = await window.yuwen.lessonList();
@@ -386,6 +396,9 @@ function CoursesPage(): JSX.Element {
     }
     setTeachingEvents(response.data.teachingEvents);
     setFeedbackRevision(response.data.streamRevision);
+    setCorrections(response.data.corrections ?? []);
+    setPreferenceState(response.data.preferenceState ?? {});
+    setEffectState(response.data.effectState ?? 'unknown');
     const latestMeasurement = response.data.measurementReviews?.at(-1);
     const latestRun = response.data.attributionRuns?.at(-1);
     if (latestMeasurement && latestRun?.status === 'succeeded' && latestRun.result) {
@@ -677,9 +690,51 @@ function CoursesPage(): JSX.Element {
               : `模型辅助归因被阻断：${response.data.note}`
       );
       analysisRequestRef.current = null;
+      await loadFeedbackHistory(selectedPlan.plan_id);
     } finally {
       analyzingRef.current = false;
       setAnalyzing(false);
+    }
+  }
+
+  async function decideCorrection(record: CorrectionRecord, action: 'accept' | 'reject' | 'revert'): Promise<void> {
+    if (!selectedPlan || correctionInFlight) return;
+    const signature = JSON.stringify([selectedPlan.plan_id, record.proposal.change_id, action, record.stateRevision, feedbackRevision]);
+    let key = correctionKeysRef.current.get(signature);
+    if (!key) {
+      key = `correction-${crypto.randomUUID()}`;
+      correctionKeysRef.current.set(signature, key);
+    }
+    setCorrectionInFlight(`${record.proposal.change_id}:${action}`);
+    setCorrectionMessage(null);
+    const payload = {
+      planId: selectedPlan.plan_id,
+      proposalId: record.proposal.change_id,
+      reason: action === 'accept' ? '教师确认有限试行' : action === 'reject' ? '教师决定不采用本次纠偏' : '教师撤回已接受纠偏',
+      expectedProposalRevision: record.stateRevision
+    };
+    try {
+      const response = action === 'revert'
+        ? await window.yuwen.revertCorrection(payload, feedbackRevision, key)
+        : await window.yuwen.decideCorrection({ ...payload, decision: action }, feedbackRevision, key);
+      if (!response.ok) {
+        setCorrectionMessage(`纠偏操作未完成：${response.error.message_zh}；${response.error.next_action}`);
+        if (response.error.code === 'VERSION_CONFLICT') await loadFeedbackHistory(selectedPlan.plan_id);
+        return;
+      }
+      setFeedbackRevision(response.data.streamRevision);
+      if (response.data.lessonChangeSuggestion?.kind === 'increase_independent_time') {
+        setChangeKind('increase_independent_time');
+        setActivityId(response.data.lessonChangeSuggestion.activityId);
+        invalidatePreview();
+        setCorrectionMessage('已接受纠偏；仅生成 G07 修改建议，需在“一处修改”中预览确认后才会应用。');
+      } else {
+        setCorrectionMessage(action === 'reject' ? '已记录拒绝，原提案和决策历史均保留。' : '已追加记录本次纠偏决策。');
+      }
+      correctionKeysRef.current.delete(signature);
+      await loadFeedbackHistory(selectedPlan.plan_id);
+    } finally {
+      setCorrectionInFlight(null);
     }
   }
 
@@ -1063,6 +1118,45 @@ function CoursesPage(): JSX.Element {
           })()}
         </div>
       )}
+
+      {selectedPlan && corrections.length > 0 && (() => {
+        const evidence = buildEvidenceTrackView({ preferenceState, effectState });
+        return (
+          <div className="card correction-panel">
+            <div className="card-title">最小纠偏建议</div>
+            <p className="muted small">提案来自测量门后的待验证归因；接受只产生 G07 预览建议，不会直接修改课时或成品。</p>
+            <div className="evidence-tracks" aria-label="表达偏好与效果证据分轨">
+              <span><b>交付偏好</b>：{evidence.preferenceLabel}</span>
+              <span><b>效果证据</b>：{evidence.effectLabel}</span>
+            </div>
+            {corrections.map((record) => {
+              const card = buildCorrectionCard(record);
+              return (
+                <article className="correction-card" key={card.proposalId}>
+                  <div className="analysis-head">
+                    <b>{card.hypothesis}</b>
+                    <span className="tag">状态：{card.status}</span>
+                  </div>
+                  <dl className="correction-fields">
+                    <div><dt>替换什么</dt><dd>{card.replacementAction}</dd></div>
+                    <div><dt>减少什么</dt><dd>{card.removedOrReduced}</dd></div>
+                    <div><dt>预计看到什么</dt><dd>{card.predictedEvidence}</dd></div>
+                    <div><dt>什么情况说明没奏效</dt><dd>{card.disconfirmingEvidence}</dd></div>
+                    <div><dt>在哪次正常任务复核</dt><dd>{card.nextNormalTask}</dd></div>
+                    <div><dt>退回模块</dt><dd>{card.returnModules.join('、')}</dd></div>
+                  </dl>
+                  <div className="actions-row">
+                    {card.canAccept && <button className="btn" disabled={correctionInFlight !== null} onClick={() => void decideCorrection(record, 'accept')}>采用建议</button>}
+                    {card.canReject && <button className="btn secondary" disabled={correctionInFlight !== null} onClick={() => void decideCorrection(record, 'reject')}>不采用</button>}
+                    {card.canRevert && <button className="btn secondary" disabled={correctionInFlight !== null} onClick={() => void decideCorrection(record, 'revert')}>撤回采用</button>}
+                  </div>
+                </article>
+              );
+            })}
+            {correctionMessage && <p className={`notice small ${correctionMessage.includes('未完成') ? 'warn' : ''}`}>{correctionMessage}</p>}
+          </div>
+        );
+      })()}
 
       {selectedPlan && (
         <div className="card change-panel">

@@ -234,6 +234,28 @@
       "arbitrary_path_allowed": false
     },
     {
+      "operation": "corrections.decide",
+      "kind": "write",
+      "scope": "workspace",
+      "requires_expected_revision": true,
+      "requires_idempotency_key": true,
+      "output_contract": "纠偏接受或拒绝事件、双轨证据状态与可选 G07 预览建议",
+      "semantic_guard": "追加式决策；不直接应用课时修改；偏好不得冒充效果证据",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "corrections.revert",
+      "kind": "write",
+      "scope": "workspace",
+      "requires_expected_revision": true,
+      "requires_idempotency_key": true,
+      "output_contract": "已接受纠偏的追加式撤回事务",
+      "semantic_guard": "仅 accepted 可撤回；保留原提案和全部决策历史",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
       "operation": "jobs.get",
       "kind": "read",
       "scope": "workspace",

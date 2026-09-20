@@ -8,8 +8,11 @@ import type {
   AddObservationInput,
   BeginFeedbackAnalysisInput,
   BeginFeedbackAnalysisResult,
+  CommitCorrectionDecisionInput,
   DeleteObservationInput,
+  CorrectionDecisionResult,
   FeedbackAnalysisHistory,
+  FeedbackCorrectionHistory,
   FeedbackHistory,
   FeedbackKnowledgeState,
   FeedbackWriteResult,
@@ -384,6 +387,8 @@ export interface FeedbackStore {
   beginFeedbackAnalysis(input: BeginFeedbackAnalysisInput): BeginFeedbackAnalysisResult;
   finishFeedbackAnalysis(input: FinishFeedbackAnalysisInput): { committed: boolean; streamRevision: number };
   getFeedbackAnalysisHistory(planId: string): FeedbackAnalysisHistory;
+  getFeedbackCorrectionHistory(planId: string): FeedbackCorrectionHistory;
+  commitCorrectionDecision(input: CommitCorrectionDecisionInput): CorrectionDecisionResult;
 }
 
 export interface ModelStore {

@@ -45,6 +45,8 @@ import {
   FeedbackKeyReuseError,
   FeedbackSourceMissingError,
   FeedbackVersionConflictError,
+  CorrectionVersionConflictError,
+  type CorrectionDecisionResult,
   type ImplementationState,
   type FeedbackAnalysisResult,
   type ObservationMaterialRelation,
@@ -54,7 +56,7 @@ import {
   type ObservationSupportLevel
 } from './feedback/types';
 import { createObservationRecord, ObservationPrivacyError } from './feedback/observation';
-import type { FeedbackAnalyzeInput } from './feedback/service';
+import type { CorrectionDecisionInput, CorrectionRevertInput, FeedbackAnalyzeInput } from './feedback/service';
 
 function errorResponse(
   code: ErrorCode,
@@ -88,7 +90,11 @@ export interface IpcServiceContext {
   // G08 采用/授课/观察反馈流（由 SqliteStore 提供）。
   feedbackStore?: FeedbackStore;
   // G08 测量门与模型辅助归因；仅接受稳定 ID 和逐次许可，不接受自由提示词或 Observation JSON。
-  feedbackService?: { analyze(input: FeedbackAnalyzeInput): Promise<FeedbackAnalysisResult> };
+  feedbackService?: {
+    analyze(input: FeedbackAnalyzeInput): Promise<FeedbackAnalysisResult>;
+    decideCorrection(input: CorrectionDecisionInput): CorrectionDecisionResult;
+    revertCorrection(input: CorrectionRevertInput): CorrectionDecisionResult;
+  };
   // G08 删除观察前的原生确认；仅主进程注入，渲染层不能签发 token。
   confirmObservationDelete?: (input: {
     workspaceId: string;
@@ -230,6 +236,10 @@ export class IpcService {
         return this.feedbackHistory(request);
       case 'feedback.analyze':
         return this.feedbackAnalyze(request);
+      case 'corrections.decide':
+        return this.correctionsDecide(request);
+      case 'corrections.revert':
+        return this.correctionsRevert(request);
       case 'observations.add':
         return this.observationsAdd(request);
       case 'observations.list':
@@ -506,10 +516,14 @@ export class IpcService {
       const planId = (req.payload as { planId: string }).planId;
       const base = feedback.getFeedbackHistory(planId);
       const analysis = feedback.getFeedbackAnalysisHistory(planId);
+      const corrections = feedback.getFeedbackCorrectionHistory(planId);
+      const observations = feedback.listObservations(planId);
+      const hasExtendedHistory = analysis.measurementReviews.length || analysis.attributionRuns.length || observations.length ||
+        corrections.corrections.length || corrections.preferenceEvents.length || corrections.effectEvents.length || corrections.observationTombstones.length;
       return {
         ok: true,
-        data: analysis.measurementReviews.length || analysis.attributionRuns.length
-          ? { ...base, ...analysis }
+        data: hasExtendedHistory
+          ? { ...base, observations, ...analysis, ...corrections }
           : base
       };
     } catch (error) {
@@ -550,6 +564,83 @@ export class IpcService {
     } catch (error) {
       return this.feedbackMutationError(error, '反馈分析');
     }
+  }
+
+  private correctionsDecide(req: IpcRequest): IpcResponse {
+    const service = this.ctx.feedbackService;
+    if (!service) return errorResponse('SOURCE_MISSING', '纠偏决策功能不可用。', '请重启应用。');
+    const basic = this.correctionRequestBase(req);
+    if (!basic.ok) return basic.response;
+    const payload = req.payload as {
+      planId: string; proposalId: string; decision: unknown; reason: string; expectedProposalRevision: number;
+      preference?: unknown; effect?: unknown;
+    };
+    if (payload.decision !== 'accept' && payload.decision !== 'reject') {
+      return errorResponse('INPUT_INVALID', '纠偏决策无效。', '请选择接受或拒绝。');
+    }
+    const preference = this.parseCorrectionPreference(payload.preference);
+    if (preference === false) return errorResponse('INPUT_INVALID', '表达偏好结构无效。', '请刷新后重试。');
+    const effect = this.parseCorrectionEffect(payload.effect);
+    if (effect === false) return errorResponse('INPUT_INVALID', '效果证据结构无效。', '请核对观察条件后重试。');
+    try {
+      return { ok: true, data: service.decideCorrection({
+        ...basic.input,
+        decision: payload.decision,
+        ...(preference ? { preference } : {}),
+        ...(effect ? { effect } : {})
+      }) };
+    } catch (error) {
+      return this.feedbackMutationError(error, '纠偏决策');
+    }
+  }
+
+  private correctionsRevert(req: IpcRequest): IpcResponse {
+    const service = this.ctx.feedbackService;
+    if (!service) return errorResponse('SOURCE_MISSING', '纠偏撤回功能不可用。', '请重启应用。');
+    const basic = this.correctionRequestBase(req);
+    if (!basic.ok) return basic.response;
+    try {
+      return { ok: true, data: service.revertCorrection(basic.input) };
+    } catch (error) {
+      return this.feedbackMutationError(error, '纠偏撤回');
+    }
+  }
+
+  private correctionRequestBase(req: IpcRequest):
+    | { ok: true; input: CorrectionRevertInput }
+    | { ok: false; response: IpcResponse<never> } {
+    if (!Number.isSafeInteger(req.expected_revision) || (req.expected_revision as number) < 0 ||
+        typeof req.idempotency_key !== 'string' || !req.idempotency_key.trim()) {
+      return { ok: false, response: errorResponse('INPUT_INVALID', '纠偏请求缺少有效版本或幂等键。', '请刷新后重试。') };
+    }
+    const payload = req.payload as { planId: string; proposalId: string; reason: string; expectedProposalRevision: number };
+    const workspaceId = typeof req.workspace_id === 'string' && req.workspace_id.trim() ? req.workspace_id.trim() : 'workspace_default';
+    return { ok: true, input: {
+      workspaceId, planId: payload.planId, proposalId: payload.proposalId, reason: payload.reason,
+      expectedRevision: req.expected_revision as number,
+      expectedProposalRevision: payload.expectedProposalRevision,
+      idempotencyKey: req.idempotency_key
+    } };
+  }
+
+  private parseCorrectionPreference(value: unknown): CorrectionDecisionInput['preference'] | null | false {
+    if (value === undefined) return null;
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+    const input = value as Record<string, unknown>;
+    if (Object.keys(input).some((key) => !['preferenceKey', 'value', 'reason'].includes(key)) ||
+        typeof input.preferenceKey !== 'string' || typeof input.value !== 'string' || typeof input.reason !== 'string') return false;
+    return { preferenceKey: input.preferenceKey, value: input.value, reason: input.reason };
+  }
+
+  private parseCorrectionEffect(value: unknown): CorrectionDecisionInput['effect'] | null | false {
+    if (value === undefined) return null;
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+    const input = value as Record<string, unknown>;
+    if (Object.keys(input).some((key) => !['state', 'observationIds'].includes(key)) ||
+        !['unknown', 'initial_support', 'repeated_support', 'disconfirmed'].includes(String(input.state)) ||
+        !Array.isArray(input.observationIds) || input.observationIds.length < 1 || input.observationIds.length > 100 ||
+        input.observationIds.some((id) => typeof id !== 'string' || id.length < 1 || id.length > 128)) return false;
+    return { state: input.state as NonNullable<CorrectionDecisionInput['effect']>['state'], observationIds: input.observationIds as string[] };
   }
 
   private observationsAdd(req: IpcRequest): IpcResponse {
@@ -721,6 +812,9 @@ export class IpcService {
   }
 
   private feedbackMutationError(error: unknown, label: string): IpcResponse<never> {
+    if (error instanceof CorrectionVersionConflictError) {
+      return errorResponse('VERSION_CONFLICT', `${label}状态已变化，本次未覆盖。`, '请刷新纠偏卡后重试。');
+    }
     if (error instanceof FeedbackVersionConflictError) {
       return errorResponse('VERSION_CONFLICT', `${label}流已被其他操作更新，本次未覆盖。`, '请刷新课程后重试。');
     }

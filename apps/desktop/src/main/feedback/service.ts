@@ -8,7 +8,11 @@ import type {
   AttributionContentOrigin,
   AttributionModelOutput,
   AttributionResult,
-  FeedbackAnalysisResult
+  CorrectionDecisionResult,
+  CorrectionProposal,
+  EffectEvidenceState,
+  FeedbackAnalysisResult,
+  FeedbackReturnModule
 } from './types';
 import { FeedbackSourceMissingError, FeedbackVersionConflictError } from './types';
 import { reviewMeasurement } from './measurement';
@@ -18,6 +22,11 @@ import {
   validateFeedbackAnalysisResult,
   validateTeachingAttributionModelOutput
 } from './attribution';
+import {
+  buildCorrectionProposal,
+  buildLessonChangeSuggestion,
+  createEffectEvidenceEvent
+} from './correction';
 
 export interface StructuredAttributionModel {
   runStructuredAttribution(input: {
@@ -39,8 +48,25 @@ export interface FeedbackAnalyzeInput {
 export interface FeedbackServiceIds {
   reviewId(): string;
   runId(): string;
+  proposalId(): string;
+  eventId(): string;
   now(): string;
 }
+
+export interface CorrectionDecisionInput {
+  workspaceId: string;
+  planId: string;
+  proposalId: string;
+  decision: 'accept' | 'reject';
+  reason: string;
+  expectedRevision: number;
+  expectedProposalRevision: number;
+  idempotencyKey: string;
+  preference?: { preferenceKey: string; value: string; reason: string };
+  effect?: { state: EffectEvidenceState; observationIds: string[] };
+}
+
+export interface CorrectionRevertInput extends Omit<CorrectionDecisionInput, 'decision' | 'preference' | 'effect'> {}
 
 function parsePlan(contentJson: string): LessonPlan {
   let value: unknown;
@@ -77,6 +103,8 @@ export class FeedbackService {
     this.ids = {
       reviewId: ids.reviewId ?? (() => `measurement_${randomUUID()}`),
       runId: ids.runId ?? (() => `attribution_${randomUUID()}`),
+      proposalId: ids.proposalId ?? (() => `correction_${randomUUID()}`),
+      eventId: ids.eventId ?? (() => `feedback_event_${randomUUID()}`),
       now: ids.now ?? (() => new Date().toISOString())
     };
   }
@@ -157,7 +185,7 @@ export class FeedbackService {
         streamRevision: begun.streamRevision,
         measurement
       };
-      this.finish(input, fingerprint, inputHash, null, begun.streamRevision, 'blocked', null, result, null, null, false);
+      this.finish(input, fingerprint, inputHash, null, begun.streamRevision, 'blocked', null, null, result, null, null, false);
       return result;
     }
 
@@ -182,13 +210,25 @@ export class FeedbackService {
         };
         const attributionErrors = validateAttributionResult(attribution);
         if (attributionErrors.length === 0) {
+          const hypothesis = attribution.hypotheses[0];
+          const correctionProposal = hypothesis ? buildCorrectionProposal({
+            planRevisionId: plan.revision_id,
+            observationIds: hypothesis.observation_ids,
+            hypothesis,
+            replacementAction: '把连续提示替换为先独立找证据、再按需核对',
+            removedOrReduced: '减少一次完整示范或重复讲解，不增加课后作业',
+            predictedEvidence: '下一次相似新材料中能在较少提示下独立指出证据并说明联系',
+            disconfirmingEvidence: '撤去提示后仍无法定位证据，或总负担增加',
+            nextNormalTask: '下一篇正常阅读任务中的证据联系题',
+            returnModules: [...new Set<FeedbackReturnModule>([...hypothesis.return_modules, 'M06', 'M07', 'M08', 'M11', 'M12'])]
+          }, { proposalId: this.ids.proposalId }) : null;
           const result: FeedbackAnalysisResult = {
             status: 'attributed',
             streamRevision: begun.streamRevision + 1,
             measurement,
             attribution
           };
-          const committed = this.finish(input, fingerprint, inputHash, runId, begun.streamRevision, 'succeeded', attribution, result, payload.jobId, payload.origin, true);
+          const committed = this.finish(input, fingerprint, inputHash, runId, begun.streamRevision, 'succeeded', attribution, correctionProposal, result, payload.jobId, payload.origin, true);
           if (!committed) throw new FeedbackVersionConflictError();
           return result;
         }
@@ -200,7 +240,7 @@ export class FeedbackService {
         status: 'uncertain', streamRevision: begun.streamRevision, measurement,
         jobId: model.jobId, code: 'REQUEST_UNCERTAIN', note: model.note
       };
-      const committed = this.finish(input, fingerprint, inputHash, runId, begun.streamRevision, 'uncertain', null, result, model.jobId, null, false);
+      const committed = this.finish(input, fingerprint, inputHash, runId, begun.streamRevision, 'uncertain', null, null, result, model.jobId, null, false);
       if (!committed) throw new FeedbackVersionConflictError();
       return result;
     }
@@ -217,9 +257,95 @@ export class FeedbackService {
     };
     const runStatus = model.status === 'blocked' ? 'blocked' : 'failed';
     const jobId = 'jobId' in model ? model.jobId : null;
-    const committed = this.finish(input, fingerprint, inputHash, runId, begun.streamRevision, runStatus, null, result, jobId, null, false);
+    const committed = this.finish(input, fingerprint, inputHash, runId, begun.streamRevision, runStatus, null, null, result, jobId, null, false);
     if (!committed) throw new FeedbackVersionConflictError();
     return result;
+  }
+
+  decideCorrection(input: CorrectionDecisionInput): CorrectionDecisionResult {
+    return this.commitCorrection(input, input.decision);
+  }
+
+  revertCorrection(input: CorrectionRevertInput): CorrectionDecisionResult {
+    return this.commitCorrection(input, 'revert');
+  }
+
+  private commitCorrection(
+    input: CorrectionDecisionInput | CorrectionRevertInput,
+    action: 'accept' | 'reject' | 'revert'
+  ): CorrectionDecisionResult {
+    if (!input.workspaceId.trim() || !input.planId.trim() || !input.proposalId.trim() ||
+        !input.reason.trim() || !input.idempotencyKey.trim()) throw new Error('invalid_correction_input');
+    if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0 ||
+        !Number.isSafeInteger(input.expectedProposalRevision) || input.expectedProposalRevision < 0) {
+      throw new Error('invalid_correction_revision');
+    }
+    const fingerprint = createHash('sha256').update(JSON.stringify({ ...input, action })).digest('hex');
+    const history = this.feedbackStore.getFeedbackCorrectionHistory(input.planId);
+    const correction = history.corrections.find((item) => item.proposal.change_id === input.proposalId);
+    const lessonRevision = correction
+      ? this.lessonStore.getLessonRevision(input.planId, correction.proposal.plan_revision_id)
+      : null;
+    const plan = lessonRevision ? parsePlan(lessonRevision.contentJson) : null;
+    const now = this.ids.now();
+    const decisionEvent = {
+      event_id: this.ids.eventId(),
+      proposal_id: input.proposalId,
+      action,
+      reason: input.reason.trim(),
+      state_revision: input.expectedProposalRevision + 1,
+      created_at: now
+    } as const;
+    const preference = 'preference' in input ? input.preference : undefined;
+    const preferenceEvent = preference ? {
+      event_id: this.ids.eventId(),
+      proposal_id: input.proposalId,
+      action: 'set' as const,
+      preference_key: preference.preferenceKey.trim(),
+      value: preference.value.trim(),
+      reason: preference.reason.trim(),
+      created_at: now
+    } : null;
+    const effect = 'effect' in input ? input.effect : undefined;
+    const activeObservations = this.feedbackStore.listObservations(input.planId);
+    const observations = effect
+      ? activeObservations.filter((record) => effect.observationIds.includes(record.observation.observation_id))
+      : [];
+    if (effect && (new Set(effect.observationIds).size !== effect.observationIds.length || observations.length !== effect.observationIds.length)) {
+      throw new FeedbackSourceMissingError();
+    }
+    const activeIds = new Set(activeObservations.map((record) => record.observation.observation_id));
+    const priorEvents = history.effectEvents
+      .filter((event) => event.proposal_id === input.proposalId)
+      .map((event) => ({ ...event, observation_ids: event.observation_ids.filter((id) => activeIds.has(id)) }))
+      .filter((event) => event.observation_ids.length > 0);
+    const conditions = observations.map(({ observation }) =>
+      `observation_id=${observation.observation_id};material_relation=${observation.material_relation};delay_days=${observation.delay_days ?? 0};support_level=${observation.support_level}`
+    ).join('|');
+    const effectEvent = effect ? createEffectEvidenceEvent({
+      proposalId: input.proposalId,
+      state: effect.state,
+      observationIds: effect.observationIds,
+      conditions,
+      priorEvents
+    }, { eventId: this.ids.eventId, now: () => now }) : null;
+    const lessonChangeSuggestion = action === 'accept' && correction && plan
+      ? buildLessonChangeSuggestion(correction.proposal, plan, activeObservations)
+      : null;
+    return this.feedbackStore.commitCorrectionDecision({
+      workspaceId: input.workspaceId,
+      planId: input.planId,
+      proposalId: input.proposalId,
+      expectedRevision: input.expectedRevision,
+      expectedProposalRevision: input.expectedProposalRevision,
+      idempotencyKey: input.idempotencyKey,
+      fingerprint,
+      decisionEvent,
+      preferenceEvent,
+      effectEvent,
+      lessonChangeSuggestion,
+      updatedAt: now
+    });
   }
 
   private finish(
@@ -230,6 +356,7 @@ export class FeedbackService {
     expectedRevision: number,
     runStatus: 'succeeded' | 'blocked' | 'failed' | 'uncertain',
     attribution: AttributionResult | null,
+    correctionProposal: CorrectionProposal | null,
     result: FeedbackAnalysisResult,
     modelJobId: string | null,
     contentOrigin: AttributionContentOrigin | null,
@@ -245,6 +372,7 @@ export class FeedbackService {
       inputHash,
       runStatus,
       attribution,
+      correctionProposal,
       result,
       modelJobId,
       contentOrigin,

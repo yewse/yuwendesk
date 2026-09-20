@@ -31,20 +31,25 @@ import {
 } from '../store';
 import { validateReviewReport } from '../review/review';
 import type { ReviewReport } from '../review/types';
-import { validateChangeProposal } from '../change/change';
+import { validateChangeProposal, validateLessonChange } from '../change/change';
 import type { ChangeProposal, LessonChange } from '../change/types';
 import {
   FeedbackKeyReuseError,
   FeedbackSourceMissingError,
   FeedbackVersionConflictError,
+  CorrectionVersionConflictError,
   type AddObservationInput,
   type AttributionContentOrigin,
   type AttributionResult,
   type AttributionRunStatus,
   type BeginFeedbackAnalysisInput,
   type BeginFeedbackAnalysisResult,
+  type CommitCorrectionDecisionInput,
+  type CorrectionDecisionResult,
+  type CorrectionRecord,
   type DeleteObservationInput,
   type FeedbackAnalysisHistory,
+  type FeedbackCorrectionHistory,
   type FeedbackHistory,
   type FeedbackKnowledgeState,
   type FeedbackWriteResult,
@@ -59,6 +64,16 @@ import { validateTeachingEvent } from '../feedback/teaching';
 import { validateObservation, validateObservationOutcome } from '../feedback/observation';
 import { validateMeasurementReview } from '../feedback/measurement';
 import { validateAttributionResult, validateFeedbackAnalysisResult } from '../feedback/attribution';
+import {
+  applyEffectEvidence,
+  applyPreferenceEvent,
+  deriveCorrectionStatus,
+  validateCorrectionDecisionEvent,
+  validateCorrectionProposal,
+  validateCorrectionRecord,
+  validateEffectEvidenceEvent,
+  validatePreferenceEvent
+} from '../feedback/correction';
 import { isBoundedString, isIsoDateTime, isRecord } from '../feedback/validation';
 import { extractBuffer, ExtractError, extractText, type CancelSignal, type ExtractOpts, type ExtractResult } from '../sources/extract';
 import {
@@ -92,6 +107,11 @@ export interface LessonChangeCommitFaultHooks {
 export interface FeedbackCommitFaultHooks {
   afterObservationInsert?: () => void;
   afterObservationDelete?: () => void;
+  afterCorrectionProposalUpdate?: () => void;
+  afterPreferenceInsert?: () => void;
+  afterEffectInsert?: () => void;
+  afterFeedbackStreamIncrement?: () => void;
+  beforeFeedbackIdempotency?: () => void;
 }
 
 export interface SqliteStoreOptions {
@@ -2184,6 +2204,13 @@ export class SqliteStore {
       const attributionErrors = validateAttributionResult(input.attribution);
       if (attributionErrors.length) throw new Error(`invalid_attribution_result:${attributionErrors.join('|')}`);
     }
+    if (input.correctionProposal) {
+      const proposalErrors = validateCorrectionProposal(input.correctionProposal);
+      if (proposalErrors.length) throw new Error(`invalid_correction_proposal:${proposalErrors.join('|')}`);
+      if (!input.attribution || input.correctionProposal.plan_revision_id !== input.attribution.plan_revision_id) {
+        throw new Error('correction_attribution_mismatch');
+      }
+    }
     if (!isIsoDateTime(input.updatedAt)) throw new Error('invalid_feedback_analysis_updated_at');
     if (!input.inputHash.trim()) throw new Error('invalid_feedback_analysis_input_hash');
     const db = this.requireDb();
@@ -2216,6 +2243,33 @@ export class SqliteStore {
            WHERE run_id=? AND plan_id=? AND input_hash=?`
         ).run(input.runStatus, input.attribution ? JSON.stringify(input.attribution) : null, input.modelJobId, input.contentOrigin, input.updatedAt, input.runId, input.planId, input.inputHash);
         if (updated.changes !== 1) throw new StoreProtectedError('attribution_run_input_hash_mismatch');
+      }
+      if (input.correctionProposal) {
+        const allowedObservationIds = new Set(input.attribution?.hypotheses.flatMap((item) => item.observation_ids) ?? []);
+        if (input.correctionProposal.observation_ids.some((id) => !allowedObservationIds.has(id))) {
+          throw new FeedbackSourceMissingError();
+        }
+        const correctionRecord: CorrectionRecord = {
+          proposal: input.correctionProposal,
+          decisionEvents: [],
+          currentStatus: 'proposed',
+          stateRevision: 0,
+          createdAt: input.updatedAt,
+          updatedAt: input.updatedAt
+        };
+        const recordErrors = validateCorrectionRecord(correctionRecord);
+        if (recordErrors.length) throw new Error(`invalid_correction_record:${recordErrors.join('|')}`);
+        db.prepare(
+          `INSERT INTO correction_proposal(proposal_id,workspace_id,plan_id,proposal_json,state_revision,created_at,updated_at)
+           VALUES(?,?,?,?,0,?,?)`
+        ).run(
+          input.correctionProposal.change_id,
+          input.workspaceId,
+          input.planId,
+          JSON.stringify(correctionRecord),
+          input.updatedAt,
+          input.updatedAt
+        );
       }
       if (input.advanceRevision) db.prepare('UPDATE feedback_stream SET revision=?,updated_at=? WHERE plan_id=?').run(finalRevision, input.updatedAt, input.planId);
       db.prepare("UPDATE feedback_idempotency SET status='succeeded',result_json=?,updated_at=? WHERE key=?").run(JSON.stringify(input.result), input.updatedAt, input.idempotencyKey);
@@ -2270,6 +2324,187 @@ export class SqliteStore {
       };
     });
     return { measurementReviews, attributionRuns };
+  }
+
+  getFeedbackCorrectionHistory(planId: string): FeedbackCorrectionHistory {
+    const db = this.requireDb();
+    const correctionRows = db
+      .prepare('SELECT proposal_json proposalJson FROM correction_proposal WHERE plan_id=? ORDER BY created_at,proposal_id')
+      .all(planId) as Array<{ proposalJson: string }>;
+    const corrections = correctionRows.map((row) => {
+      let value: unknown;
+      try { value = JSON.parse(row.proposalJson) as unknown; } catch { throw new StoreProtectedError('invalid_stored_correction:json'); }
+      const errors = validateCorrectionRecord(value);
+      if (errors.length) throw new StoreProtectedError(`invalid_stored_correction:${errors.join('|')}`);
+      return value as CorrectionRecord;
+    });
+    const preferenceRows = db
+      .prepare('SELECT event_json eventJson FROM preference_event WHERE plan_id=? ORDER BY created_at,event_id')
+      .all(planId) as Array<{ eventJson: string }>;
+    const preferenceEvents = preferenceRows.map((row) => {
+      let value: unknown;
+      try { value = JSON.parse(row.eventJson) as unknown; } catch { throw new StoreProtectedError('invalid_stored_preference_event:json'); }
+      const errors = validatePreferenceEvent(value);
+      if (errors.length) throw new StoreProtectedError(`invalid_stored_preference_event:${errors.join('|')}`);
+      return value as FeedbackCorrectionHistory['preferenceEvents'][number];
+    });
+    const effectRows = db
+      .prepare('SELECT event_json eventJson FROM effect_evidence_event WHERE plan_id=? ORDER BY created_at,event_id')
+      .all(planId) as Array<{ eventJson: string }>;
+    const effectEvents = effectRows.map((row) => {
+      let value: unknown;
+      try { value = JSON.parse(row.eventJson) as unknown; } catch { throw new StoreProtectedError('invalid_stored_effect_event:json'); }
+      const errors = validateEffectEvidenceEvent(value);
+      if (errors.length) throw new StoreProtectedError(`invalid_stored_effect_event:${errors.join('|')}`);
+      return value as FeedbackCorrectionHistory['effectEvents'][number];
+    });
+    const tombstoneRows = db
+      .prepare('SELECT backup_scope_json valueJson FROM observation_tombstone WHERE plan_id=? ORDER BY deleted_at,observation_id')
+      .all(planId) as Array<{ valueJson: string }>;
+    const observationTombstones = tombstoneRows.map((row) => {
+      let value: unknown;
+      try { value = JSON.parse(row.valueJson) as unknown; } catch { throw new StoreProtectedError('invalid_stored_observation_tombstone:json'); }
+      return parseObservationDeleteResult(value, 'invalid_stored_observation_tombstone');
+    });
+    let state: Pick<FeedbackCorrectionHistory, 'preferenceState' | 'effectState' | 'preferenceEvents' | 'effectEvents'> = {
+      preferenceState: {}, effectState: 'unknown', preferenceEvents: [], effectEvents: []
+    };
+    for (const event of preferenceEvents) state = applyPreferenceEvent(state, event);
+    for (const event of effectEvents) state = applyEffectEvidence(state, event);
+    return { corrections, observationTombstones, ...state };
+  }
+
+  commitCorrectionDecision(input: CommitCorrectionDecisionInput): CorrectionDecisionResult {
+    this.assertWritable();
+    const decisionErrors = validateCorrectionDecisionEvent(input.decisionEvent);
+    if (decisionErrors.length) throw new Error(`invalid_correction_decision:${decisionErrors.join('|')}`);
+    if (input.preferenceEvent) {
+      const errors = validatePreferenceEvent(input.preferenceEvent);
+      if (errors.length) throw new Error(`invalid_preference_event:${errors.join('|')}`);
+    }
+    if (input.effectEvent) {
+      const errors = validateEffectEvidenceEvent(input.effectEvent);
+      if (errors.length) throw new Error(`invalid_effect_event:${errors.join('|')}`);
+    }
+    if (input.lessonChangeSuggestion) {
+      const errors = validateLessonChange(input.lessonChangeSuggestion);
+      if (errors.length) throw new Error(`invalid_lesson_change_suggestion:${errors.join('|')}`);
+    }
+    if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0 ||
+        !Number.isSafeInteger(input.expectedProposalRevision) || input.expectedProposalRevision < 0) {
+      throw new Error('invalid_correction_revision');
+    }
+    if (!input.idempotencyKey.trim() || !input.fingerprint.trim() || !isIsoDateTime(input.updatedAt)) {
+      throw new Error('invalid_correction_identity');
+    }
+    if (input.decisionEvent.proposal_id !== input.proposalId ||
+        input.preferenceEvent && input.preferenceEvent.proposal_id !== input.proposalId ||
+        input.effectEvent && input.effectEvent.proposal_id !== input.proposalId) {
+      throw new Error('correction_event_identity_mismatch');
+    }
+    const operation = input.decisionEvent.action === 'revert' ? 'corrections.revert' : 'corrections.decide';
+    const db = this.requireDb();
+    const tx = db.transaction((): CorrectionDecisionResult => {
+      const existing = db
+        .prepare('SELECT fingerprint,operation,status,result_json resultJson FROM feedback_idempotency WHERE key=?')
+        .get(input.idempotencyKey) as { fingerprint: string; operation: string; status: string; resultJson: string | null } | undefined;
+      if (existing) {
+        if (existing.fingerprint !== input.fingerprint || existing.operation !== operation) throw new FeedbackKeyReuseError();
+        if (existing.status !== 'succeeded' || !existing.resultJson) throw new StoreProtectedError('correction_idempotency_incomplete');
+        let parsed: unknown;
+        try { parsed = JSON.parse(existing.resultJson) as unknown; } catch { throw new StoreProtectedError('invalid_correction_idempotency:json'); }
+        if (!isRecord(parsed) || parsed.proposalId !== input.proposalId ||
+            !Number.isSafeInteger(parsed.stateRevision) || !Number.isSafeInteger(parsed.streamRevision) ||
+            !['accepted', 'rejected', 'reverted'].includes(String(parsed.currentStatus)) ||
+            typeof parsed.preferenceState !== 'object' || parsed.preferenceState === null ||
+            !['unknown', 'initial_support', 'repeated_support', 'disconfirmed'].includes(String(parsed.effectState))) {
+          throw new StoreProtectedError('invalid_correction_idempotency_result');
+        }
+        return { ...(parsed as unknown as CorrectionDecisionResult), replayed: true };
+      }
+
+      const stream = db.prepare('SELECT workspace_id workspaceId,revision FROM feedback_stream WHERE plan_id=?')
+        .get(input.planId) as { workspaceId: string; revision: number } | undefined;
+      if (!stream || stream.workspaceId !== input.workspaceId) throw new FeedbackSourceMissingError();
+      if (stream.revision !== input.expectedRevision) throw new FeedbackVersionConflictError();
+      const row = db.prepare(
+        'SELECT workspace_id workspaceId,proposal_json proposalJson,state_revision stateRevision,created_at createdAt FROM correction_proposal WHERE proposal_id=? AND plan_id=?'
+      ).get(input.proposalId, input.planId) as { workspaceId: string; proposalJson: string; stateRevision: number; createdAt: string } | undefined;
+      if (!row || row.workspaceId !== input.workspaceId) throw new FeedbackSourceMissingError();
+      if (row.stateRevision !== input.expectedProposalRevision) throw new CorrectionVersionConflictError();
+      let stored: unknown;
+      try { stored = JSON.parse(row.proposalJson) as unknown; } catch { throw new StoreProtectedError('invalid_stored_correction:json'); }
+      const storedErrors = validateCorrectionRecord(stored);
+      if (storedErrors.length) throw new StoreProtectedError(`invalid_stored_correction:${storedErrors.join('|')}`);
+      const current = stored as CorrectionRecord;
+      for (const observationId of current.proposal.observation_ids) {
+        const observation = db.prepare(
+          'SELECT 1 FROM learning_observation WHERE observation_id=? AND workspace_id=? AND plan_id=?'
+        ).get(observationId, input.workspaceId, input.planId);
+        if (!observation) throw new FeedbackSourceMissingError();
+      }
+      if (input.decisionEvent.state_revision !== current.stateRevision + 1) throw new CorrectionVersionConflictError();
+      const decisionEvents = [...current.decisionEvents, input.decisionEvent];
+      let currentStatus;
+      try { currentStatus = deriveCorrectionStatus(decisionEvents); } catch { throw new CorrectionVersionConflictError(); }
+      const updatedRecord: CorrectionRecord = {
+        ...current, decisionEvents, currentStatus,
+        stateRevision: current.stateRevision + 1,
+        updatedAt: input.updatedAt
+      };
+      const updated = db.prepare(
+        'UPDATE correction_proposal SET proposal_json=?,state_revision=?,updated_at=? WHERE proposal_id=? AND plan_id=? AND state_revision=?'
+      ).run(JSON.stringify(updatedRecord), updatedRecord.stateRevision, input.updatedAt, input.proposalId, input.planId, input.expectedProposalRevision);
+      if (updated.changes !== 1) throw new CorrectionVersionConflictError();
+      this.feedbackFaults?.afterCorrectionProposalUpdate?.();
+
+      const before = this.getFeedbackCorrectionHistory(input.planId);
+      let evidence = {
+        preferenceState: before.preferenceState,
+        effectState: before.effectState,
+        preferenceEvents: before.preferenceEvents,
+        effectEvents: before.effectEvents
+      };
+      if (input.preferenceEvent) {
+        db.prepare(
+          'INSERT INTO preference_event(event_id,workspace_id,plan_id,proposal_id,event_json,created_at) VALUES(?,?,?,?,?,?)'
+        ).run(input.preferenceEvent.event_id, input.workspaceId, input.planId, input.proposalId, JSON.stringify(input.preferenceEvent), input.preferenceEvent.created_at);
+        this.feedbackFaults?.afterPreferenceInsert?.();
+        evidence = applyPreferenceEvent(evidence, input.preferenceEvent);
+      }
+      if (input.effectEvent) {
+        for (const observationId of input.effectEvent.observation_ids) {
+          const observation = db.prepare(
+            'SELECT 1 FROM learning_observation WHERE observation_id=? AND workspace_id=? AND plan_id=?'
+          ).get(observationId, input.workspaceId, input.planId);
+          if (!observation) throw new FeedbackSourceMissingError();
+        }
+        evidence = applyEffectEvidence(evidence, input.effectEvent);
+        db.prepare(
+          'INSERT INTO effect_evidence_event(event_id,workspace_id,plan_id,proposal_id,event_json,created_at) VALUES(?,?,?,?,?,?)'
+        ).run(input.effectEvent.event_id, input.workspaceId, input.planId, input.proposalId, JSON.stringify(input.effectEvent), input.effectEvent.created_at);
+        this.feedbackFaults?.afterEffectInsert?.();
+      }
+      const nextRevision = stream.revision + 1;
+      db.prepare('UPDATE feedback_stream SET revision=?,updated_at=? WHERE plan_id=?').run(nextRevision, input.updatedAt, input.planId);
+      this.feedbackFaults?.afterFeedbackStreamIncrement?.();
+      const result: CorrectionDecisionResult = {
+        proposalId: input.proposalId,
+        currentStatus,
+        stateRevision: updatedRecord.stateRevision,
+        streamRevision: nextRevision,
+        lessonChangeSuggestion: input.lessonChangeSuggestion,
+        preferenceState: evidence.preferenceState,
+        effectState: evidence.effectState,
+        replayed: false
+      };
+      this.feedbackFaults?.beforeFeedbackIdempotency?.();
+      db.prepare(
+        'INSERT INTO feedback_idempotency(key,fingerprint,operation,status,result_json,updated_at) VALUES(?,?,?,?,?,?)'
+      ).run(input.idempotencyKey, input.fingerprint, operation, 'succeeded', JSON.stringify(result), input.updatedAt);
+      return result;
+    });
+    return tx.immediate();
   }
 
   // ===== G04 模型配置/作业持久化 =====

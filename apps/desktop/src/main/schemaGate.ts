@@ -183,6 +183,31 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     required: ['planId', 'teachingEventId', 'observationIds', 'dispatchConsent'],
     additionalProperties: false
   },
+  'corrections.decide': {
+    type: 'object',
+    properties: {
+      planId: { type: 'string', minLength: 1, maxLength: 128 },
+      proposalId: { type: 'string', minLength: 1, maxLength: 128 },
+      decision: { type: 'string', minLength: 1, maxLength: 16 },
+      reason: { type: 'string', minLength: 1, maxLength: 2000 },
+      expectedProposalRevision: { type: 'integer', nonNegative: true },
+      preference: { type: 'object' },
+      effect: { type: 'object' }
+    },
+    required: ['planId', 'proposalId', 'decision', 'reason', 'expectedProposalRevision'],
+    additionalProperties: false
+  },
+  'corrections.revert': {
+    type: 'object',
+    properties: {
+      planId: { type: 'string', minLength: 1, maxLength: 128 },
+      proposalId: { type: 'string', minLength: 1, maxLength: 128 },
+      reason: { type: 'string', minLength: 1, maxLength: 2000 },
+      expectedProposalRevision: { type: 'integer', nonNegative: true }
+    },
+    required: ['planId', 'proposalId', 'reason', 'expectedProposalRevision'],
+    additionalProperties: false
+  },
   'observations.add': {
     type: 'object',
     properties: {

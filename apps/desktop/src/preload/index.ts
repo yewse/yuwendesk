@@ -21,6 +21,9 @@ import type {
   FeedbackHistory,
   FeedbackAnalysisHistory,
   FeedbackAnalysisResult,
+  FeedbackCorrectionHistory,
+  CorrectionDecisionResult,
+  EffectEvidenceState,
   FeedbackKnowledgeState,
   FeedbackWriteResult,
   ImplementationState,
@@ -147,7 +150,7 @@ const api = {
       payload
     }),
   feedbackHistory: (planId: string) =>
-    call<FeedbackHistory & Partial<FeedbackAnalysisHistory>>('feedback.history', {
+    call<FeedbackHistory & Partial<FeedbackAnalysisHistory & FeedbackCorrectionHistory>>('feedback.history', {
       workspace_id: 'workspace_default',
       payload: { planId }
     }),
@@ -165,6 +168,28 @@ const api = {
       idempotency_key: idempotencyKey,
       payload: { planId, teachingEventId, observationIds, dispatchConsent }
     }),
+  decideCorrection: (
+    payload: {
+      planId: string;
+      proposalId: string;
+      decision: 'accept' | 'reject';
+      reason: string;
+      expectedProposalRevision: number;
+      preference?: { preferenceKey: string; value: string; reason: string };
+      effect?: { state: EffectEvidenceState; observationIds: string[] };
+    },
+    expectedRevision: number,
+    idempotencyKey: string
+  ) => call<CorrectionDecisionResult>('corrections.decide', {
+    workspace_id: 'workspace_default', expected_revision: expectedRevision, idempotency_key: idempotencyKey, payload
+  }),
+  revertCorrection: (
+    payload: { planId: string; proposalId: string; reason: string; expectedProposalRevision: number },
+    expectedRevision: number,
+    idempotencyKey: string
+  ) => call<CorrectionDecisionResult>('corrections.revert', {
+    workspace_id: 'workspace_default', expected_revision: expectedRevision, idempotency_key: idempotencyKey, payload
+  }),
   addObservation: (
     payload: {
       planId: string;

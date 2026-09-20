@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { FeedbackAnalysisResult, MeasurementReview, TeachingEvent } from '../src/main/feedback/types';
+import type { CorrectionRecord, FeedbackAnalysisResult, MeasurementReview, TeachingEvent } from '../src/main/feedback/types';
 import {
   OBSERVATION_OUTCOME_OPTIONS,
   buildAnalysisView,
+  buildCorrectionCard,
+  buildEvidenceTrackView,
   buildObservationPrompt,
   buildTeachingStatus,
   teachingSubmissionKey
@@ -114,5 +116,36 @@ describe('G08 feedback renderer view model', () => {
       teachingEventId: 'teach_1',
       knowledgeLabel: '尚无反馈'
     });
+  });
+
+  it('renders all correction fields and keeps preference separate from effect evidence', () => {
+    const correction: CorrectionRecord = {
+      proposal: {
+        change_id: 'correction_1', plan_revision_id: 'revision_1', observation_ids: ['observation_1'],
+        hypothesis: '待验证：提示可能遮蔽独立表现。', replacement_action: '替换为先独立找证据再核对',
+        removed_or_reduced: '减少一次完整示范', predicted_evidence: '相似新材料中独立完成',
+        disconfirming_evidence: '撤去提示后仍不能完成', next_normal_task: '下一篇正常阅读任务',
+        return_modules: ['M06', 'M11', 'M12'], status: 'proposed'
+      },
+      decisionEvents: [], currentStatus: 'proposed', stateRevision: 0,
+      createdAt: '2026-09-20T09:00:00.000Z', updatedAt: '2026-09-20T09:00:00.000Z'
+    };
+    expect(buildCorrectionCard(correction)).toMatchObject({
+      hypothesis: correction.proposal.hypothesis,
+      replacementAction: correction.proposal.replacement_action,
+      removedOrReduced: correction.proposal.removed_or_reduced,
+      predictedEvidence: correction.proposal.predicted_evidence,
+      disconfirmingEvidence: correction.proposal.disconfirming_evidence,
+      nextNormalTask: correction.proposal.next_normal_task,
+      canAccept: true,
+      canReject: true,
+      canRevert: false
+    });
+    expect(buildEvidenceTrackView({ preferenceState: { default_link_count: '1' }, effectState: 'initial_support' })).toEqual({
+      preferenceLabel: '表达偏好：default_link_count=1',
+      effectLabel: '有限条件下的初步证据（非效果证明）'
+    });
+    expect(buildEvidenceTrackView({ preferenceState: { default_link_count: '2' }, effectState: 'initial_support' }).effectLabel)
+      .toBe('有限条件下的初步证据（非效果证明）');
   });
 });

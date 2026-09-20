@@ -471,9 +471,40 @@ h1 {
 }
 .observation-panel,
 .observation-history,
-.attribution-panel {
+.attribution-panel,
+.correction-panel {
   margin-top: 16px;
 }
+.evidence-tracks {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.evidence-tracks span {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fbfcff;
+}
+.correction-card {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.correction-fields {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.correction-fields div { display: grid; grid-template-columns: 110px 1fr; gap: 10px; }
+.correction-fields dt { color: var(--muted); font-size: 12px; }
+.correction-fields dd { margin: 0; font-size: 13px; }
+.actions-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .dispatch-consent {
   display: flex;
   align-items: flex-start;

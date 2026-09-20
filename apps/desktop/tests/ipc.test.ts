@@ -204,6 +204,8 @@ describe('白名单与目录一致性', () => {
       'plans.recordTeaching',
       'feedback.analyze',
       'feedback.history',
+      'corrections.decide',
+      'corrections.revert',
       'observations.add',
       'observations.list',
       'observations.prepareDelete',

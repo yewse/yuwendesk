@@ -1,3 +1,5 @@
+import type { LessonChange } from '../change/types';
+
 export type ImplementationState = 'completed' | 'partial' | 'stopped';
 
 export interface TeachingEvent {
@@ -287,10 +289,108 @@ export interface FinishFeedbackAnalysisInput {
   inputHash: string;
   runStatus: Exclude<AttributionRunStatus, 'running' | 'stale'>;
   attribution: AttributionResult | null;
+  correctionProposal: CorrectionProposal | null;
   result: FeedbackAnalysisResult;
   modelJobId: string | null;
   contentOrigin: AttributionContentOrigin | null;
   advanceRevision: boolean;
+  updatedAt: string;
+}
+
+export type FeedbackReturnModule =
+  | 'M01' | 'M02' | 'M03' | 'M04' | 'M05' | 'M06'
+  | 'M07' | 'M08' | 'M09' | 'M10' | 'M11' | 'M12';
+export type CorrectionStatus = 'proposed' | 'accepted' | 'rejected' | 'reverted' | 'supported_with_limits';
+
+export interface CorrectionProposal {
+  change_id: string;
+  plan_revision_id: string;
+  observation_ids: string[];
+  hypothesis: string;
+  replacement_action: string;
+  removed_or_reduced: string;
+  predicted_evidence: string;
+  disconfirming_evidence: string;
+  next_normal_task: string;
+  return_modules: FeedbackReturnModule[];
+  status: CorrectionStatus;
+}
+
+export interface PreferenceEvent {
+  event_id: string;
+  proposal_id: string;
+  action: 'set' | 'revert';
+  preference_key: string;
+  value: string | null;
+  reason: string;
+  created_at: string;
+}
+
+export type EffectEvidenceState = 'unknown' | 'initial_support' | 'repeated_support' | 'disconfirmed';
+
+export interface EffectEvidenceEvent {
+  event_id: string;
+  proposal_id: string;
+  state: EffectEvidenceState;
+  observation_ids: string[];
+  conditions: string;
+  is_effectiveness_proof: false;
+  created_at: string;
+}
+
+export interface EvidenceTrackState {
+  preferenceState: Record<string, string | null>;
+  effectState: EffectEvidenceState;
+  preferenceEvents: PreferenceEvent[];
+  effectEvents: EffectEvidenceEvent[];
+}
+
+export interface CorrectionDecisionEvent {
+  event_id: string;
+  proposal_id: string;
+  action: 'accept' | 'reject' | 'revert';
+  reason: string;
+  state_revision: number;
+  created_at: string;
+}
+
+export interface CorrectionRecord {
+  proposal: CorrectionProposal;
+  decisionEvents: CorrectionDecisionEvent[];
+  currentStatus: CorrectionStatus;
+  stateRevision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FeedbackCorrectionHistory extends EvidenceTrackState {
+  corrections: CorrectionRecord[];
+  observationTombstones: ObservationDeleteResult[];
+}
+
+export interface CorrectionDecisionResult {
+  proposalId: string;
+  currentStatus: CorrectionStatus;
+  stateRevision: number;
+  streamRevision: number;
+  lessonChangeSuggestion: LessonChange | null;
+  preferenceState: Record<string, string | null>;
+  effectState: EffectEvidenceState;
+  replayed: boolean;
+}
+
+export interface CommitCorrectionDecisionInput {
+  workspaceId: string;
+  planId: string;
+  proposalId: string;
+  expectedRevision: number;
+  expectedProposalRevision: number;
+  idempotencyKey: string;
+  fingerprint: string;
+  decisionEvent: CorrectionDecisionEvent;
+  preferenceEvent: PreferenceEvent | null;
+  effectEvent: EffectEvidenceEvent | null;
+  lessonChangeSuggestion: LessonChange | null;
   updatedAt: string;
 }
 
@@ -305,6 +405,13 @@ export class FeedbackVersionConflictError extends Error {
   constructor() {
     super('FEEDBACK_VERSION_CONFLICT');
     this.name = 'FeedbackVersionConflictError';
+  }
+}
+
+export class CorrectionVersionConflictError extends Error {
+  constructor() {
+    super('CORRECTION_VERSION_CONFLICT');
+    this.name = 'CorrectionVersionConflictError';
   }
 }
 
