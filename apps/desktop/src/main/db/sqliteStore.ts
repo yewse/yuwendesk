@@ -90,7 +90,8 @@ import {
   isSecureSafeStorage,
   type SafeStorageLike
 } from '../crypto/secrets';
-import type { BackupKind, SnapshotSummary } from '../protection/types';
+import type { BackupKind, ProtectionFaultHooks, SnapshotSummary } from '../protection/types';
+import type { DiagnosticsStorageSnapshot } from '../protection/diagnostics';
 import {
   encryptSensitiveSourcePayload,
   type EncryptedSensitiveSourcePayload,
@@ -126,7 +127,10 @@ export interface FeedbackCommitFaultHooks {
 }
 
 // 仅供 G09 敏感资料事务回滚测试使用；生产不配置。
-export interface SourcePrivacyFaultHooks {
+export interface SourcePrivacyFaultHooks extends Pick<
+  ProtectionFaultHooks,
+  'afterSensitiveCiphertextInsert' | 'afterFtsCleanup' | 'duringPermanentDeletion'
+> {
   afterCiphertextInsert?: () => void;
   afterFtsCleanup?: () => void;
   afterSegmentCleanup?: () => void;
@@ -666,6 +670,28 @@ const MIGRATIONS: Migration[] = [
         ALTER TABLE source_document ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
         INSERT INTO source_fts(source_fts, rank) VALUES('secure-delete', 1);
         INSERT INTO source_seg_fts(source_seg_fts, rank) VALUES('secure-delete', 1);
+      `);
+    }
+  },
+  {
+    version: 12,
+    up: (db) => {
+      // G09 最小诊断只保存内容无关的维护代码、时间与计数；不保存 Error/message/stack/path。
+      db.exec(`
+        CREATE TABLE maintenance_state (
+          id                     INTEGER PRIMARY KEY CHECK (id = 1),
+          last_backup_code       TEXT,
+          last_restore_code      TEXT,
+          repeated_failure_count INTEGER NOT NULL DEFAULT 0,
+          updated_at             TEXT NOT NULL
+        );
+        INSERT INTO maintenance_state(id,last_backup_code,last_restore_code,repeated_failure_count,updated_at)
+        VALUES(1,NULL,NULL,0,'1970-01-01T00:00:00.000Z');
+        CREATE TABLE maintenance_error_count (
+          code       TEXT PRIMARY KEY,
+          count      INTEGER NOT NULL,
+          updated_at TEXT NOT NULL
+        );
       `);
     }
   }
@@ -1624,6 +1650,7 @@ export class SqliteStore {
         );
       }
       this.sourcePrivacyFaults?.afterCiphertextInsert?.();
+      this.sourcePrivacyFaults?.afterSensitiveCiphertextInsert?.();
       for (const versionId of versionIds) {
         db.prepare('DELETE FROM source_seg_fts WHERE version_id=?').run(versionId);
         db.prepare('DELETE FROM source_fts WHERE version_id=?').run(versionId);
@@ -1730,6 +1757,7 @@ export class SqliteStore {
       for (const jobId of deletedModelJobIds) db.prepare('DELETE FROM model_job WHERE id=?').run(jobId);
       db.prepare('DELETE FROM source_version WHERE document_id=?').run(input.documentId);
       db.prepare('DELETE FROM source_document WHERE id=?').run(input.documentId);
+      this.sourcePrivacyFaults?.duringPermanentDeletion?.();
       this.sourcePrivacyFaults?.beforeTombstone?.();
       db.prepare(
         `INSERT INTO source_tombstone(
@@ -3305,6 +3333,92 @@ export class SqliteStore {
   schemaVersion(): number {
     if (!this.db) return 0;
     return Number(this.db.pragma('user_version', { simple: true }));
+  }
+
+  diagnosticsSnapshot(): DiagnosticsStorageSnapshot {
+    const db = this.requireDb();
+    const count = (table: string): number => Number(db.prepare(`SELECT COUNT(*) FROM ${table}`).pluck().get());
+    const state = db.prepare(
+      `SELECT last_backup_code lastBackupCode,last_restore_code lastRestoreCode,
+              repeated_failure_count repeatedFailureCount
+       FROM maintenance_state WHERE id=1`
+    ).get() as { lastBackupCode: string | null; lastRestoreCode: string | null; repeatedFailureCount: number };
+    const errors = db.prepare(
+      `SELECT code,SUM(count) count FROM (
+         SELECT code,count FROM maintenance_error_count WHERE count>0
+         UNION ALL
+         SELECT error_code code,COUNT(*) count FROM model_job WHERE error_code IS NOT NULL GROUP BY error_code
+         UNION ALL
+         SELECT error_code code,COUNT(*) count FROM lesson_change_idempotency WHERE error_code IS NOT NULL GROUP BY error_code
+       ) GROUP BY code ORDER BY code LIMIT 100`
+    ).all() as Array<{ code: string; count: number }>;
+    return {
+      schemaVersion: this.schemaVersion(),
+      protected: this.isProtected(),
+      credentialEncryption: this.credentialEncryptionAvailable(),
+      objectCounts: {
+        sources: count('source_document'),
+        lessonPlans: count('lesson_plan'),
+        materialBundles: count('material_bundle'),
+        teachingEvents: count('teaching_event'),
+        observations: count('learning_observation'),
+        modelJobs: count('model_job')
+      },
+      maintenance: {
+        lastBackupCode: state.lastBackupCode,
+        lastRestoreCode: state.lastRestoreCode,
+        repeatedFailureCount: state.repeatedFailureCount
+      },
+      errors
+    };
+  }
+
+  recordMaintenanceFailure(input: {
+    scope: 'backup' | 'restore' | 'diagnostics';
+    code: string;
+    automatic?: boolean;
+    at: string;
+  }): void {
+    if (!/^[A-Z][A-Z0-9_]{0,63}$/u.test(input.code) || Number.isNaN(Date.parse(input.at))) {
+      throw new Error('maintenance_status_invalid');
+    }
+    this.withTransaction((db) => {
+      db.prepare(
+        `INSERT INTO maintenance_error_count(code,count,updated_at) VALUES(?,1,?)
+         ON CONFLICT(code) DO UPDATE SET count=count+1,updated_at=excluded.updated_at`
+      ).run(input.code, input.at);
+      if (input.scope === 'backup') {
+        db.prepare(
+          `UPDATE maintenance_state
+           SET last_backup_code=?,repeated_failure_count=repeated_failure_count+?,updated_at=? WHERE id=1`
+        ).run(input.code, input.automatic ? 1 : 0, input.at);
+      } else if (input.scope === 'restore') {
+        db.prepare('UPDATE maintenance_state SET last_restore_code=?,updated_at=? WHERE id=1')
+          .run(input.code, input.at);
+      } else {
+        db.prepare('UPDATE maintenance_state SET updated_at=? WHERE id=1').run(input.at);
+      }
+    });
+  }
+
+  recordMaintenanceSuccess(input: {
+    scope: 'backup' | 'restore';
+    code: string;
+    at: string;
+  }): void {
+    if (!/^[A-Z][A-Z0-9_]{0,63}$/u.test(input.code) || Number.isNaN(Date.parse(input.at))) {
+      throw new Error('maintenance_status_invalid');
+    }
+    this.withTransaction((db) => {
+      if (input.scope === 'backup') {
+        db.prepare(
+          'UPDATE maintenance_state SET last_backup_code=?,repeated_failure_count=0,updated_at=? WHERE id=1'
+        ).run(input.code, input.at);
+      } else {
+        db.prepare('UPDATE maintenance_state SET last_restore_code=?,updated_at=? WHERE id=1')
+          .run(input.code, input.at);
+      }
+    });
   }
 
   async createSanitizedSnapshot(destination: string, mode: BackupKind): Promise<SnapshotSummary> {

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import type { SafeStorageLike } from '../crypto/secrets';
 import type { BackupRecord, BackupService } from './backup';
+import type { ProtectionFaultHooks } from './types';
 import {
   preparePortableRestore,
   writePendingRestore,
@@ -25,6 +26,8 @@ interface ProtectionServiceOptions {
     reserveMaintenanceIdempotency(input: { key: string; fingerprint: string; operation: string; updatedAt: string }): 'reserved' | 'existing';
     saveMaintenanceIdempotency(input: { key: string; fingerprint: string; operation: string; resultJson: string; updatedAt: string }): void;
     maintenanceRequestDigest?(value: string): string;
+    recordMaintenanceFailure?(input: { scope: 'backup' | 'restore' | 'diagnostics'; code: string; automatic?: boolean; at: string }): void;
+    recordMaintenanceSuccess?(input: { scope: 'backup' | 'restore'; code: string; at: string }): void;
   };
   safeStorage?: SafeStorageLike;
   choosePortableSavePath(): Promise<string | null>;
@@ -36,6 +39,7 @@ interface ProtectionServiceOptions {
   writePending?: typeof writePendingRestore;
   ids?: { restoreJobId(): string; token(): string };
   now?: () => number;
+  faults?: Pick<ProtectionFaultHooks, 'beforePendingMarker'>;
 }
 
 type RestorePayload = {
@@ -149,22 +153,44 @@ export class ProtectionService {
     const passphraseDigest = payload.mode === 'portable' && payload.passphrase
       ? (this.options.idempotencyStore?.maintenanceRequestDigest?.(payload.passphrase) ?? createHash('sha256').update(payload.passphrase).digest('hex'))
       : '';
-    return this.once(idempotencyKey, `create:${payload.mode}:${passphraseDigest}`, async () => {
-      if (payload.mode === 'local') return omitLocalPath(await this.options.backup.createLocal());
-      if (payload.mode !== 'portable' || !payload.passphrase) throw new Error('backup_create_invalid');
-      const destination = await this.options.choosePortableSavePath();
-      if (!destination) return { cancelled: true };
-      const exported = await this.options.backup.exportPortable(payload.passphrase);
-      const temporary = `${destination}.partial`;
-      await fs.writeFile(temporary, exported.container);
-      await fs.rename(temporary, destination);
-      return {
-        backupId: exported.manifest.backupId,
-        saved: true,
-        sha256: createHash('sha256').update(exported.container).digest('hex'),
-        byteSize: exported.container.length
-      };
-    }, 'backup.create');
+    try {
+      const result = await this.once(idempotencyKey, `create:${payload.mode}:${passphraseDigest}`, async () => {
+        if (payload.mode === 'local') return omitLocalPath(await this.options.backup.createLocal());
+        if (payload.mode !== 'portable' || !payload.passphrase) throw new Error('backup_create_invalid');
+        const destination = await this.options.choosePortableSavePath();
+        if (!destination) return { cancelled: true };
+        const exported = await this.options.backup.exportPortable(payload.passphrase);
+        const temporary = `${destination}.partial`;
+        await fs.rm(temporary, { force: true });
+        try {
+          await fs.writeFile(temporary, exported.container);
+          await fs.rename(temporary, destination);
+          return {
+            backupId: exported.manifest.backupId,
+            saved: true,
+            sha256: createHash('sha256').update(exported.container).digest('hex'),
+            byteSize: exported.container.length
+          };
+        } finally {
+          await fs.rm(temporary, { force: true });
+        }
+      }, 'backup.create');
+      if (!(result as { cancelled?: boolean }).cancelled) {
+        try {
+          this.options.idempotencyStore?.recordMaintenanceSuccess?.({
+            scope: 'backup', code: 'BACKUP_OK', at: new Date(this.now()).toISOString()
+          });
+        } catch { /* the completed backup remains successful if status metadata cannot be updated */ }
+      }
+      return result;
+    } catch (error) {
+      try {
+        this.options.idempotencyStore?.recordMaintenanceFailure?.({
+          scope: 'backup', code: 'BACKUP_CREATE_FAILED', at: new Date(this.now()).toISOString()
+        });
+      } catch { /* preserve the original operation error */ }
+      throw error;
+    }
   }
 
   async list(): Promise<unknown[]> {
@@ -172,7 +198,8 @@ export class ProtectionService {
   }
 
   async restore(payload: RestorePayload, idempotencyKey?: string): Promise<unknown> {
-    return this.once(idempotencyKey, `restore:${payload.action}:${payload.restoreJobId ?? ''}:${payload.previewHash ?? ''}`, async () => {
+    try {
+      const result = await this.once(idempotencyKey, `restore:${payload.action}:${payload.restoreJobId ?? ''}:${payload.previewHash ?? ''}`, async () => {
       if (payload.action === 'preview') {
         if (!payload.passphrase || !this.options.safeStorage) {
           if (!this.options.prepareRestore) throw new Error('restore_environment_unavailable');
@@ -209,12 +236,31 @@ export class ProtectionService {
           throw new Error('restore_confirmation_invalid');
         }
         grant.consumed = true;
+        this.options.faults?.beforePendingMarker?.();
         await this.writePendingImpl(this.options.userDataDir, prepared, grant);
         this.options.relaunch();
         return { restoreJobId: jobId, restartRequired: true };
       }
       throw new Error('restore_action_invalid');
-    });
+      });
+      if (!(result as { cancelled?: boolean }).cancelled) {
+        try {
+          this.options.idempotencyStore?.recordMaintenanceSuccess?.({
+            scope: 'restore',
+            code: payload.action === 'confirm' ? 'RESTORE_PENDING' : 'RESTORE_PREVIEW_OK',
+            at: new Date(this.now()).toISOString()
+          });
+        } catch { /* a completed stage remains successful if status metadata cannot be updated */ }
+      }
+      return result;
+    } catch (error) {
+      try {
+        this.options.idempotencyStore?.recordMaintenanceFailure?.({
+          scope: 'restore', code: 'RESTORE_FAILED', at: new Date(this.now()).toISOString()
+        });
+      } catch { /* preserve the original operation error */ }
+      throw error;
+    }
   }
 
   async delete(payload: DeletePayload, idempotencyKey?: string): Promise<unknown> {

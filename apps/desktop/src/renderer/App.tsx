@@ -35,6 +35,8 @@ import {
 } from './lessonChangeView';
 import { buildBackupRows, portableBackupNotice, restorePreviewNotice } from './protectionView';
 import { buildSourceDeleteSummary, sensitiveSourceNotice, type SourceDeleteSummary } from './sourcePrivacyView';
+import type { DiagnosticsPreview } from '../main/protection/diagnostics';
+import { diagnosticsPreviewText, diagnosticsSaveEnabled, diagnosticsScopeNotice } from './diagnosticsView';
 
 type NavKey = 'prepare' | 'courses' | 'resources' | 'settings';
 
@@ -2118,6 +2120,61 @@ function ProtectionPanel(): JSX.Element {
   );
 }
 
+function DiagnosticsPanel(): JSX.Element {
+  const [preview, setPreview] = useState<DiagnosticsPreview | null>(null);
+  const [previewHash, setPreviewHash] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function review(): Promise<void> {
+    setBusy(true);
+    const response = await window.yuwen.diagnosticsPreview();
+    if (response.ok) {
+      setPreview(response.data.preview);
+      setPreviewHash(response.data.previewHash);
+      setMessage('请完整核对下方预览；只有当前预览摘要仍匹配时才能保存。');
+    } else {
+      setPreview(null);
+      setPreviewHash(null);
+      setMessage(response.error.message_zh);
+    }
+    setBusy(false);
+  }
+
+  async function save(): Promise<void> {
+    if (!previewHash) return;
+    setBusy(true);
+    const response = await window.yuwen.diagnosticsSave(previewHash, `diagnostics-save-${crypto.randomUUID()}`);
+    if (response.ok) {
+      setMessage(response.data.cancelled ? '已取消保存诊断包。' : '诊断包已按当前预览原子保存；应用没有上传该文件。');
+    } else {
+      setMessage(`${response.error.message_zh} ${response.error.next_action}`);
+      if (response.error.code === 'VERSION_CONFLICT') {
+        setPreview(null);
+        setPreviewHash(null);
+      }
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="card diagnostics-card">
+      <div className="card-title">最小诊断</div>
+      <p className="muted small">{diagnosticsScopeNotice()}</p>
+      <div className="confirm-actions">
+        <button className="btn small" disabled={busy} onClick={() => void review()}>生成并完整预览</button>
+        <button
+          className="btn small"
+          disabled={!diagnosticsSaveEnabled(previewHash, previewHash, busy)}
+          onClick={() => void save()}
+        >保存当前预览</button>
+      </div>
+      {message && <p className="notice small">{message}</p>}
+      {preview && <pre className="diagnostics-preview">{diagnosticsPreviewText(preview)}</pre>}
+    </div>
+  );
+}
+
 function SettingsPage({ boot }: { boot: BootstrapData | null }): JSX.Element {
   return (
     <div className="page">
@@ -2126,6 +2183,7 @@ function SettingsPage({ boot }: { boot: BootstrapData | null }): JSX.Element {
       <div className="grid">
         <ModelPanel />
         <ProtectionPanel />
+        <DiagnosticsPanel />
         <div className="card">
           <div className="card-title">关于</div>
           <ul className="kv">

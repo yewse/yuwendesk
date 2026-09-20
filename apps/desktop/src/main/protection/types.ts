@@ -29,3 +29,17 @@ export interface SnapshotSummary {
   secureKeyRowsRemoved: number;
 }
 
+// Test-only, constructor-injected failure boundaries. Production construction never derives these from
+// environment variables, renderer input, or persisted data.
+export interface ProtectionFaultHooks {
+  afterOnlineSnapshot?: () => void;
+  beforeManifestRename?: () => void;
+  afterPortableKeyWrap?: () => void;
+  beforePendingMarker?: () => void;
+  afterCurrentDatabaseRollbackMove?: () => void;
+  afterCurrentDataRollbackMove?: () => void;
+  afterSensitiveCiphertextInsert?: () => void;
+  afterFtsCleanup?: () => void;
+  duringPermanentDeletion?: () => void;
+  beforeDiagnosticsRename?: () => void;
+}

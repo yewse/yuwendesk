@@ -185,7 +185,7 @@
 - **状态边界**：机器测试只证明事件、事务、IPC、隐私守卫、离线协议与渲染代码边界，不证明一般匿名化能力、真实云模型解释质量、教师实际实施质量或教学有效性；冻结验收未改为 PASS。真实学生材料隐私授权与逐次外发许可、开发态 Electron UI 走查、干净 Windows 安装、真实 API 归因质量、教学专业复核、Office/WPS 保真与正式签名仍为 `BLOCKED_EXTERNAL`。
 - 设计规格：`docs/superpowers/specs/2026-09-20-g08-feedback-attribution-design.md`；实施计划：`docs/superpowers/plans/2026-09-20-g08-feedback-attribution.md`。首版仍不保存学生原始作业正文；Observation 保持 `cloud_allowed=false`。
 
-## G09 保护与恢复 — IN_PROGRESS（T01–T02 本地工程范围完成）
+## G09 保护与恢复 — IN_PROGRESS（T01–T03 本地工程范围完成）
 
 - [x] **G09-T01 WAL 一致快照与原子发布**：新增 `protection` 领域；使用 better-sqlite3 Online Backup API，而非复制主 `.db`。快照经独立 `integrity_check`，删除全部 `credential` 行，再与应用登记的成果文件逐项重算 SHA-256；任何缺失/不符均不发布。备份先写 `.partial`，完整校验后原子改名 `.ready`，列表忽略半成品。
 - [x] **日/周保留与自动触发**：成功业务写入后通知 `BackupCoordinator`，按本地日历日合并为每日最多一次；备份记录日/周标签，轮换保留最近 7 个日点和 4 个周点，并不删除唯一有效恢复点。自动备份失败不回滚已提交业务写入，维护错误保持独立。
@@ -205,10 +205,17 @@
 - **T02 实测（Windows 11 开发主机，Node 24.15.0；全为虚构数据与伪 safeStorage）**：代码复核发现的跨分类绕过、派生明文残留、FTS 残留、备份范围竞态、删除工作流续做、prepare grant 重放与不可读受管备份遗漏均逐项补测试并修复。最终重点定向 **45/45**；全量 Vitest **419 passed / 1 skipped（420 total，49 files）**。主/渲染 typecheck、ESLint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0；覆盖跨服务/跨重启幂等、全部清理边界、文件隔离回滚、备份范围漂移、快照/live 竞态、删除工作流重启续做和不可读备份的保守纳入/显式删除。既有跳过项未改为通过。
 - **T02 外部门/未覆盖**：真实学生资料处理授权、真实 Windows DPAPI、真实设备 SSD/备份介质销毁、已外发/离线副本召回均为 `BLOCKED_EXTERNAL` 或能力外边界；真实 API 不接收敏感资料，真实模型辅助归因仍需逐次隐私授权；教学有效性仍待有资质教师专业复核。本包只证明本地工程边界，不宣称完成上述外部验收。
 
+- [x] **G09-T03 白名单诊断与两阶段导出**：SQLite schema v12 只保存维护错误代码、时间与计数；诊断对象逐字段构造，仅含应用/平台、schema/保护/凭据加密布尔、固定对象计数、备份有效/无效计数、维护代码与错误代码聚合。输出错误码使用闭集，未知值统一合并为 `UNKNOWN`；标题、姓名式文件名、正文、路径、密钥、密文、prompt、模型完整 IO 和自由文本异常不进入预览。`diagnostics.export` 先返回规范 JSON 与 SHA-256，保存对话框返回后、ZIP 回读后及原子 rename 前均重算同一生成时刻下的当前状态；漂移返回 `VERSION_CONFLICT` 且不预留 running 幂等记录。渲染层不能提交路径，主进程原生对话框选址；ZIP 原子发布且精确只有 `diagnostics.json` / `README.txt`，无上传调用。保存幂等结果可跨服务实例重放，同键异摘要拒绝。
+- [x] **集中故障边界与恢复保全**：`ProtectionFaultHooks` 只能经构造器注入，生产不从环境、IPC 或持久数据启用。覆盖 Online Backup 快照后、manifest 发布前、便携密钥封装后、pending marker 前、当前数据库/全部当前数据移入 rollback 后、敏感密文插入后、FTS 清理后、永久删除中途和诊断 rename 前。未发布 `.partial`/临时目录被清理或不可列出；SQLite 故障整体回滚。恢复逐项记录旧 DB/WAL/SHM/materials 的存在与移动状态；旧数据仅部分移动时只逆向恢复已移动项，全部移动后还须组件全集与原 DB SHA-256 可证明，才保全候选并恢复旧数据。发现既有 rollback/marker 或证明失败时停止并保留副本，不自动删除不确定数据。启动错误只显示固定中文恢复说明，不展示异常栈、路径或自由消息。
+- [x] **维护重试截止与可见状态**：自动日备份连续三次失败后停止自动重试，持久记录 `AUTO_BACKUP_FAILED`、次数与时间；手动备份入口仍可用，成功后清零连续计数但不删除历史错误计数。手动备份/恢复只记录固定状态码，状态元数据写失败不反向改写已完成备份/恢复阶段。
+- [x] **窄 IPC、设置页预览和样包说明**：新增单一命名 `diagnostics.export` 的 `preview/save` 动作，schema 拒绝任意路径和额外字段；preload 只暴露两个命名方法。设置页必须先显示完整 JSON 预览，再启用保存，并明确“不包含”范围与“不会自动上传”。`reports/fixtures/g09-diagnostics-sample/README.md` 记录全虚构夹具摘要、精确条目和生成命令；二进制只在临时目录生成并清理。
+- **T03 实测（Windows 11 开发主机，Node 24.15.0；全为虚构状态、canary 与伪 safeStorage）**：计划定向 **93/93**；全量 Vitest **441 passed / 1 skipped（442 total，52 files）**。主/渲染 typecheck、ESLint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0；独立复审 Critical 0 / Important 0，结论 Ready。覆盖八类敏感 canary 搜索、真实 SQLite 全大写自由错误码闭集映射、ZIP 解包复核、零网络调用、保存对话框内状态漂移且零 running 预留、路径拒绝、跨实例幂等、数据库已移动而 materials 未移动的恢复故障、九类其余故障/重启恢复和三次自动重试截止。既有跳过项未改为通过；pdfjs 可选 canvas/standardFontDataUrl 警告仍如实保留。
+- **T03 外部门/未覆盖**：诊断样包没有真实用户内容；真实学生资料隐私授权、逐次外发许可、真实 API 归因质量、教学专业复核、干净 Windows/DPAPI 跨机恢复、真实 Office/WPS、正式签名和开发态 Electron 真实窗口走查仍为 `BLOCKED_EXTERNAL`。不以 canary、Node 测试或构建产物替代这些验收。
+
 ## G10–G11 — NOT_STARTED
 
 升级与性能（G10）、完整发行验收（G11）尚未开始。
 
 ## 下一步
 
-见 `HANDOFF.md`。下一步执行 G09-T03 最小诊断与故障恢复，不重做 G00–G09-T02。扫描件 OCR 未接入则继续阻塞。外部门保留：真实学生材料隐私授权与逐次外发许可、真实跨机 Windows/DPAPI 恢复、开发态 Electron 真实窗口走查、G01 目标环境安装验收、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。
+见 `HANDOFF.md`。下一步执行 G09-T04 注入、越权、归档与资源攻击验证，不重做 G00–G09-T03。扫描件 OCR 未接入则继续阻塞。外部门保留：真实学生材料隐私授权与逐次外发许可、真实跨机 Windows/DPAPI 恢复、开发态 Electron 真实窗口走查、G01 目标环境安装验收、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。

@@ -19,6 +19,7 @@ import type {
 import type { ReviewReport } from '../main/review/types';
 import type { ChangePreview, LessonChange } from '../main/change/types';
 import type { LessonChangeApplyOutcome } from '../main/store';
+import type { DiagnosticSaveResult, DiagnosticsPreview } from '../main/protection/diagnostics';
 import type {
   FeedbackHistory,
   FeedbackAnalysisHistory,
@@ -331,6 +332,15 @@ const api = {
     call<{ backupId: string; deleted: boolean }>('backups.delete', {
       idempotency_key: idempotencyKey,
       payload: { action: 'confirm', backupId, confirmationToken }
+    }),
+  diagnosticsPreview: () =>
+    call<{ preview: DiagnosticsPreview; previewHash: string }>('diagnostics.export', {
+      payload: { action: 'preview' }
+    }),
+  diagnosticsSave: (previewHash: string, idempotencyKey: string) =>
+    call<DiagnosticSaveResult>('diagnostics.export', {
+      idempotency_key: idempotencyKey,
+      payload: { action: 'save', previewHash }
     }),
   // 关闭前刷新握手：主进程在窗口关闭前通知渲染层落盘（带唯一 requestId）；渲染层完成后回执。
   // 仅暴露固定通道，不暴露任意 send/on。返回取消订阅函数，供组件卸载时释放监听。

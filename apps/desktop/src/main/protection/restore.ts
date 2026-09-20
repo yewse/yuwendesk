@@ -7,7 +7,7 @@ import { SqliteStore, SQLITE_SCHEMA_TARGET } from '../db/sqliteStore';
 import { inspectArchive } from './archive';
 import { openPortableArchive } from './envelope';
 import { validateBackupManifest, verifyBackupDirectory } from './manifest';
-import type { BackupManifest } from './types';
+import type { BackupManifest, ProtectionFaultHooks } from './types';
 
 export interface RestorePreview {
   backupId: string;
@@ -150,15 +150,67 @@ export async function writePendingRestore(userDataDir: string, prepared: Prepare
   await fs.rename(temporary, path);
 }
 
-async function moveIfExists(from: string, to: string): Promise<void> {
-  if (!existsSync(from)) return;
+async function moveIfExists(from: string, to: string): Promise<boolean> {
+  if (!existsSync(from)) return false;
   await fs.mkdir(dirname(to), { recursive: true });
   await fs.rename(from, to);
+  return true;
+}
+
+function databaseLooksUsable(databasePath: string): boolean {
+  if (!existsSync(databasePath)) return false;
+  let db: Database.Database | null = null;
+  try {
+    db = new Database(databasePath, { readonly: true });
+    return db.pragma('integrity_check', { simple: true }) === 'ok' &&
+      Number(db.pragma('user_version', { simple: true })) <= SQLITE_SCHEMA_TARGET;
+  } catch {
+    return false;
+  } finally {
+    db?.close();
+  }
+}
+
+async function fileSha256(path: string): Promise<string | null> {
+  try {
+    return createHash('sha256').update(await fs.readFile(path)).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
+interface RestoreComponent {
+  name: 'database' | 'wal' | 'shm' | 'materials';
+  current: string;
+  rollback: string;
+  wasPresent: boolean;
+}
+
+function partialOldMoveIsProven(components: RestoreComponent[], moved: Set<RestoreComponent['name']>): boolean {
+  return components.every((component) => {
+    if (!component.wasPresent) return !existsSync(component.current) && !existsSync(component.rollback);
+    if (moved.has(component.name)) return !existsSync(component.current) && existsSync(component.rollback);
+    return existsSync(component.current) && !existsSync(component.rollback);
+  });
+}
+
+function completeOldRollbackIsProven(components: RestoreComponent[], currentMustBeEmpty: boolean): boolean {
+  return components.every((component) => {
+    const rollbackMatches = component.wasPresent ? existsSync(component.rollback) : !existsSync(component.rollback);
+    return rollbackMatches && (!currentMustBeEmpty || !existsSync(component.current));
+  });
+}
+
+function originalIsRestored(components: RestoreComponent[]): boolean {
+  return components.every((component) => component.wasPresent
+    ? existsSync(component.current) && !existsSync(component.rollback)
+    : !existsSync(component.current) && !existsSync(component.rollback));
 }
 
 export async function applyPendingRestoreBeforeOpen(
   userDataDir: string,
-  validateInstalled: (userDataDir: string) => Promise<boolean>
+  validateInstalled: (userDataDir: string) => Promise<boolean>,
+  faults?: Pick<ProtectionFaultHooks, 'afterCurrentDatabaseRollbackMove' | 'afterCurrentDataRollbackMove'>
 ): Promise<{ status: 'none' | 'applied' | 'rolled_back'; jobId?: string }> {
   const markerPath = join(userDataDir, 'pending-restore.json');
   if (!existsSync(markerPath)) return { status: 'none' };
@@ -168,29 +220,86 @@ export async function applyPendingRestoreBeforeOpen(
   const expected = resolve(userDataDir, 'restore-staging', marker.jobId, 'userData');
   if (staged !== expected || !inside(userDataDir, staged)) throw new Error('restore_marker_invalid');
   const rollback = join(userDataDir, 'restore-rollback', marker.jobId);
-  await fs.rm(rollback, { recursive: true, force: true });
-  await fs.mkdir(rollback, { recursive: true });
+  // A marker plus an existing rollback directory means a previous switch may have been interrupted. Never erase
+  // that evidence/data to retry automatically; preserve every copy for the protected recovery path.
+  if (existsSync(rollback)) throw new Error('restore_recovery_required');
   const currentDb = join(userDataDir, 'yuwendesk.db');
   const currentMaterials = join(userDataDir, 'materials');
+  const stagedDb = join(staged, 'yuwendesk.db');
+  if (!databaseLooksUsable(stagedDb)) throw new Error('restore_stage_invalid');
+  const originalDatabasePresent = existsSync(currentDb);
+  if (originalDatabasePresent && !databaseLooksUsable(currentDb)) throw new Error('restore_rollback_invalid');
+  const originalDatabaseHash = originalDatabasePresent ? await fileSha256(currentDb) : null;
+  if (originalDatabasePresent && !originalDatabaseHash) throw new Error('restore_rollback_invalid');
+  await fs.mkdir(rollback, { recursive: true });
+  const components: RestoreComponent[] = [
+    { name: 'database', current: currentDb, rollback: join(rollback, 'yuwendesk.db'), wasPresent: existsSync(currentDb) },
+    { name: 'wal', current: `${currentDb}-wal`, rollback: join(rollback, 'yuwendesk.db-wal'), wasPresent: existsSync(`${currentDb}-wal`) },
+    { name: 'shm', current: `${currentDb}-shm`, rollback: join(rollback, 'yuwendesk.db-shm'), wasPresent: existsSync(`${currentDb}-shm`) },
+    { name: 'materials', current: currentMaterials, rollback: join(rollback, 'materials'), wasPresent: existsSync(currentMaterials) }
+  ];
+  const movedOld = new Set<RestoreComponent['name']>();
+  let oldMoveComplete = false;
   try {
-    await moveIfExists(currentDb, join(rollback, 'yuwendesk.db'));
-    await moveIfExists(`${currentDb}-wal`, join(rollback, 'yuwendesk.db-wal'));
-    await moveIfExists(`${currentDb}-shm`, join(rollback, 'yuwendesk.db-shm'));
-    await moveIfExists(currentMaterials, join(rollback, 'materials'));
-    await moveIfExists(join(staged, 'yuwendesk.db'), currentDb);
+    for (const component of components) {
+      if (!component.wasPresent) continue;
+      await fs.mkdir(dirname(component.rollback), { recursive: true });
+      await fs.rename(component.current, component.rollback);
+      movedOld.add(component.name);
+      if (component.name === 'database') faults?.afterCurrentDatabaseRollbackMove?.();
+    }
+    oldMoveComplete = true;
+    if (!completeOldRollbackIsProven(components, true) ||
+        (components[0].wasPresent && await fileSha256(components[0].rollback) !== originalDatabaseHash)) {
+      throw new Error('restore_rollback_invalid');
+    }
+    faults?.afterCurrentDataRollbackMove?.();
+    await moveIfExists(stagedDb, currentDb);
     await moveIfExists(join(staged, 'materials'), currentMaterials);
     if (!(await validateInstalled(userDataDir))) throw new Error('restore_post_switch_validation_failed');
     await fs.rm(markerPath, { force: true });
     return { status: 'applied', jobId: marker.jobId };
   } catch {
-    await fs.rm(currentDb, { force: true });
-    await fs.rm(`${currentDb}-wal`, { force: true });
-    await fs.rm(`${currentDb}-shm`, { force: true });
-    await fs.rm(currentMaterials, { recursive: true, force: true });
-    await moveIfExists(join(rollback, 'yuwendesk.db'), currentDb);
-    await moveIfExists(join(rollback, 'yuwendesk.db-wal'), `${currentDb}-wal`);
-    await moveIfExists(join(rollback, 'yuwendesk.db-shm'), `${currentDb}-shm`);
-    await moveIfExists(join(rollback, 'materials'), currentMaterials);
+    if (!oldMoveComplete) {
+      // The candidate has not started. Prove the exact split, then undo only successful old-data moves.
+      // Never sweep still-current original components into restore-failed.
+      if (!partialOldMoveIsProven(components, movedOld)) throw new Error('restore_recovery_required');
+      const oldDatabase = components[0];
+      if (oldDatabase.wasPresent) {
+        const databasePath = movedOld.has('database') ? oldDatabase.rollback : oldDatabase.current;
+        if (await fileSha256(databasePath) !== originalDatabaseHash) throw new Error('restore_rollback_invalid');
+      }
+      for (const component of [...components].reverse()) {
+        if (movedOld.has(component.name)) await fs.rename(component.rollback, component.current);
+      }
+      if (!originalIsRestored(components) ||
+          (components[0].wasPresent && await fileSha256(components[0].current) !== originalDatabaseHash)) {
+        throw new Error('restore_recovery_required');
+      }
+    } else {
+      // All old components must still be complete in rollback before preserving a failed candidate.
+      if (!completeOldRollbackIsProven(components, false) ||
+          (components[0].wasPresent && await fileSha256(components[0].rollback) !== originalDatabaseHash)) {
+        throw new Error('restore_rollback_invalid');
+      }
+      const failed = join(userDataDir, 'restore-failed', marker.jobId);
+      const hasCandidate = components.some((component) => existsSync(component.current));
+      if (hasCandidate) {
+        if (existsSync(failed)) throw new Error('restore_failed_copy_exists');
+        await fs.mkdir(failed, { recursive: true });
+        await moveIfExists(currentDb, join(failed, 'yuwendesk.db'));
+        await moveIfExists(`${currentDb}-wal`, join(failed, 'yuwendesk.db-wal'));
+        await moveIfExists(`${currentDb}-shm`, join(failed, 'yuwendesk.db-shm'));
+        await moveIfExists(currentMaterials, join(failed, 'materials'));
+      }
+      for (const component of components) {
+        if (component.wasPresent) await fs.rename(component.rollback, component.current);
+      }
+      if (!originalIsRestored(components) ||
+          (components[0].wasPresent && await fileSha256(components[0].current) !== originalDatabaseHash)) {
+        throw new Error('restore_recovery_required');
+      }
+    }
     await fs.rm(markerPath, { force: true });
     return { status: 'rolled_back', jobId: marker.jobId };
   }

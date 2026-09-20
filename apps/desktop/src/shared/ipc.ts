@@ -78,7 +78,8 @@ export const IMPLEMENTED_OPERATIONS = [
   'backup.create',
   'backup.restore',
   'backups.list',
-  'backups.delete'
+  'backups.delete',
+  'diagnostics.export'
 ] as const;
 
 export type OperationName = (typeof IMPLEMENTED_OPERATIONS)[number];

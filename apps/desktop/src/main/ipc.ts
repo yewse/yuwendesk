@@ -108,6 +108,7 @@ export interface IpcServiceContext {
   // G09 备份/恢复服务；路径只由主进程原生对话框选择。
   protectionService?: ProtectionServiceLike;
   sourcePrivacyService?: SourcePrivacyServiceLike;
+  diagnosticsService?: DiagnosticsServiceLike;
   noteSuccessfulWrite?: (operation: OperationName) => void;
 }
 
@@ -142,6 +143,11 @@ export interface SourcePrivacyServiceLike {
     idempotencyKey: string;
     fingerprint: string;
   }): Promise<unknown>;
+}
+
+export interface DiagnosticsServiceLike {
+  preview(): Promise<unknown>;
+  save(input: { previewHash: string; idempotencyKey: string }): Promise<unknown>;
 }
 
 // 仅声明 IPC 需要的模型服务形状（避免主进程强耦合）。
@@ -328,6 +334,8 @@ export class IpcService {
         return this.backupsList();
       case 'backups.delete':
         return this.backupsDelete(request);
+      case 'diagnostics.export':
+        return this.diagnosticsExport(request);
       default:
         return errorResponse('INPUT_INVALID', '未知操作。', '请重试当前操作。');
     }
@@ -375,6 +383,36 @@ export class IpcService {
       return { ok: true, data: await this.ctx.protectionService.delete(payload, req.idempotency_key) };
     } catch {
       return errorResponse('BACKUP_INVALID', '备份未删除。', '请刷新备份列表后重试。');
+    }
+  }
+
+  private async diagnosticsExport(req: IpcRequest): Promise<IpcResponse> {
+    const service = this.ctx.diagnosticsService;
+    if (!service) return errorResponse('EXPORT_INVALID', '诊断功能当前不可用。', '请重启应用后重试。');
+    const payload = req.payload as { action: string; previewHash?: string };
+    if (payload.action === 'preview') {
+      try {
+        return { ok: true, data: await service.preview() };
+      } catch {
+        return errorResponse('EXPORT_INVALID', '诊断预览生成失败。', '请检查本机存储状态后重试。', true);
+      }
+    }
+    if (payload.action !== 'save' || !/^[0-9a-f]{64}$/u.test(payload.previewHash ?? '') || !req.idempotency_key?.trim()) {
+      return errorResponse('INPUT_INVALID', '诊断保存请求缺少已预览的摘要或幂等标识。', '请先重新预览完整诊断内容。');
+    }
+    try {
+      return {
+        ok: true,
+        data: await service.save({ previewHash: payload.previewHash as string, idempotencyKey: req.idempotency_key })
+      };
+    } catch (error) {
+      if ((error as Error).message === 'diagnostics_preview_stale') {
+        return errorResponse('VERSION_CONFLICT', '诊断状态已变化，本次未保存。', '请重新预览完整诊断内容后再保存。');
+      }
+      if ((error as Error).message.includes('idempotency')) {
+        return errorResponse('INPUT_INVALID', '诊断保存标识已用于不同预览。', '请重新预览并使用新的保存请求。');
+      }
+      return errorResponse('EXPORT_INVALID', '诊断包未能安全保存。', '请重新预览并选择可写位置。', true);
     }
   }
 

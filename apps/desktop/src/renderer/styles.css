@@ -664,3 +664,20 @@ h1 {
     grid-column: auto;
   }
 }
+
+.diagnostics-card {
+  grid-column: 1 / -1;
+}
+
+.diagnostics-preview {
+  max-height: 26rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 0.8rem;
+  border-radius: 0.6rem;
+  background: #1f2622;
+  color: #f6f3e8;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}

@@ -143,6 +143,8 @@ describe('G09 backup and portable restore flow', () => {
 
     const reopened = await open(currentDir);
     expect(reopened.getDraft().content).toBe('current state must survive');
+    const preservedCandidate = await open(join(currentDir, 'restore-failed', 'restore_job_rollback'));
+    expect(preservedCandidate.getDraft().content).toBe('candidate restored state');
   });
 
   it('does not stage anything for a wrong password', async () => {

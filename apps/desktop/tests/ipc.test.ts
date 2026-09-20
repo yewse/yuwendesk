@@ -222,7 +222,8 @@ describe('白名单与目录一致性', () => {
       'backup.create',
       'backup.restore',
       'backups.list',
-      'backups.delete'
+      'backups.delete',
+      'diagnostics.export'
     ];
     expect([...IMPLEMENTED_OPERATIONS].sort()).toEqual([...expected].sort());
     expect(new Set(IMPLEMENTED_OPERATIONS).size).toBe(IMPLEMENTED_OPERATIONS.length);
@@ -279,6 +280,55 @@ describe('G09 backup IPC remains a named, path-free surface', () => {
     const { svc } = makeService();
     const result = await svc.handle('backup.create', envelope('backup.create', {
       idempotency_key: 'backup-create-path', payload: { mode: 'portable', passphrase: 'restore-语文备份-strong-2026', path: 'C:\\escape' }
+    }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('INPUT_INVALID');
+  });
+});
+
+describe('G09 diagnostics IPC is preview-bound and path-free', () => {
+  it('routes preview/save and maps changed state to VERSION_CONFLICT', async () => {
+    const { store } = makeService();
+    const calls: string[] = [];
+    let stale = false;
+    const svc = new IpcService({
+      store,
+      appVersion: '0.1.0', appNameZh: '语文备课工作台', platformSupported: true,
+      httpListeners: 0, online: false, buildMode: 'production', sandboxEnabled: true,
+      platformDevOverride: false, platformTargetSupported: true, platformIdentity: 'win11',
+      diagnosticsService: {
+        preview: async () => { calls.push('preview'); return { preview: {}, previewHash: 'a'.repeat(64) }; },
+        save: async ({ previewHash, idempotencyKey }) => {
+          calls.push(`save:${previewHash}:${idempotencyKey}`);
+          if (stale) throw new Error('diagnostics_preview_stale');
+          return { saved: true };
+        }
+      }
+    });
+    const preview = await svc.handle('diagnostics.export', envelope('diagnostics.export', {
+      payload: { action: 'preview' }
+    }));
+    const saved = await svc.handle('diagnostics.export', envelope('diagnostics.export', {
+      idempotency_key: 'diagnostics-save-1', payload: { action: 'save', previewHash: 'a'.repeat(64) }
+    }));
+    stale = true;
+    const changed = await svc.handle('diagnostics.export', envelope('diagnostics.export', {
+      idempotency_key: 'diagnostics-save-2', payload: { action: 'save', previewHash: 'a'.repeat(64) }
+    }));
+    expect(preview.ok).toBe(true);
+    expect(saved.ok).toBe(true);
+    expect(changed.ok).toBe(false);
+    if (!changed.ok) expect(changed.error.code).toBe('VERSION_CONFLICT');
+    expect(calls).toEqual([
+      'preview', `save:${'a'.repeat(64)}:diagnostics-save-1`, `save:${'a'.repeat(64)}:diagnostics-save-2`
+    ]);
+  });
+
+  it('rejects a renderer-supplied diagnostic output path', async () => {
+    const { svc } = makeService();
+    const result = await svc.handle('diagnostics.export', envelope('diagnostics.export', {
+      idempotency_key: 'diagnostics-path',
+      payload: { action: 'save', previewHash: 'a'.repeat(64), path: 'C:\\private\\diagnostics.zip' }
     }));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe('INPUT_INVALID');

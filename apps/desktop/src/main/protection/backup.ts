@@ -6,7 +6,7 @@ import Database from 'better-sqlite3';
 import type { SqliteStore } from '../db/sqliteStore';
 import { buildBackupManifest, isSafeArchivePath, validateBackupManifest, verifyBackupDirectory } from './manifest';
 import { sealPortableArchive } from './envelope';
-import type { BackupFileEntry, BackupManifest, BackupRetention } from './types';
+import type { BackupFileEntry, BackupManifest, BackupRetention, ProtectionFaultHooks } from './types';
 
 export interface BackupRecord {
   backupId: string;
@@ -24,6 +24,7 @@ export interface BackupServiceOptions {
   store: SqliteStore;
   ids?: { backupId(): string };
   now?: () => Date;
+  faults?: Pick<ProtectionFaultHooks, 'afterOnlineSnapshot' | 'beforeManifestRename' | 'afterPortableKeyWrap'>;
 }
 
 function sha256(bytes: Buffer): string {
@@ -86,6 +87,7 @@ export class BackupService {
     await fs.mkdir(join(root, 'data'), { recursive: true });
     const dbPath = join(root, 'data', 'yuwendesk.db');
     const snapshot = await this.options.store.createSanitizedSnapshot(dbPath, kind);
+    this.options.faults?.afterOnlineSnapshot?.();
     const dbBytes = await fs.readFile(dbPath);
     const materialEntries = await this.copyRegisteredMaterials(root);
     const snapshotDb = new Database(dbPath, { readonly: true });
@@ -146,14 +148,22 @@ export class BackupService {
     }
     if (existsSync(partial)) await fs.rm(partial, { recursive: true, force: true });
     await fs.mkdir(partial, { recursive: true });
-    const manifest = await this.buildDirectory(partial, backupId, 'local', now.toISOString(), await this.retentionFor(now));
-    await fs.writeFile(join(partial, 'manifest.json'), JSON.stringify(manifest), 'utf8');
-    const verified = await verifyBackupDirectory(partial, manifest);
-    if (!verified.ok) throw new Error(`backup_verification_failed:${verified.reason}`);
-    await fs.rename(partial, ready);
-    await this.rotate();
-    const files = await Promise.all(manifest.files.map((entry) => fs.stat(join(ready, ...entry.path.split('/')))));
-    return { backupId, createdAt: manifest.createdAt, kind: 'local', path: ready, valid: true, retention: manifest.retention, byteSize: files.reduce((sum, item) => sum + item.size, 0) };
+    let published = false;
+    try {
+      const manifest = await this.buildDirectory(partial, backupId, 'local', now.toISOString(), await this.retentionFor(now));
+      await fs.writeFile(join(partial, 'manifest.json'), JSON.stringify(manifest), 'utf8');
+      const verified = await verifyBackupDirectory(partial, manifest);
+      if (!verified.ok) throw new Error(`backup_verification_failed:${verified.reason}`);
+      this.options.faults?.beforeManifestRename?.();
+      await fs.rename(partial, ready);
+      published = true;
+      await this.rotate();
+      const files = await Promise.all(manifest.files.map((entry) => fs.stat(join(ready, ...entry.path.split('/')))));
+      return { backupId, createdAt: manifest.createdAt, kind: 'local', path: ready, valid: true, retention: manifest.retention, byteSize: files.reduce((sum, item) => sum + item.size, 0) };
+    } catch (error) {
+      if (!published) await fs.rm(partial, { recursive: true, force: true });
+      throw error;
+    }
   }
 
   async exportPortable(passphrase: string): Promise<{ container: Buffer; manifest: BackupManifest }> {
@@ -168,6 +178,7 @@ export class BackupService {
       if (!exportedKey.ok) throw new Error(`backup_workspace_key_${exportedKey.reason}`);
       if (exportedKey.key) {
         const wrappedKey = await sealPortableArchive(exportedKey.key, passphrase);
+        this.options.faults?.afterPortableKeyWrap?.();
         const keyBytes = Buffer.from(JSON.stringify({ format: 'yuwendesk-portable-key', version: 1, wrapped: wrappedKey.toString('base64') }));
         const keyPath = join(tempRoot, 'keys', 'workspace-key.json');
         await fs.mkdir(dirname(keyPath), { recursive: true });
@@ -206,6 +217,14 @@ export class BackupService {
       }
     }
     return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async diagnosticsSummary(): Promise<{ validBackups: number; invalidBackups: number }> {
+    const readyCount = existsSync(this.backupsRoot)
+      ? (await fs.readdir(this.backupsRoot)).filter((name) => name.endsWith('.ready')).length
+      : 0;
+    const valid = await this.list();
+    return { validBackups: valid.length, invalidBackups: Math.max(0, readyCount - valid.length) };
   }
 
   private async managedDirectoryIds(): Promise<string[]> {
@@ -292,6 +311,12 @@ interface AutomaticBackupOperations {
   createLocal(): Promise<unknown>;
 }
 
+interface AutomaticMaintenanceStore {
+  diagnosticsSnapshot(): { maintenance: { repeatedFailureCount: number } };
+  recordMaintenanceFailure(input: { scope: 'backup'; code: string; automatic: true; at: string }): void;
+  recordMaintenanceSuccess(input: { scope: 'backup'; code: string; at: string }): void;
+}
+
 function localDay(value: Date): string {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
 }
@@ -300,13 +325,21 @@ export class BackupCoordinator {
   private pending: Promise<void> | null = null;
   private completedDay: string | null = null;
   private lastError: string | null = null;
+  private repeatedFailureCount = 0;
 
-  constructor(private readonly backup: AutomaticBackupOperations, private readonly now: () => Date = () => new Date()) {}
+  constructor(
+    private readonly backup: AutomaticBackupOperations,
+    private readonly now: () => Date = () => new Date(),
+    private readonly maintenance?: AutomaticMaintenanceStore
+  ) {}
 
   noteSuccessfulWrite(_operation: string): void {
     void _operation;
     const day = localDay(this.now());
-    if (this.completedDay === day || this.pending) return;
+    let persistedFailures: number | undefined;
+    try { persistedFailures = this.maintenance?.diagnosticsSnapshot().maintenance.repeatedFailureCount; } catch { /* maintenance state is advisory */ }
+    if (typeof persistedFailures === 'number') this.repeatedFailureCount = persistedFailures;
+    if (this.completedDay === day || this.pending || this.repeatedFailureCount >= 3) return;
     this.pending = this.run(day).finally(() => { this.pending = null; });
   }
 
@@ -315,13 +348,28 @@ export class BackupCoordinator {
       const existing = await this.backup.list();
       if (existing.some((record) => record.createdAt && localDay(new Date(record.createdAt)) === day)) {
         this.completedDay = day;
+        this.lastError = null;
+        this.repeatedFailureCount = 0;
+        try {
+          this.maintenance?.recordMaintenanceSuccess({ scope: 'backup', code: 'BACKUP_OK', at: this.now().toISOString() });
+        } catch { /* a completed backup remains valid even if status metadata cannot be updated */ }
         return;
       }
       await this.backup.createLocal();
       this.completedDay = day;
       this.lastError = null;
-    } catch (error) {
-      this.lastError = error instanceof Error ? error.message : 'automatic_backup_failed';
+      this.repeatedFailureCount = 0;
+      try {
+        this.maintenance?.recordMaintenanceSuccess({ scope: 'backup', code: 'BACKUP_OK', at: this.now().toISOString() });
+      } catch { /* a completed backup remains valid even if status metadata cannot be updated */ }
+    } catch {
+      this.lastError = 'AUTO_BACKUP_FAILED';
+      this.repeatedFailureCount += 1;
+      try {
+        this.maintenance?.recordMaintenanceFailure({
+          scope: 'backup', code: 'AUTO_BACKUP_FAILED', automatic: true, at: this.now().toISOString()
+        });
+      } catch { /* never turn maintenance telemetry failure into an application write failure */ }
     }
   }
 
@@ -329,7 +377,7 @@ export class BackupCoordinator {
     await this.pending;
   }
 
-  status(): { completedDay: string | null; lastError: string | null } {
-    return { completedDay: this.completedDay, lastError: this.lastError };
+  status(): { completedDay: string | null; lastError: string | null; repeatedFailureCount: number } {
+    return { completedDay: this.completedDay, lastError: this.lastError, repeatedFailureCount: this.repeatedFailureCount };
   }
 }

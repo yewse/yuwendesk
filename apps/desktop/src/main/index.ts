@@ -19,6 +19,7 @@ import { BackupCoordinator, BackupService } from './protection/backup';
 import { ProtectionService } from './protection/service';
 import { applyPendingRestoreBeforeOpen } from './protection/restore';
 import { SourcePrivacyService } from './protection/sourcePrivacy';
+import { DiagnosticsService } from './protection/diagnostics';
 
 const APP_NAME_ZH = '语文备课工作台';
 
@@ -209,7 +210,7 @@ async function bootstrap(): Promise<void> {
   }
 
   const userDataDir = app.getPath('userData');
-  await applyPendingRestoreBeforeOpen(userDataDir, async (directory) => {
+  const startupRestore = await applyPendingRestoreBeforeOpen(userDataDir, async (directory) => {
     let candidate: Database.Database | null = null;
     try {
       candidate = new Database(join(directory, 'yuwendesk.db'), { readonly: true });
@@ -229,11 +230,20 @@ async function bootstrap(): Promise<void> {
     parseFile: createWorkerParser(join(__dirname, 'sources', 'parseWorker.js'))
   });
   await store.load();
+  if (startupRestore.status === 'applied') {
+    try {
+      store.recordMaintenanceSuccess({ scope: 'restore', code: 'RESTORE_OK', at: new Date().toISOString() });
+    } catch { /* restored data remains authoritative if maintenance metadata cannot be updated */ }
+  } else if (startupRestore.status === 'rolled_back') {
+    try {
+      store.recordMaintenanceFailure({ scope: 'restore', code: 'RESTORE_ROLLED_BACK', at: new Date().toISOString() });
+    } catch { /* rollback remains authoritative if maintenance metadata cannot be updated */ }
+  }
 
   const modelService = new ModelService(store);
   const feedbackService = new FeedbackService(store, store, modelService);
   const backupService = new BackupService({ userDataDir, appVersion: app.getVersion(), store });
-  const backupCoordinator = new BackupCoordinator(backupService);
+  const backupCoordinator = new BackupCoordinator(backupService, () => new Date(), store);
   const sourcePrivacyService = new SourcePrivacyService({
     store,
     backup: backupService,
@@ -307,6 +317,26 @@ async function bootstrap(): Promise<void> {
       setTimeout(() => { app.relaunch(); app.exit(0); }, 100);
     }
   });
+  const diagnosticsService = new DiagnosticsService({
+    appVersion: app.getVersion(),
+    buildMode: app.isPackaged ? 'production' : 'development',
+    platform: {
+      targetSupported: platform.targetSupported,
+      identity: platform.identity,
+      sandboxEnabled: !sandboxDisabled
+    },
+    store,
+    backups: backupService,
+    chooseSavePath: async () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      const selected = await dialog.showSaveDialog(mainWindow, {
+        title: '保存最小诊断包',
+        defaultPath: `YuwenDesk-diagnostics-${new Date().toISOString().slice(0, 10)}.zip`,
+        filters: [{ name: 'ZIP 诊断包', extensions: ['zip'] }]
+      });
+      return selected.canceled ? null : selected.filePath;
+    }
+  });
   ipcService = new IpcService({
     store,
     sourceStore: store,
@@ -334,6 +364,7 @@ async function bootstrap(): Promise<void> {
     userDataDir,
     protectionService,
     sourcePrivacyService,
+    diagnosticsService,
     noteSuccessfulWrite: (operation) => backupCoordinator.noteSuccessfulWrite(operation),
     appVersion: app.getVersion(),
     appNameZh: APP_NAME_ZH,
@@ -363,8 +394,11 @@ if (!gotLock) {
     }
   });
 
-  app.whenReady().then(bootstrap).catch((err) => {
-    dialog.showErrorBox(APP_NAME_ZH, `启动失败：${String(err)}`);
+  app.whenReady().then(bootstrap).catch(() => {
+    dialog.showErrorBox(
+      APP_NAME_ZH,
+      '启动前的数据检查或恢复未能安全完成。应用已停止写入；请保留当前数据目录并使用已验证备份或受支持的恢复流程。'
+    );
     app.exit(1);
   });
 

@@ -363,6 +363,15 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     },
     required: ['action', 'backupId'],
     additionalProperties: false
+  },
+  'diagnostics.export': {
+    type: 'object',
+    properties: {
+      action: { type: 'string', minLength: 1, maxLength: 16 },
+      previewHash: { type: 'string', maxLength: 64 }
+    },
+    required: ['action'],
+    additionalProperties: false
   }
 };
 
