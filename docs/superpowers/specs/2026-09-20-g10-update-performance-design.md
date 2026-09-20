@@ -125,4 +125,3 @@ G10 本地工程范围完成不等于发行就绪。以下始终独立：
 - 干净 Windows 上签名安装/升级/回退、SmartScreen 和标准账户：`BLOCKED_EXTERNAL`；
 - 真实 Windows 显示缩放、IME、辅助技术、目标 8GB/SSD 冷启动 P95：没有环境则 `BLOCKED_EXTERNAL`；
 - 真实 API、学生资料隐私授权、教学专业复核、Office/WPS 保真：不因 G10 改变。
-
