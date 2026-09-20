@@ -30,7 +30,8 @@ export const G11_T03_FIXED_CHECKSUM_PATHS = Object.freeze([
   'reports/release/sbom-environment.json',
   'reports/release/signing-status.json',
   'docs/TEACHER_QUICK_GUIDE.md',
-  'reports/release/KNOWN_LIMITATIONS.md'
+  'reports/release/KNOWN_LIMITATIONS.md',
+  'reports/release/FINAL_STATUS.md'
 ]);
 
 function error(code, detail = '') {

@@ -41,7 +41,10 @@ export const G11_GENERATED_OUTPUT_PATHS = Object.freeze([
   'reports/release/sbom-environment.json',
   'reports/release/signing-status.json',
   'reports/release/SHA256SUMS.txt',
-  'reports/release/FINAL_STATUS.md'
+  'reports/release/FINAL_STATUS.md',
+  'reports/release/.g11-supply-chain-transaction.json',
+  'reports/release/*.set-*',
+  'reports/release/*.rollback-*'
 ]);
 
 function sha256(bytes) {
@@ -70,7 +73,9 @@ function isIsoDate(value) {
 
 function containsSensitiveOutput(value) {
   if (typeof value === 'string') {
-    return /[A-Za-z]:[\\/]|\\\\[^\\\s]+\\|file:\/\/|(?:^|[\s"'(：])\/(?!\/)[^\s]+/i.test(value) ||
+    return /(?:^|[^\p{L}\p{N}+.\-])[A-Za-z]:[\\/]/u.test(value) ||
+      /(?:^|[^\\])\\\\[^\\\s]+\\/u.test(value) || /file:\/\//i.test(value) ||
+      /(?:^|[^\p{L}\p{N}+.\-:/])\/(?!\/)[^\s`<>)\]}]+/u.test(value) ||
       /\b(?:sk|xai)-[A-Za-z0-9_-]{12,}\b|\bBearer\s+[A-Za-z0-9._-]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----/i.test(value) ||
       /(?:api[_ -]?key|password|secret[_ -]?value|学生姓名|学生原文|完整提示词|full prompt)\s*[:=：]/i.test(value);
   }
@@ -981,7 +986,7 @@ export function loadReleaseAggregationInputs({ root, releaseInput, generatedAt }
       deliverable(root, 'checksum_manifest', 'reports/release/SHA256SUMS.txt'),
       deliverable(root, 'signing_status', 'reports/release/signing-status.json'),
       deliverable(root, 'teacher_guide', 'docs/TEACHER_QUICK_GUIDE.md'),
-      deliverable(root, 'final_status', 'reports/release/FINAL_STATUS.md')
+      deliverable(root, 'final_status', 'reports/release/FINAL_STATUS.md', true)
     ]
   };
 }

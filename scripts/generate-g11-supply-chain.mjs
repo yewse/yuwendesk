@@ -11,10 +11,14 @@ import {
   writeFileSetAtomic
 } from './lib/g11-acceptance.mjs';
 import {
+  aggregateReleaseEvidence,
   G11_GENERATED_OUTPUT_PATHS,
   inspectRepositoryProvenance,
+  loadReleaseAggregationInputs,
+  validateReleaseEvidence,
   verifyCandidateArtifactSnapshot
 } from './lib/g11-release-evidence.mjs';
+import { renderFinalStatus, renderKnownLimitations } from './lib/g11-release-verify.mjs';
 import {
   allowedScopedDisplayNamesFromPackageLock,
   buildChecksumManifest,
@@ -35,9 +39,22 @@ const outputPaths = {
   sbom: resolve(releaseRoot, 'yuwendesk.cdx.json'),
   environment: resolve(releaseRoot, 'sbom-environment.json'),
   signing: resolve(releaseRoot, 'signing-status.json'),
+  evidence: resolve(releaseRoot, 'release-evidence.json'),
+  limitations: resolve(releaseRoot, 'KNOWN_LIMITATIONS.md'),
+  finalStatus: resolve(releaseRoot, 'FINAL_STATUS.md'),
+  releaseInput: resolve(releaseRoot, 'release-input.json'),
   checksums: resolve(releaseRoot, 'SHA256SUMS.txt')
 };
-const outputNames = ['yuwendesk.cdx.json', 'sbom-environment.json', 'signing-status.json', 'SHA256SUMS.txt'];
+const outputNames = [
+  'yuwendesk.cdx.json',
+  'sbom-environment.json',
+  'signing-status.json',
+  'release-evidence.json',
+  'KNOWN_LIMITATIONS.md',
+  'FINAL_STATUS.md',
+  'release-input.json',
+  'SHA256SUMS.txt'
+];
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -169,10 +186,48 @@ if (!signingValidation.ok) {
 }
 verifyCandidateArtifactSnapshot({ root, candidateArtifact: candidate });
 
+const prospectiveSupplyChain = {
+  sbomStatus: 'PASS',
+  checksumStatus: 'PASS',
+  signatureStatus: signing.status,
+  sbomPath: 'reports/release/yuwendesk.cdx.json',
+  checksumPath: 'reports/release/SHA256SUMS.txt',
+  signingStatusPath: 'reports/release/signing-status.json',
+  formalEnvironmentMatch: environment.formalEnvironmentMatch,
+  componentCount: environment.componentCount,
+  dependencyCount: environment.dependencyCount
+};
+const aggregationInput = loadReleaseAggregationInputs({ root, releaseInput, generatedAt });
+aggregationInput.supplyChain = prospectiveSupplyChain;
+aggregationInput.deliverables = aggregationInput.deliverables.map((item) => {
+  if (['release_evidence', 'known_limitations', 'final_status'].includes(item.id)) {
+    return { ...item, status: 'GENERATED' };
+  }
+  if (['cyclonedx_sbom', 'checksum_manifest', 'signing_status'].includes(item.id)) {
+    return { ...item, status: 'PRESENT' };
+  }
+  return item;
+});
+const evidence = aggregateReleaseEvidence(aggregationInput);
+const limitations = renderKnownLimitations(evidence);
+const finalStatus = renderFinalStatus(evidence);
+const nextReleaseInput = {
+  ...releaseInput,
+  releaseEvidenceGeneratedAt: generatedAt,
+  defectAuditPath: 'reports/release/defect-audit.json',
+  releaseEvidencePath: 'reports/release/release-evidence.json',
+  knownLimitationsPath: 'reports/release/KNOWN_LIMITATIONS.md',
+  finalStatusPath: 'reports/release/FINAL_STATUS.md'
+};
+
 const serialized = new Map([
   ['reports/release/yuwendesk.cdx.json', `${JSON.stringify(sbom, null, 2)}\n`],
   ['reports/release/sbom-environment.json', `${JSON.stringify(environment, null, 2)}\n`],
-  ['reports/release/signing-status.json', `${JSON.stringify(signing, null, 2)}\n`]
+  ['reports/release/signing-status.json', `${JSON.stringify(signing, null, 2)}\n`],
+  ['reports/release/release-evidence.json', `${JSON.stringify(evidence, null, 2)}\n`],
+  ['reports/release/KNOWN_LIMITATIONS.md', limitations],
+  ['reports/release/FINAL_STATUS.md', finalStatus],
+  ['reports/release/release-input.json', `${JSON.stringify(nextReleaseInput, null, 2)}\n`]
 ]);
 const checksumPaths = [...G11_T03_FIXED_CHECKSUM_PATHS];
 if (!checksumPaths.includes(releaseInput.acceptanceRunPath)) checksumPaths.push(releaseInput.acceptanceRunPath);
@@ -192,6 +247,17 @@ writeFileSetAtomic({
       manifestText: readFileSync(outputPaths.checksums, 'utf8')
     });
     if (!validation.ok) throw new Error(`CHECKSUM_VERIFICATION_FAILED:${JSON.stringify(validation.errors)}`);
+    const publishedEvidence = JSON.parse(readFileSync(outputPaths.evidence, 'utf8'));
+    const evidenceValidation = validateReleaseEvidence({ root, evidence: publishedEvidence });
+    if (!evidenceValidation.ok) {
+      throw new Error(`RELEASE_EVIDENCE_INVALID:${JSON.stringify(evidenceValidation.errors)}`);
+    }
+    if (readFileSync(outputPaths.limitations, 'utf8') !== renderKnownLimitations(publishedEvidence)) {
+      throw new Error('RELEASE_LIMITATIONS_MISMATCH');
+    }
+    if (readFileSync(outputPaths.finalStatus, 'utf8') !== renderFinalStatus(publishedEvidence)) {
+      throw new Error('RELEASE_FINAL_STATUS_MISMATCH');
+    }
   },
   entries: [
     {
@@ -211,6 +277,26 @@ writeFileSetAtomic({
       targetPath: outputPaths.signing,
       content: serialized.get('reports/release/signing-status.json'),
       validateContent: (content) => JSON.stringify(JSON.parse(content)) === JSON.stringify(signing)
+    },
+    {
+      targetPath: outputPaths.evidence,
+      content: serialized.get('reports/release/release-evidence.json'),
+      validateContent: (content) => JSON.stringify(JSON.parse(content)) === JSON.stringify(evidence)
+    },
+    {
+      targetPath: outputPaths.limitations,
+      content: serialized.get('reports/release/KNOWN_LIMITATIONS.md'),
+      validateContent: (content) => content === limitations
+    },
+    {
+      targetPath: outputPaths.finalStatus,
+      content: serialized.get('reports/release/FINAL_STATUS.md'),
+      validateContent: (content) => content === finalStatus
+    },
+    {
+      targetPath: outputPaths.releaseInput,
+      content: serialized.get('reports/release/release-input.json'),
+      validateContent: (content) => JSON.stringify(JSON.parse(content)) === JSON.stringify(nextReleaseInput)
     },
     {
       targetPath: outputPaths.checksums,
@@ -234,5 +320,8 @@ console.log(JSON.stringify({
     formalEnvironmentMatch: environment.formalEnvironmentMatch
   },
   signing: { status: signing.status, reasonCode: signing.reasonCode },
-  checksumEntries: checksumEntries.length
+  checksumEntries: checksumEntries.length,
+  releaseDisposition: evidence.statuses.releaseDisposition,
+  releaseReasonCode: evidence.statuses.reasonCode,
+  gapCount: evidence.knownGaps.length
 }, null, 2));

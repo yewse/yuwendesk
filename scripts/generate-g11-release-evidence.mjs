@@ -7,20 +7,21 @@ import { recoverJsonSetAtomic, writeFileSetAtomic } from './lib/g11-acceptance.m
 import {
   aggregateReleaseEvidence,
   loadReleaseAggregationInputs,
-  renderKnownGap,
   validateReleaseEvidence
 } from './lib/g11-release-evidence.mjs';
+import { renderFinalStatus, renderKnownLimitations } from './lib/g11-release-verify.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const releaseRoot = resolve(root, 'reports', 'release');
 const releaseInputPath = resolve(releaseRoot, 'release-input.json');
 const evidencePath = resolve(releaseRoot, 'release-evidence.json');
 const limitationsPath = resolve(releaseRoot, 'KNOWN_LIMITATIONS.md');
+const finalStatusPath = resolve(releaseRoot, 'FINAL_STATUS.md');
 const transactionPath = resolve(releaseRoot, '.g11-release-evidence-transaction.json');
 
 recoverJsonSetAtomic({
   transactionPath,
-  expectedTargetNames: ['release-evidence.json', 'KNOWN_LIMITATIONS.md', 'release-input.json']
+  expectedTargetNames: ['release-evidence.json', 'KNOWN_LIMITATIONS.md', 'FINAL_STATUS.md', 'release-input.json']
 });
 
 const releaseInput = JSON.parse(readFileSync(releaseInputPath, 'utf8'));
@@ -30,13 +31,15 @@ const evidence = aggregateReleaseEvidence(aggregationInput);
 const validation = validateReleaseEvidence({ root, evidence });
 if (!validation.ok) throw new Error(`RELEASE_EVIDENCE_INVALID:${JSON.stringify(validation.errors)}`);
 
-const limitations = renderKnownGap(evidence);
+const limitations = renderKnownLimitations(evidence);
+const finalStatus = renderFinalStatus(evidence);
 const nextReleaseInput = {
   ...releaseInput,
   releaseEvidenceGeneratedAt: generatedAt,
   defectAuditPath: 'reports/release/defect-audit.json',
   releaseEvidencePath: 'reports/release/release-evidence.json',
-  knownLimitationsPath: 'reports/release/KNOWN_LIMITATIONS.md'
+  knownLimitationsPath: 'reports/release/KNOWN_LIMITATIONS.md',
+  finalStatusPath: 'reports/release/FINAL_STATUS.md'
 };
 writeFileSetAtomic({
   transactionPath,
@@ -52,6 +55,11 @@ writeFileSetAtomic({
       validateContent: (content) => content === limitations
     },
     {
+      targetPath: finalStatusPath,
+      content: finalStatus,
+      validateContent: (content) => content === finalStatus
+    },
+    {
       targetPath: releaseInputPath,
       content: `${JSON.stringify(nextReleaseInput, null, 2)}\n`,
       validateContent: (content) => {
@@ -62,7 +70,8 @@ writeFileSetAtomic({
           value?.releaseEvidenceGeneratedAt === generatedAt &&
           value?.defectAuditPath === 'reports/release/defect-audit.json' &&
           value?.releaseEvidencePath === 'reports/release/release-evidence.json' &&
-          value?.knownLimitationsPath === 'reports/release/KNOWN_LIMITATIONS.md';
+          value?.knownLimitationsPath === 'reports/release/KNOWN_LIMITATIONS.md' &&
+          value?.finalStatusPath === 'reports/release/FINAL_STATUS.md';
       }
     }
   ]

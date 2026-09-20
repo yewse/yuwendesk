@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T16:48:20.591Z",
+  "generatedAt": "2026-09-20T17:30:54.664Z",
   "sourceCommit": "b5dba42579cbb325e1b3cbeadc582865256f88e4",
   "acceptanceRun": {
     "runId": "run-20260920-b5dba42-01",
@@ -2026,7 +2026,7 @@
     {
       "id": "final_status",
       "path": "reports/release/FINAL_STATUS.md",
-      "status": "MISSING"
+      "status": "GENERATED"
     }
   ],
   "externalInputs": [
@@ -2213,14 +2213,6 @@
       "blockerCode": "RELEASE_DEFECT_AUDIT_REQUIRED",
       "externalInputIds": [],
       "safeAction": "在候选 commit 上完成缺陷审计；空 items 只有在 COMPLETE 时才表示未发现已知缺陷。"
-    },
-    {
-      "gapId": "DELIVERABLE_FINAL_STATUS_MISSING",
-      "scope": "reports/release/FINAL_STATUS.md",
-      "status": "NOT_RUN",
-      "blockerCode": "RELEASE_REQUIRED_DELIVERABLE_MISSING",
-      "externalInputIds": [],
-      "safeAction": "执行负责该固定交付物的后续 G11 工作包，并在生成后重新归集证据。"
     },
     {
       "gapId": "EXTERNAL_EXT02",

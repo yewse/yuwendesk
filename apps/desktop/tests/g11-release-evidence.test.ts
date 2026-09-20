@@ -13,6 +13,7 @@ import {
   aggregateReleaseEvidence,
   buildRequirementCoverage,
   decideReleaseDisposition,
+  G11_GENERATED_OUTPUT_PATHS,
   inspectRepositoryProvenance,
   loadReleaseAggregationInputs,
   validateReleaseEvidence,
@@ -212,6 +213,14 @@ describe('G11-T02 release aggregation boundary', () => {
       allowedDirtyPaths: ['reports/release/release-evidence.json']
     }).relevantTreeClean).toBe(true);
 
+    writeFileSync(join(fixtureRoot, 'reports', 'release', '.g11-supply-chain-transaction.json'), '{}\n', 'utf8');
+    writeFileSync(join(fixtureRoot, 'reports', 'release', 'FINAL_STATUS.md.rollback-1234-fixture'), 'old\n', 'utf8');
+    expect(inspectRepositoryProvenance({
+      root: fixtureRoot,
+      sourceCommit: head,
+      allowedDirtyPaths: G11_GENERATED_OUTPUT_PATHS
+    }).relevantTreeClean).toBe(true);
+
     writeFileSync(join(fixtureRoot, 'scripts', 'verify.mjs'), 'export const ok = false;\n', 'utf8');
     expect(inspectRepositoryProvenance({
       root: fixtureRoot,
@@ -313,7 +322,7 @@ describe('G11-T02 release aggregation boundary', () => {
     expect(() => aggregateReleaseEvidence(minimalInput({
       externalInputs: [{
         ...(input.externalInputs as Array<Record<string, unknown>>)[0],
-        ownerAction: 'inspect /opt/private/student.txt'
+        ownerAction: 'inspect `/opt/private/student.txt`'
       }]
     }))).toThrow(/RELEASE_PRIVACY_VIOLATION/);
   });
