@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
-import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, promises as fs } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, promises as fs, renameSync, rmSync } from 'node:fs';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { LocalStore } from '../store';
 import type {
   DraftCommitOp,
@@ -17,6 +17,11 @@ import type {
   SourceFileImportInput,
   SourceLocator,
   SourceReadResult,
+  SourceReclassificationInput,
+  SourceReclassificationResult,
+  SourceDeletionInput,
+  SourceDeletionResult,
+  SourceDeletionWorkflow,
   SourceSearchHit,
   SourceVersionItem,
   StoreIo,
@@ -86,6 +91,11 @@ import {
   type SafeStorageLike
 } from '../crypto/secrets';
 import type { BackupKind, SnapshotSummary } from '../protection/types';
+import {
+  encryptSensitiveSourcePayload,
+  type EncryptedSensitiveSourcePayload,
+  type SensitiveSourcePayloadV1
+} from '../protection/sourcePrivacy';
 
 // 仅供测试的事务中途故障注入点（验证 outbox/幂等写入失败时整体回滚）。
 export interface CommitFaultHooks {
@@ -115,6 +125,19 @@ export interface FeedbackCommitFaultHooks {
   beforeFeedbackIdempotency?: () => void;
 }
 
+// 仅供 G09 敏感资料事务回滚测试使用；生产不配置。
+export interface SourcePrivacyFaultHooks {
+  afterCiphertextInsert?: () => void;
+  afterFtsCleanup?: () => void;
+  afterSegmentCleanup?: () => void;
+  afterTextCleanup?: () => void;
+  afterOriginalCleanup?: () => void;
+  afterPlaintextCleanup?: () => void;
+  afterDependencyInvalidation?: () => void;
+  beforeIdempotency?: () => void;
+  beforeTombstone?: () => void;
+}
+
 export interface SqliteStoreOptions {
   // 旧 JSON 读取/隔离的可注入 IO（供确定性测试读取失败/隔离失败）。
   legacyIo?: StoreIo;
@@ -128,6 +151,8 @@ export interface SqliteStoreOptions {
   lessonChangeFaults?: LessonChangeCommitFaultHooks;
   // G08 测试用观察写入/删除事务故障注入；生产不配置。
   feedbackFaults?: FeedbackCommitFaultHooks;
+  // G09 测试用敏感升级/永久删除事务故障注入；生产不配置。
+  sourcePrivacyFaults?: SourcePrivacyFaultHooks;
   // 可注入的解析实现：生产可注入 worker 线程后端使耗时解析不阻塞主进程；缺省内联 extractBuffer。
   parseFile?: (buf: Buffer, format: string, opts: ExtractOpts) => Promise<ExtractResult>;
 }
@@ -195,6 +220,22 @@ function parseObservationDeleteResult(value: unknown, context: string): Observat
 
 function likeEscape(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+function jsonContainsAnyExactString(json: string, candidates: Set<string>): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json) as unknown;
+  } catch {
+    return false;
+  }
+  const visit = (value: unknown): boolean => {
+    if (typeof value === 'string') return candidates.has(value);
+    if (Array.isArray(value)) return value.some(visit);
+    if (value && typeof value === 'object') return Object.values(value as Record<string, unknown>).some(visit);
+    return false;
+  };
+  return visit(parsed);
 }
 
 // G02-T02：真实文件型 SQLite 存储（单写入者 + 版本迁移 + WAL/外键 + 原子条件保存 + 失败回滚）。
@@ -575,6 +616,58 @@ const MIGRATIONS: Migration[] = [
         );
       `);
     }
+  },
+  {
+    version: 11,
+    up: (db) => {
+      // G09 敏感资料密文、无内容墓碑与保护类写操作的持久幂等。
+      db.exec(`
+        CREATE TABLE source_sensitive_payload (
+          version_id        TEXT PRIMARY KEY REFERENCES source_version(id),
+          document_id       TEXT NOT NULL REFERENCES source_document(id),
+          ciphertext        BLOB NOT NULL,
+          nonce             BLOB NOT NULL,
+          aad               TEXT NOT NULL,
+          algorithm_version INTEGER NOT NULL CHECK (algorithm_version = 1),
+          plaintext_hash    TEXT NOT NULL,
+          created_at        TEXT NOT NULL,
+          updated_at        TEXT NOT NULL
+        );
+        CREATE INDEX idx_sensitive_document ON source_sensitive_payload(document_id);
+        CREATE TABLE source_tombstone (
+          document_id     TEXT PRIMARY KEY,
+          deleted_at      TEXT NOT NULL,
+          version_count   INTEGER NOT NULL,
+          reason_code     TEXT NOT NULL,
+          backup_scope_json TEXT NOT NULL,
+          idempotency_key TEXT NOT NULL UNIQUE,
+          deletion_policy TEXT NOT NULL,
+          workflow_status TEXT NOT NULL,
+          managed_backup_deleted_json TEXT NOT NULL,
+          managed_backup_remaining_json TEXT NOT NULL,
+          post_delete_backup_id TEXT,
+          workflow_updated_at TEXT NOT NULL
+        );
+        CREATE TABLE maintenance_idempotency (
+          key         TEXT PRIMARY KEY,
+          fingerprint TEXT NOT NULL,
+          operation   TEXT NOT NULL,
+          status      TEXT NOT NULL,
+          result_json TEXT,
+          updated_at  TEXT NOT NULL
+        );
+        CREATE TABLE privacy_file_quarantine (
+          operation_key  TEXT NOT NULL,
+          original_path  TEXT NOT NULL,
+          quarantine_path TEXT NOT NULL,
+          PRIMARY KEY(operation_key, original_path)
+        );
+        ALTER TABLE lesson_revision ADD COLUMN source_review_required INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE source_document ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
+        INSERT INTO source_fts(source_fts, rank) VALUES('secure-delete', 1);
+        INSERT INTO source_seg_fts(source_seg_fts, rank) VALUES('secure-delete', 1);
+      `);
+    }
   }
 ];
 
@@ -605,6 +698,7 @@ export class SqliteStore {
   private readonly commitFaults?: CommitFaultHooks;
   private readonly lessonChangeFaults?: LessonChangeCommitFaultHooks;
   private readonly feedbackFaults?: FeedbackCommitFaultHooks;
+  private readonly sourcePrivacyFaults?: SourcePrivacyFaultHooks;
   private readonly parseFile: (buf: Buffer, format: string, opts: ExtractOpts) => Promise<ExtractResult>;
   private readonly cancelRegistry = new Map<string, CancelSignal>();
 
@@ -618,6 +712,7 @@ export class SqliteStore {
     this.commitFaults = opts.commitFaults;
     this.lessonChangeFaults = opts.lessonChangeFaults;
     this.feedbackFaults = opts.feedbackFaults;
+    this.sourcePrivacyFaults = opts.sourcePrivacyFaults;
     this.parseFile = opts.parseFile ?? ((buf, format, o) => extractBuffer(buf, format, o));
   }
 
@@ -627,6 +722,7 @@ export class SqliteStore {
       this.db = new Database(this.dbPath);
       this.db.pragma('journal_mode = WAL');
       this.db.pragma('foreign_keys = ON');
+      this.db.pragma('secure_delete = ON');
       this.db.pragma('busy_timeout = 5000');
       const integrity = this.db.pragma('integrity_check', { simple: true });
       if (integrity !== 'ok') {
@@ -640,6 +736,8 @@ export class SqliteStore {
         return;
       }
       this.runMigrations(version);
+      this.enableFtsSecureDelete();
+      this.reconcilePrivacyFileQuarantine();
       if (!this.verifyRequiredRows()) {
         this.enterProtected('required_row_missing');
         return;
@@ -994,6 +1092,136 @@ export class SqliteStore {
     return { ok: true, key };
   }
 
+  private enableFtsSecureDelete(): void {
+    const db = this.requireDb();
+    db.prepare("INSERT INTO source_fts(source_fts, rank) VALUES('secure-delete', 1)").run();
+    db.prepare("INSERT INTO source_seg_fts(source_seg_fts, rank) VALUES('secure-delete', 1)").run();
+  }
+
+  private reconcilePrivacyFileQuarantine(): void {
+    const db = this.requireDb();
+    const rows = db.prepare(
+      `SELECT q.operation_key operationKey,q.original_path originalPath,q.quarantine_path quarantinePath,
+              m.status maintenanceStatus
+       FROM privacy_file_quarantine q
+       LEFT JOIN maintenance_idempotency m ON m.key=q.operation_key
+       ORDER BY q.operation_key,q.original_path`
+    ).all() as Array<{ operationKey: string; originalPath: string; quarantinePath: string; maintenanceStatus: string | null }>;
+    for (const row of rows) {
+      if (row.maintenanceStatus === 'succeeded') {
+        if (existsSync(row.quarantinePath)) rmSync(row.quarantinePath, { recursive: true, force: true });
+      } else if (existsSync(row.quarantinePath)) {
+        mkdirSync(dirname(row.originalPath), { recursive: true });
+        if (!existsSync(row.originalPath)) renameSync(row.quarantinePath, row.originalPath);
+      }
+      db.prepare('DELETE FROM privacy_file_quarantine WHERE operation_key=? AND original_path=?')
+        .run(row.operationKey, row.originalPath);
+    }
+    const root = join(this.dir, 'privacy-quarantine');
+    if (existsSync(root)) {
+      try { rmSync(root, { recursive: true, force: true }); } catch { /* next startup retries registered entries */ }
+    }
+  }
+
+  private quarantineDerivedFiles(operationKey: string, paths: string[]): Array<{ originalPath: string; quarantinePath: string }> {
+    const materialRoot = resolve(this.dir, 'materials');
+    const normalized = [...new Set(paths.map((value) => resolve(value)))].sort((a, b) => a.length - b.length);
+    for (const candidate of normalized) {
+      if (candidate !== materialRoot && !candidate.startsWith(`${materialRoot}${sep}`)) {
+        throw new StoreProtectedError('privacy_artifact_path_outside_root');
+      }
+    }
+    const roots = normalized.filter((candidate, index) => !normalized.slice(0, index).some((parent) => candidate.startsWith(`${parent}${sep}`)));
+    const token = createHash('sha256').update(operationKey).digest('hex').slice(0, 24);
+    const prepared = roots.filter((source) => existsSync(source)).map((source) => ({
+      originalPath: source,
+      quarantinePath: join(this.dir, 'privacy-quarantine', token, relative(materialRoot, source))
+    }));
+    if (prepared.length === 0) return [];
+    const db = this.requireDb();
+    db.transaction(() => {
+      const insert = db.prepare('INSERT INTO privacy_file_quarantine(operation_key,original_path,quarantine_path) VALUES(?,?,?)');
+      for (const entry of prepared) insert.run(operationKey, entry.originalPath, entry.quarantinePath);
+    }).immediate();
+    try {
+      for (const entry of prepared) {
+        mkdirSync(dirname(entry.quarantinePath), { recursive: true });
+        renameSync(entry.originalPath, entry.quarantinePath);
+      }
+      return prepared;
+    } catch (error) {
+      this.restoreDerivedFiles(operationKey, prepared);
+      throw error;
+    }
+  }
+
+  private restoreDerivedFiles(operationKey: string, entries: Array<{ originalPath: string; quarantinePath: string }>): void {
+    for (const entry of [...entries].reverse()) {
+      if (!existsSync(entry.quarantinePath)) continue;
+      mkdirSync(dirname(entry.originalPath), { recursive: true });
+      if (!existsSync(entry.originalPath)) renameSync(entry.quarantinePath, entry.originalPath);
+    }
+    this.requireDb().prepare('DELETE FROM privacy_file_quarantine WHERE operation_key=?').run(operationKey);
+  }
+
+  private finalizeDerivedFiles(operationKey: string, entries: Array<{ originalPath: string; quarantinePath: string }>): void {
+    for (const entry of entries) if (existsSync(entry.quarantinePath)) rmSync(entry.quarantinePath, { recursive: true, force: true });
+    this.requireDb().prepare('DELETE FROM privacy_file_quarantine WHERE operation_key=?').run(operationKey);
+  }
+
+  private dependentPrivacyData(versionIds: Set<string>): {
+    revisionIds: string[];
+    planIds: string[];
+    filePaths: string[];
+  } {
+    const db = this.requireDb();
+    const revisions = (db.prepare('SELECT revision_id revisionId,plan_id planId,content_json contentJson FROM lesson_revision').all() as Array<{
+      revisionId: string; planId: string; contentJson: string;
+    }>).filter((row) => jsonContainsAnyExactString(row.contentJson, versionIds));
+    const revisionIds = revisions.map((row) => row.revisionId);
+    const planIds = [...new Set(revisions.map((row) => row.planId))];
+    if (planIds.length === 0) return { revisionIds, planIds, filePaths: [] };
+    const placeholders = planIds.map(() => '?').join(',');
+    const artifacts = db.prepare(`SELECT path FROM material_artifact WHERE plan_id IN (${placeholders})`).all(...planIds) as Array<{ path: string }>;
+    const bundles = db.prepare(`SELECT directory FROM material_bundle WHERE plan_id IN (${placeholders})`).all(...planIds) as Array<{ directory: string }>;
+    return { revisionIds, planIds, filePaths: [...artifacts.map((row) => row.path), ...bundles.map((row) => row.directory)] };
+  }
+
+  private purgeDependentPrivacyData(revisionIds: string[], planIds: string[]): void {
+    if (planIds.length === 0) return;
+    const db = this.requireDb();
+    const planPlaceholders = planIds.map(() => '?').join(',');
+    const revisionPlaceholders = revisionIds.map(() => '?').join(',');
+    const observationIds = (db.prepare(`SELECT observation_id observationId FROM learning_observation WHERE plan_id IN (${planPlaceholders})`).all(...planIds) as Array<{ observationId: string }>).map((row) => row.observationId);
+    if (observationIds.length) {
+      db.prepare(`DELETE FROM observation_outcome WHERE observation_id IN (${observationIds.map(() => '?').join(',')})`).run(...observationIds);
+    }
+    for (const table of [
+      'preference_event', 'effect_evidence_event', 'correction_proposal', 'attribution_run', 'measurement_review',
+      'observation_tombstone', 'learning_observation', 'teaching_event', 'feedback_stream',
+      'material_artifact', 'material_bundle', 'change_proposal', 'review_report'
+    ]) {
+      db.prepare(`DELETE FROM ${table} WHERE plan_id IN (${planPlaceholders})`).run(...planIds);
+    }
+    const identities = new Set([...planIds, ...revisionIds]);
+    for (const table of ['feedback_idempotency', 'lesson_change_idempotency']) {
+      const rows = db.prepare(`SELECT key,result_json resultJson FROM ${table} WHERE result_json IS NOT NULL`).all() as Array<{ key: string; resultJson: string }>;
+      const keys = rows.filter((row) => jsonContainsAnyExactString(row.resultJson, identities)).map((row) => row.key);
+      if (keys.length) db.prepare(`DELETE FROM ${table} WHERE key IN (${keys.map(() => '?').join(',')})`).run(...keys);
+    }
+    if (revisionIds.length) {
+      db.prepare(
+        `UPDATE lesson_revision
+         SET title='需重新生成的课时（敏感资料）',content_json='{"redacted_due_to_sensitive_source":true}',valid=0,source_review_required=1
+         WHERE revision_id IN (${revisionPlaceholders})`
+      ).run(...revisionIds);
+      db.prepare(
+        `UPDATE lesson_plan SET title='需重新生成的课时（敏感资料）'
+         WHERE plan_id IN (${planPlaceholders}) AND current_revision_id IN (${revisionPlaceholders})`
+      ).run(...planIds, ...revisionIds);
+    }
+  }
+
   exportWorkspaceDataKey():
     | { ok: true; key: Buffer | null }
     | { ok: false; reason: 'unavailable' | 'decrypt_failed' } {
@@ -1126,7 +1354,8 @@ export class SqliteStore {
     });
   }
 
-  // 统一提交路径：严格分类、无条件阻止敏感、去重（按原件哈希）、版本关系需明确确认（不自动切换当前版本）。
+  // 统一提交路径：严格分类；学生资料只写认证密文，不进入普通正文/段落/FTS；
+  // 去重按原件哈希，版本关系需明确确认（不自动切换当前版本）。
   private commitParsedImport(p: {
     title: string;
     format: string;
@@ -1143,9 +1372,8 @@ export class SqliteStore {
     if (p.classification !== undefined && !SOURCE_CLASSIFICATIONS.includes(classification)) {
       return { status: 'rejected', reason: 'bad_classification' };
     }
-    if (classification === 'student_sensitive') {
-      return { status: 'blocked_sensitive', reason: 'not_implemented' };
-    }
+    const sensitiveKey = classification === 'student_sensitive' ? this.ensureDataKey() : null;
+    if (sensitiveKey && !sensitiveKey.ok) return { status: 'blocked_sensitive', reason: 'encryption_unavailable' };
     const db = this.requireDb();
     const now = new Date().toISOString();
     const originalHash = createHash('sha256').update(p.originalBytes).digest('hex');
@@ -1161,27 +1389,60 @@ export class SqliteStore {
       db.prepare(
         'INSERT INTO source_version(id,document_id,version,content_hash,byte_size,format,created_at,original_hash,text_hash,mime,scanned,reliable_text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)'
       ).run(versionId, documentId, version, textHash, byteSize, p.format, now, originalHash, textHash, p.mime, scanned, reliableText);
-      db.prepare('INSERT INTO source_text(version_id,full_text) VALUES(?,?)').run(versionId, p.extracted.fullText);
       db.prepare('INSERT INTO source_file(version_id,original_blob,original_hash,byte_size,mime,created_at) VALUES(?,?,?,?,?,?)').run(
         versionId,
-        p.originalBytes,
+        classification === 'student_sensitive' ? null : p.originalBytes,
         originalHash,
         byteSize,
         p.mime,
         now
       );
-      const insSeg = db.prepare(
-        'INSERT INTO source_segment(id,version_id,ordinal,locator_kind,locator,text,char_start,char_end,reliable) VALUES(?,?,?,?,?,?,?,?,?)'
-      );
-      const insFts = db.prepare('INSERT INTO source_seg_fts(text,segment_id,version_id) VALUES(?,?,?)');
-      for (const seg of p.extracted.segments) {
-        const segId = randomUUID();
-        insSeg.run(segId, versionId, seg.ordinal, seg.locatorKind, JSON.stringify(seg.locator), seg.text, seg.char_start, seg.char_end, seg.reliable ? 1 : 0);
-        // 仅把可靠且非空文字入检索索引；扫描件空文本不参与（不伪造可靠文字）。
-        if (seg.reliable && seg.text.trim().length > 0) insFts.run(seg.text, segId, versionId);
+      if (classification === 'student_sensitive') {
+        const payload: SensitiveSourcePayloadV1 = {
+          version: 1,
+          originalBase64: p.originalBytes.toString('base64'),
+          mime: p.mime,
+          fullText: p.extracted.fullText,
+          segments: p.extracted.segments.map((seg) => ({
+            ordinal: seg.ordinal,
+            locatorKind: seg.locatorKind,
+            locator: JSON.stringify(seg.locator),
+            text: seg.text,
+            charStart: seg.char_start,
+            charEnd: seg.char_end,
+            reliable: seg.reliable
+          }))
+        };
+        const encrypted = encryptSensitiveSourcePayload(
+          (sensitiveKey as { ok: true; key: Buffer }).key,
+          payload,
+          { workspaceId: 'workspace_local', documentId, versionId }
+        );
+        db.prepare(
+          `INSERT INTO source_sensitive_payload(
+             version_id,document_id,ciphertext,nonce,aad,algorithm_version,plaintext_hash,created_at,updated_at
+           ) VALUES(?,?,?,?,?,?,?,?,?)`
+        ).run(versionId, documentId, encrypted.ciphertext, encrypted.nonce, encrypted.aad, encrypted.algorithmVersion, encrypted.plaintextHash, now, now);
+      } else {
+        db.prepare('INSERT INTO source_text(version_id,full_text) VALUES(?,?)').run(versionId, p.extracted.fullText);
+        const insSeg = db.prepare(
+          'INSERT INTO source_segment(id,version_id,ordinal,locator_kind,locator,text,char_start,char_end,reliable) VALUES(?,?,?,?,?,?,?,?,?)'
+        );
+        const insFts = db.prepare('INSERT INTO source_seg_fts(text,segment_id,version_id) VALUES(?,?,?)');
+        for (const seg of p.extracted.segments) {
+          const segId = randomUUID();
+          insSeg.run(segId, versionId, seg.ordinal, seg.locatorKind, JSON.stringify(seg.locator), seg.text, seg.char_start, seg.char_end, seg.reliable ? 1 : 0);
+          // 仅把可靠且非空文字入检索索引；扫描件空文本不参与（不伪造可靠文字）。
+          if (seg.reliable && seg.text.trim().length > 0) insFts.run(seg.text, segId, versionId);
+        }
       }
       if (makeCurrent) {
-        db.prepare('UPDATE source_document SET current_version_id=?, status=?, updated_at=? WHERE id=?').run(versionId, 'active', now, documentId);
+        if (classification === 'student_sensitive') {
+          db.prepare('UPDATE source_document SET current_version_id=?,title=?,classification=?,status=?,updated_at=?,revision=revision+1 WHERE id=?')
+            .run(versionId, `学生作品（${documentId.replace(/-/g, '').slice(-8)}）`, classification, 'active', now, documentId);
+        } else {
+          db.prepare('UPDATE source_document SET current_version_id=?, status=?, updated_at=?, revision=revision+1 WHERE id=?').run(versionId, 'active', now, documentId);
+        }
       } else {
         db.prepare('UPDATE source_document SET updated_at=? WHERE id=?').run(now, documentId);
       }
@@ -1191,7 +1452,15 @@ export class SqliteStore {
       const documentId = randomUUID();
       db.prepare(
         'INSERT INTO source_document(id,title,classification,status,current_version_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?)'
-      ).run(documentId, p.title, classification, 'active', null, now, now);
+      ).run(
+        documentId,
+        classification === 'student_sensitive' ? `学生作品（${documentId.replace(/-/g, '').slice(-8)}）` : p.title,
+        classification,
+        'active',
+        null,
+        now,
+        now
+      );
       return documentId;
     };
     // 去重按原件哈希：同一原始文件重复导入 → duplicate。
@@ -1202,8 +1471,13 @@ export class SqliteStore {
 
     const tx = db.transaction((): SourceImportResult => {
       if (p.relation === 'new_version' && p.targetDocumentId) {
-        const doc = db.prepare('SELECT id FROM source_document WHERE id=?').get(p.targetDocumentId) as { id: string } | undefined;
+        const doc = db.prepare('SELECT id,classification FROM source_document WHERE id=?').get(p.targetDocumentId) as
+          | { id: string; classification: SourceClassification }
+          | undefined;
         if (!doc) return { status: 'rejected', reason: 'empty' };
+        if (doc.classification !== classification) {
+          return { status: 'blocked_sensitive', reason: 'classification_transition_blocked' };
+        }
         const dup = dupInDoc(doc.id);
         if (dup) return { status: 'duplicate', documentId: doc.id, versionId: dup.versionId, version: dup.version, contentHash: textHash };
         return addVersion(doc.id, true, true);
@@ -1227,6 +1501,383 @@ export class SqliteStore {
       };
     });
     return tx.immediate();
+  }
+
+  reclassifySource(input: SourceReclassificationInput): SourceReclassificationResult {
+    this.assertWritable();
+    if (input.targetClassification !== 'student_sensitive') return { status: 'blocked', reason: 'PRIVACY_BLOCKED' };
+    if (!input.idempotencyKey.trim() || !input.fingerprint.trim()) throw new Error('maintenance_idempotency_required');
+    const db = this.requireDb();
+    const existing = db.prepare(
+      'SELECT fingerprint,operation,status,result_json resultJson FROM maintenance_idempotency WHERE key=?'
+    ).get(input.idempotencyKey) as { fingerprint: string; operation: string; status: string; resultJson: string | null } | undefined;
+    if (existing) {
+      if (existing.fingerprint !== input.fingerprint || existing.operation !== 'sources.reclassify') {
+        throw new Error('maintenance_idempotency_key_reuse');
+      }
+      if (existing.status !== 'succeeded' || !existing.resultJson) throw new Error('maintenance_idempotency_incomplete');
+      const result = JSON.parse(existing.resultJson) as SourceReclassificationResult;
+      return result.status === 'succeeded' ? { ...result, replayed: true } : result;
+    }
+
+    const doc = db.prepare(
+      `SELECT sd.classification classification,sd.current_version_id currentVersionId,sd.revision currentRevision
+       FROM source_document sd WHERE sd.id=?`
+    ).get(input.documentId) as { classification: SourceClassification; currentVersionId: string | null; currentRevision: number } | undefined;
+    if (!doc || !doc.currentVersionId) return { status: 'missing' };
+    if (doc.currentRevision !== input.expectedRevision) return { status: 'conflict', currentRevision: doc.currentRevision };
+
+    const existingVersionIds = (db.prepare('SELECT id FROM source_version WHERE document_id=? ORDER BY version').all(input.documentId) as Array<{ id: string }>).map((row) => row.id);
+    const protectedCount = Number((db.prepare('SELECT COUNT(*) count FROM source_sensitive_payload WHERE document_id=?').get(input.documentId) as { count: number }).count);
+    if (doc.classification === 'student_sensitive' && protectedCount === existingVersionIds.length) {
+      const alreadyProtected: SourceReclassificationResult = {
+        status: 'succeeded',
+        documentId: input.documentId,
+        classification: 'student_sensitive',
+        revision: doc.currentRevision,
+        protectedVersionIds: existingVersionIds,
+        invalidatedLessonRevisionIds: [],
+        deletedModelJobIds: [],
+        replayed: false
+      };
+      db.prepare(
+        `INSERT INTO maintenance_idempotency(key,fingerprint,operation,status,result_json,updated_at)
+         VALUES(?,?,?,?,?,?)`
+      ).run(input.idempotencyKey, input.fingerprint, 'sources.reclassify', 'succeeded', JSON.stringify(alreadyProtected), input.updatedAt);
+      return alreadyProtected;
+    }
+
+    const dataKey = this.ensureDataKey();
+    if (!dataKey.ok) return { status: 'blocked', reason: 'KEY_UNAVAILABLE' };
+    const versions = db.prepare(
+      `SELECT sv.id versionId,sv.mime mime,sf.original_blob originalBlob
+       FROM source_version sv LEFT JOIN source_file sf ON sf.version_id=sv.id
+       WHERE sv.document_id=? ORDER BY sv.version`
+    ).all(input.documentId) as Array<{ versionId: string; mime: string | null; originalBlob: Buffer | null }>;
+    if (versions.length === 0) return { status: 'missing' };
+
+    const encrypted = versions.map((version): { versionId: string; value: EncryptedSensitiveSourcePayload } => {
+      const text = (db.prepare('SELECT full_text fullText FROM source_text WHERE version_id=?').get(version.versionId) as { fullText: string } | undefined)?.fullText ?? '';
+      const segments = db.prepare(
+        `SELECT ordinal,locator_kind locatorKind,locator,text,char_start charStart,char_end charEnd,reliable
+         FROM source_segment WHERE version_id=? ORDER BY ordinal,id`
+      ).all(version.versionId) as Array<{
+        ordinal: number; locatorKind: string; locator: string; text: string; charStart: number; charEnd: number; reliable: number;
+      }>;
+      const payload: SensitiveSourcePayloadV1 = {
+        version: 1,
+        originalBase64: version.originalBlob ? Buffer.from(version.originalBlob).toString('base64') : '',
+        mime: version.mime ?? 'application/octet-stream',
+        fullText: text,
+        segments: segments.map((segment) => ({ ...segment, reliable: segment.reliable === 1 }))
+      };
+      return {
+        versionId: version.versionId,
+        value: encryptSensitiveSourcePayload(dataKey.key, payload, {
+          workspaceId: input.workspaceId,
+          documentId: input.documentId,
+          versionId: version.versionId
+        })
+      };
+    });
+    const versionIds = new Set(versions.map((version) => version.versionId));
+    const dependent = this.dependentPrivacyData(versionIds);
+    const invalidatedLessonRevisionIds = dependent.revisionIds;
+    const deletedModelJobIds = (db.prepare('SELECT id,material_versions_json materialVersionsJson FROM model_job').all() as Array<{
+      id: string; materialVersionsJson: string;
+    }>).filter((row) => jsonContainsAnyExactString(row.materialVersionsJson, versionIds)).map((row) => row.id);
+    const result: SourceReclassificationResult = {
+      status: 'succeeded',
+      documentId: input.documentId,
+      classification: 'student_sensitive',
+      revision: doc.currentRevision + 1,
+      protectedVersionIds: [...versionIds],
+      invalidatedLessonRevisionIds,
+      deletedModelJobIds,
+      replayed: false
+    };
+
+    const quarantined = this.quarantineDerivedFiles(input.idempotencyKey, dependent.filePaths);
+    const tx = db.transaction(() => {
+      const current = db.prepare(
+        'SELECT revision currentRevision FROM source_document WHERE id=?'
+      ).get(input.documentId) as { currentRevision: number } | undefined;
+      if (!current || current.currentRevision !== input.expectedRevision) throw new Error('source_reclassification_conflict');
+      for (const item of encrypted) {
+        db.prepare(
+          `INSERT INTO source_sensitive_payload(
+             version_id,document_id,ciphertext,nonce,aad,algorithm_version,plaintext_hash,created_at,updated_at
+           ) VALUES(?,?,?,?,?,?,?,?,?)
+           ON CONFLICT(version_id) DO UPDATE SET
+             ciphertext=excluded.ciphertext,nonce=excluded.nonce,aad=excluded.aad,
+             algorithm_version=excluded.algorithm_version,plaintext_hash=excluded.plaintext_hash,updated_at=excluded.updated_at`
+        ).run(
+          item.versionId,
+          input.documentId,
+          item.value.ciphertext,
+          item.value.nonce,
+          item.value.aad,
+          item.value.algorithmVersion,
+          item.value.plaintextHash,
+          input.updatedAt,
+          input.updatedAt
+        );
+      }
+      this.sourcePrivacyFaults?.afterCiphertextInsert?.();
+      for (const versionId of versionIds) {
+        db.prepare('DELETE FROM source_seg_fts WHERE version_id=?').run(versionId);
+        db.prepare('DELETE FROM source_fts WHERE version_id=?').run(versionId);
+      }
+      this.sourcePrivacyFaults?.afterFtsCleanup?.();
+      for (const versionId of versionIds) {
+        db.prepare('DELETE FROM source_segment WHERE version_id=?').run(versionId);
+      }
+      this.sourcePrivacyFaults?.afterSegmentCleanup?.();
+      for (const versionId of versionIds) {
+        db.prepare('DELETE FROM source_text WHERE version_id=?').run(versionId);
+      }
+      this.sourcePrivacyFaults?.afterTextCleanup?.();
+      for (const versionId of versionIds) {
+        db.prepare('UPDATE source_file SET original_blob=NULL WHERE version_id=?').run(versionId);
+      }
+      this.sourcePrivacyFaults?.afterOriginalCleanup?.();
+      this.sourcePrivacyFaults?.afterPlaintextCleanup?.();
+      db.prepare('UPDATE source_document SET title=?,classification=?,updated_at=?,revision=revision+1 WHERE id=?').run(
+        `学生作品（${input.documentId.replace(/-/g, '').slice(-8)}）`,
+        'student_sensitive',
+        input.updatedAt,
+        input.documentId
+      );
+      this.purgeDependentPrivacyData(dependent.revisionIds, dependent.planIds);
+      for (const jobId of deletedModelJobIds) db.prepare('DELETE FROM model_job WHERE id=?').run(jobId);
+      this.sourcePrivacyFaults?.afterDependencyInvalidation?.();
+      this.sourcePrivacyFaults?.beforeIdempotency?.();
+      db.prepare(
+        `INSERT INTO maintenance_idempotency(key,fingerprint,operation,status,result_json,updated_at)
+         VALUES(?,?,?,?,?,?)`
+      ).run(input.idempotencyKey, input.fingerprint, 'sources.reclassify', 'succeeded', JSON.stringify(result), input.updatedAt);
+    });
+    try {
+      tx.immediate();
+    } catch (error) {
+      this.restoreDerivedFiles(input.idempotencyKey, quarantined);
+      throw error;
+    }
+    this.finalizeDerivedFiles(input.idempotencyKey, quarantined);
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    return result;
+  }
+
+  deleteSourcePermanently(input: SourceDeletionInput): SourceDeletionResult {
+    this.assertWritable();
+    if (!input.idempotencyKey.trim() || !input.fingerprint.trim()) throw new Error('maintenance_idempotency_required');
+    const db = this.requireDb();
+    const existing = db.prepare(
+      'SELECT fingerprint,operation,status,result_json resultJson FROM maintenance_idempotency WHERE key=?'
+    ).get(input.idempotencyKey) as { fingerprint: string; operation: string; status: string; resultJson: string | null } | undefined;
+    if (existing) {
+      if (existing.fingerprint !== input.fingerprint || existing.operation !== 'sources.delete') {
+        throw new Error('maintenance_idempotency_key_reuse');
+      }
+      if (existing.status !== 'succeeded' || !existing.resultJson) throw new Error('maintenance_idempotency_incomplete');
+      const result = JSON.parse(existing.resultJson) as SourceDeletionResult;
+      return result.status === 'succeeded' ? { ...result, replayed: true } : result;
+    }
+
+    const doc = db.prepare(
+      'SELECT revision currentRevision FROM source_document WHERE id=?'
+    ).get(input.documentId) as { currentRevision: number } | undefined;
+    if (!doc) return { status: 'missing' };
+    if (doc.currentRevision !== input.expectedRevision) return { status: 'conflict', currentRevision: doc.currentRevision };
+    const versionIds = new Set(
+      (db.prepare('SELECT id FROM source_version WHERE document_id=? ORDER BY version').all(input.documentId) as Array<{ id: string }>).map((row) => row.id)
+    );
+    const dependent = this.dependentPrivacyData(versionIds);
+    const invalidatedLessonRevisionIds = dependent.revisionIds;
+    const deletedModelJobIds = (db.prepare('SELECT id,material_versions_json materialVersionsJson FROM model_job').all() as Array<{
+      id: string; materialVersionsJson: string;
+    }>).filter((row) => jsonContainsAnyExactString(row.materialVersionsJson, versionIds)).map((row) => row.id);
+    const result: SourceDeletionResult = {
+      status: 'succeeded',
+      documentId: input.documentId,
+      deletedVersionCount: versionIds.size,
+      databaseDeleted: true,
+      invalidatedLessonRevisionIds,
+      deletedModelJobIds,
+      externalOrOfflineBackups: 'not_recalled',
+      replayed: false
+    };
+    const backupScopeJson = JSON.stringify({
+      managedBackupIds: [...input.managedBackupIds].sort(),
+      externalOrOfflineBackups: 'not_recalled'
+    });
+
+    const quarantined = this.quarantineDerivedFiles(input.idempotencyKey, dependent.filePaths);
+    const tx = db.transaction(() => {
+      const current = db.prepare(
+        'SELECT revision currentRevision FROM source_document WHERE id=?'
+      ).get(input.documentId) as { currentRevision: number } | undefined;
+      if (!current || current.currentRevision !== input.expectedRevision) throw new Error('source_delete_conflict');
+      for (const versionId of versionIds) {
+        db.prepare('DELETE FROM source_seg_fts WHERE version_id=?').run(versionId);
+        db.prepare('DELETE FROM source_fts WHERE version_id=?').run(versionId);
+        db.prepare('DELETE FROM source_segment WHERE version_id=?').run(versionId);
+        db.prepare('DELETE FROM source_text WHERE version_id=?').run(versionId);
+        db.prepare('DELETE FROM source_file WHERE version_id=?').run(versionId);
+        db.prepare('DELETE FROM source_sensitive_payload WHERE version_id=?').run(versionId);
+      }
+      this.purgeDependentPrivacyData(dependent.revisionIds, dependent.planIds);
+      for (const jobId of deletedModelJobIds) db.prepare('DELETE FROM model_job WHERE id=?').run(jobId);
+      db.prepare('DELETE FROM source_version WHERE document_id=?').run(input.documentId);
+      db.prepare('DELETE FROM source_document WHERE id=?').run(input.documentId);
+      this.sourcePrivacyFaults?.beforeTombstone?.();
+      db.prepare(
+        `INSERT INTO source_tombstone(
+           document_id,deleted_at,version_count,reason_code,backup_scope_json,idempotency_key,deletion_policy,
+           workflow_status,managed_backup_deleted_json,managed_backup_remaining_json,post_delete_backup_id,workflow_updated_at
+         ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        input.documentId, input.deletedAt, versionIds.size, 'user_permanent_delete', backupScopeJson,
+        input.idempotencyKey, input.policy, 'database_deleted', '[]', JSON.stringify([...input.managedBackupIds].sort()), null, input.deletedAt
+      );
+      this.sourcePrivacyFaults?.beforeIdempotency?.();
+      db.prepare(
+        `INSERT INTO maintenance_idempotency(key,fingerprint,operation,status,result_json,updated_at)
+         VALUES(?,?,?,?,?,?)`
+      ).run(input.idempotencyKey, input.fingerprint, 'sources.delete', 'succeeded', JSON.stringify(result), input.deletedAt);
+    });
+    try {
+      tx.immediate();
+    } catch (error) {
+      this.restoreDerivedFiles(input.idempotencyKey, quarantined);
+      throw error;
+    }
+    this.finalizeDerivedFiles(input.idempotencyKey, quarantined);
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    return result;
+  }
+
+  getMaintenanceIdempotency(key: string): {
+    fingerprint: string;
+    operation: string;
+    status: string;
+    resultJson: string | null;
+  } | null {
+    if (!this.db) return null;
+    return (this.db.prepare(
+      'SELECT fingerprint,operation,status,result_json resultJson FROM maintenance_idempotency WHERE key=?'
+    ).get(key) as { fingerprint: string; operation: string; status: string; resultJson: string | null } | undefined) ?? null;
+  }
+
+  reserveMaintenanceIdempotency(input: {
+    key: string;
+    fingerprint: string;
+    operation: string;
+    updatedAt: string;
+  }): 'reserved' | 'existing' {
+    this.assertWritable();
+    const db = this.requireDb();
+    return db.transaction(() => {
+      const existing = db.prepare('SELECT fingerprint,operation FROM maintenance_idempotency WHERE key=?').get(input.key) as
+        | { fingerprint: string; operation: string }
+        | undefined;
+      if (existing) {
+        if (existing.fingerprint !== input.fingerprint || existing.operation !== input.operation) {
+          throw new Error('maintenance_idempotency_key_reuse');
+        }
+        return 'existing' as const;
+      }
+      db.prepare(
+        `INSERT INTO maintenance_idempotency(key,fingerprint,operation,status,result_json,updated_at)
+         VALUES(?,?,?,'running',NULL,?)`
+      ).run(input.key, input.fingerprint, input.operation, input.updatedAt);
+      return 'reserved' as const;
+    }).immediate();
+  }
+
+  maintenanceRequestDigest(value: string): string {
+    const key = this.ensureDataKey();
+    if (!key.ok) throw new Error('maintenance_digest_key_unavailable');
+    return createHmac('sha256', key.key).update(value, 'utf8').digest('hex');
+  }
+
+  getPendingSourceDeletionWorkflows(): SourceDeletionWorkflow[] {
+    if (!this.db) return [];
+    const rows = this.db.prepare(
+      `SELECT document_id documentId,idempotency_key idempotencyKey,deletion_policy policy,workflow_status status,
+              backup_scope_json backupScopeJson,managed_backup_deleted_json deletedJson,
+              managed_backup_remaining_json remainingJson,post_delete_backup_id postDeleteBackupId,
+              workflow_updated_at updatedAt
+       FROM source_tombstone WHERE workflow_status<>'completed' ORDER BY deleted_at,document_id`
+    ).all() as Array<{
+      documentId: string; idempotencyKey: string; policy: SourceDeletionWorkflow['policy']; status: SourceDeletionWorkflow['status'];
+      backupScopeJson: string; deletedJson: string; remainingJson: string; postDeleteBackupId: string | null; updatedAt: string;
+    }>;
+    return rows.map((row) => {
+      const scope = JSON.parse(row.backupScopeJson) as { managedBackupIds?: unknown };
+      return {
+        documentId: row.documentId,
+        idempotencyKey: row.idempotencyKey,
+        policy: row.policy,
+        status: row.status,
+        managedBackupIds: Array.isArray(scope.managedBackupIds) ? scope.managedBackupIds.filter((value): value is string => typeof value === 'string') : [],
+        managedBackupDeletedIds: JSON.parse(row.deletedJson) as string[],
+        managedBackupRemainingIds: JSON.parse(row.remainingJson) as string[],
+        postDeleteBackupId: row.postDeleteBackupId,
+        updatedAt: row.updatedAt
+      };
+    });
+  }
+
+  updateSourceDeletionWorkflow(input: {
+    idempotencyKey: string;
+    status: SourceDeletionWorkflow['status'];
+    managedBackupDeletedIds: string[];
+    managedBackupRemainingIds: string[];
+    postDeleteBackupId: string | null;
+    updatedAt: string;
+  }): void {
+    this.assertWritable();
+    const updated = this.requireDb().prepare(
+      `UPDATE source_tombstone
+       SET workflow_status=?,managed_backup_deleted_json=?,managed_backup_remaining_json=?,post_delete_backup_id=?,workflow_updated_at=?
+       WHERE idempotency_key=?`
+    ).run(
+      input.status,
+      JSON.stringify([...new Set(input.managedBackupDeletedIds)].sort()),
+      JSON.stringify([...new Set(input.managedBackupRemainingIds)].sort()),
+      input.postDeleteBackupId,
+      input.updatedAt,
+      input.idempotencyKey
+    );
+    if (updated.changes !== 1) throw new Error('source_deletion_workflow_missing');
+  }
+
+  saveMaintenanceIdempotency(input: {
+    key: string;
+    fingerprint: string;
+    operation: string;
+    resultJson: string;
+    updatedAt: string;
+  }): void {
+    this.assertWritable();
+    const db = this.requireDb();
+    const existing = db.prepare('SELECT fingerprint,operation,status FROM maintenance_idempotency WHERE key=?').get(input.key) as
+      | { fingerprint: string; operation: string; status: string }
+      | undefined;
+    if (!existing) {
+      db.prepare(
+        `INSERT INTO maintenance_idempotency(key,fingerprint,operation,status,result_json,updated_at)
+         VALUES(?,?,?,?,?,?)`
+      ).run(input.key, input.fingerprint, input.operation, 'succeeded', input.resultJson, input.updatedAt);
+      return;
+    }
+    if (existing.fingerprint !== input.fingerprint || existing.operation !== input.operation) {
+      throw new Error('maintenance_idempotency_key_reuse');
+    }
+    if (existing.status !== 'running') throw new Error('maintenance_idempotency_not_running');
+    db.prepare("UPDATE maintenance_idempotency SET status='succeeded',result_json=?,updated_at=? WHERE key=?")
+      .run(input.resultJson, input.updatedAt, input.key);
   }
 
   // 中文检索：≥3 字用 FTS5 trigram；1–2 字短词回退 LIKE（含标题）；命中定位到具体段（页/段落/表格单元格等），
@@ -1355,8 +2006,11 @@ export class SqliteStore {
   retireSource(documentId: string): boolean {
     this.assertWritable();
     const db = this.requireDb();
-    const info = db.prepare("UPDATE source_document SET status='retired', updated_at=? WHERE id=?").run(new Date().toISOString(), documentId);
-    return info.changes === 1;
+    const exists = !!db.prepare('SELECT 1 FROM source_document WHERE id=?').get(documentId);
+    if (!exists) return false;
+    db.prepare("UPDATE source_document SET status='retired', updated_at=?, revision=revision+1 WHERE id=? AND status<>'retired'")
+      .run(new Date().toISOString(), documentId);
+    return true;
   }
 
   // 原件核对：返回原件字节 base64 + 原件哈希（供外部重算校验，提取成功≠原文已核验）。
@@ -2615,7 +3269,7 @@ export class SqliteStore {
     return this.db
       .prepare(
         `SELECT sd.id documentId, sd.title title, sd.classification classification, sd.status status,
-                sv.version version, sv.content_hash contentHash
+                sv.version version, sd.revision revision, sv.content_hash contentHash
          FROM source_document sd LEFT JOIN source_version sv ON sv.id=sd.current_version_id
          ORDER BY sd.updated_at DESC`
       )

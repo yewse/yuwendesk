@@ -153,6 +153,32 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     required: ['planId'],
     additionalProperties: false
   },
+  'sources.reclassify': {
+    type: 'object',
+    properties: {
+      documentId: { type: 'string', minLength: 1, maxLength: 64 },
+      targetClassification: { type: 'string', minLength: 1, maxLength: 32 }
+    },
+    required: ['documentId', 'targetClassification'],
+    additionalProperties: false
+  },
+  'sources.prepareDelete': {
+    type: 'object',
+    properties: { documentId: { type: 'string', minLength: 1, maxLength: 64 } },
+    required: ['documentId'],
+    additionalProperties: false
+  },
+  'sources.delete': {
+    type: 'object',
+    properties: {
+      documentId: { type: 'string', minLength: 1, maxLength: 64 },
+      confirmationToken: { type: 'string', minLength: 1, maxLength: 256 },
+      managedBackupIds: { type: 'array', maxItems: 100 },
+      policy: { type: 'string', minLength: 1, maxLength: 64 }
+    },
+    required: ['documentId', 'confirmationToken', 'managedBackupIds', 'policy'],
+    additionalProperties: false
+  },
   'plans.recordTeaching': {
     type: 'object',
     properties: {

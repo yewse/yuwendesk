@@ -407,6 +407,11 @@ h1 {
   padding: 4px 10px;
   font-size: 12px;
 }
+.btn.danger {
+  border-color: #c45d57;
+  color: #8f2f2a;
+  background: #fff7f6;
+}
 .reader-mask {
   position: fixed;
   inset: 0;

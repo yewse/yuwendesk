@@ -18,6 +18,7 @@ import { SqliteStore, SQLITE_SCHEMA_TARGET } from './db/sqliteStore';
 import { BackupCoordinator, BackupService } from './protection/backup';
 import { ProtectionService } from './protection/service';
 import { applyPendingRestoreBeforeOpen } from './protection/restore';
+import { SourcePrivacyService } from './protection/sourcePrivacy';
 
 const APP_NAME_ZH = '语文备课工作台';
 
@@ -233,9 +234,37 @@ async function bootstrap(): Promise<void> {
   const feedbackService = new FeedbackService(store, store, modelService);
   const backupService = new BackupService({ userDataDir, appVersion: app.getVersion(), store });
   const backupCoordinator = new BackupCoordinator(backupService);
+  const sourcePrivacyService = new SourcePrivacyService({
+    store,
+    backup: backupService,
+    confirmDelete: async ({ documentId, expectedRevision, managedBackupIds }) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      const first = await dialog.showMessageBox(mainWindow, {
+        type: 'warning', buttons: ['取消', '继续核对删除范围'], defaultId: 0, cancelId: 0,
+        title: APP_NAME_ZH,
+        message: '永久删除这份资料及其本机派生内容？',
+        detail: `资料内部 ID：${documentId}\n当前状态修订号：${expectedRevision}\n此操作不可撤销；相关全文索引、模型缓存会清理，引用它的课时需重新核对来源。`
+      });
+      if (first.response !== 1) return null;
+      const second = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: ['取消', '保留受管备份', '删除受管备份并建立删除后恢复点'],
+        defaultId: 0,
+        cancelId: 0,
+        title: APP_NAME_ZH,
+        message: '再次确认删除范围',
+        detail: `含该资料或当前无法安全检查的应用受管备份：${managedBackupIds.length ? managedBackupIds.join('、') : '无'}\n无法检查的受管备份会保守纳入本次范围；已导出的文件和离线副本无法召回；应用级删除不保证 SSD 物理擦除。`
+      });
+      if (second.response === 1) return { policy: 'keep_managed' };
+      if (second.response === 2) return { policy: 'delete_managed_and_create_post_delete' };
+      return null;
+    }
+  });
+  await sourcePrivacyService.reconcilePending();
   const protectionService = new ProtectionService({
     userDataDir,
     backup: backupService,
+    idempotencyStore: store,
     safeStorage,
     choosePortableSavePath: async () => {
       if (!mainWindow || mainWindow.isDestroyed()) return null;
@@ -304,6 +333,7 @@ async function bootstrap(): Promise<void> {
     },
     userDataDir,
     protectionService,
+    sourcePrivacyService,
     noteSuccessfulWrite: (operation) => backupCoordinator.noteSuccessfulWrite(operation),
     appVersion: app.getVersion(),
     appNameZh: APP_NAME_ZH,

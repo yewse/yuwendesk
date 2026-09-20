@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import JSZip from 'jszip';
+import Database from 'better-sqlite3';
 import type { SqliteStore } from '../db/sqliteStore';
 import { buildBackupManifest, isSafeArchivePath, validateBackupManifest, verifyBackupDirectory } from './manifest';
 import { sealPortableArchive } from './envelope';
@@ -41,6 +42,7 @@ function isoWeekKey(date: Date): string {
 export class BackupService {
   private readonly ids: { backupId(): string };
   private readonly now: () => Date;
+  private exclusiveTail: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: BackupServiceOptions) {
     this.ids = options.ids ?? { backupId: () => `backup_${randomUUID()}` };
@@ -86,20 +88,63 @@ export class BackupService {
     const snapshot = await this.options.store.createSanitizedSnapshot(dbPath, kind);
     const dbBytes = await fs.readFile(dbPath);
     const materialEntries = await this.copyRegisteredMaterials(root);
+    const snapshotDb = new Database(dbPath, { readonly: true });
+    let sourceDocumentIds: string[];
+    try {
+      sourceDocumentIds = (snapshotDb.prepare('SELECT id FROM source_document ORDER BY id').all() as Array<{ id: string }>).map((row) => row.id);
+    } finally {
+      snapshotDb.close();
+    }
     return buildBackupManifest({
       backupId, kind, createdAt, appVersion: this.options.appVersion,
       schemaVersion: snapshot.schemaVersion, retention,
       files: [{ path: 'data/yuwendesk.db', sha256: sha256(dbBytes), byteSize: dbBytes.length, role: 'database' }, ...materialEntries],
-      sourceDocumentIds: this.options.store.listSources().map((source) => source.documentId).sort()
+      sourceDocumentIds
     });
   }
 
+  private async exclusive<T>(action: () => Promise<T>): Promise<T> {
+    const previous = this.exclusiveTail;
+    let release!: () => void;
+    this.exclusiveTail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try { return await action(); } finally { release(); }
+  }
+
+  async withExclusive<T>(action: (backup: {
+    findManagedBackupsContainingSource(documentId: string): Promise<string[]>;
+    deleteManagedBackups(backupIds: string[], tokenScope: string[]): Promise<{ deletedIds: string[]; remainingIds: string[] }>;
+    createLocal(): Promise<BackupRecord>;
+    createLocalForOperation(backupId: string): Promise<BackupRecord>;
+  }) => Promise<T>): Promise<T> {
+    return this.exclusive(() => action({
+      findManagedBackupsContainingSource: (documentId) => this.findManagedBackupsContainingSourceUnlocked(documentId),
+      deleteManagedBackups: (backupIds, tokenScope) => this.deleteManagedBackupsUnlocked(backupIds, tokenScope),
+      createLocal: () => this.createLocalUnlocked(),
+      createLocalForOperation: (backupId) => this.createLocalUnlocked(backupId)
+    }));
+  }
+
   async createLocal(): Promise<BackupRecord> {
+    return this.exclusive(() => this.createLocalUnlocked());
+  }
+
+  async createLocalForOperation(backupId: string): Promise<BackupRecord> {
+    return this.exclusive(() => this.createLocalUnlocked(backupId));
+  }
+
+  private async createLocalUnlocked(requestedBackupId?: string): Promise<BackupRecord> {
     const now = this.now();
-    const backupId = this.ids.backupId();
+    const backupId = requestedBackupId ?? this.ids.backupId();
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(backupId)) throw new Error('backup_id_invalid');
     const partial = join(this.backupsRoot, `${backupId}.partial`);
     const ready = join(this.backupsRoot, `${backupId}.ready`);
-    if (existsSync(partial) || existsSync(ready)) throw new Error('backup_id_exists');
+    if (existsSync(ready)) {
+      const existing = (await this.list()).find((record) => record.backupId === backupId);
+      if (!existing) throw new Error('backup_id_exists_invalid');
+      return existing;
+    }
+    if (existsSync(partial)) await fs.rm(partial, { recursive: true, force: true });
     await fs.mkdir(partial, { recursive: true });
     const manifest = await this.buildDirectory(partial, backupId, 'local', now.toISOString(), await this.retentionFor(now));
     await fs.writeFile(join(partial, 'manifest.json'), JSON.stringify(manifest), 'utf8');
@@ -163,12 +208,73 @@ export class BackupService {
     return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  private async managedDirectoryIds(): Promise<string[]> {
+    if (!existsSync(this.backupsRoot)) return [];
+    const ids: string[] = [];
+    for (const name of await fs.readdir(this.backupsRoot)) {
+      if (!name.endsWith('.ready')) continue;
+      const backupId = name.slice(0, -'.ready'.length);
+      if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(backupId)) ids.push(backupId);
+    }
+    return [...new Set(ids)].sort();
+  }
+
   async deleteManaged(backupId: string): Promise<boolean> {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(backupId)) return false;
-    const record = (await this.list()).find((item) => item.backupId === backupId);
-    if (!record) return false;
-    await fs.rm(record.path, { recursive: true, force: true });
+    const path = join(this.backupsRoot, `${backupId}.ready`);
+    if (!existsSync(path)) return false;
+    await fs.rm(path, { recursive: true, force: true });
     return true;
+  }
+
+  async findManagedBackupsContainingSource(documentId: string): Promise<string[]> {
+    return this.exclusive(() => this.findManagedBackupsContainingSourceUnlocked(documentId));
+  }
+
+  private async findManagedBackupsContainingSourceUnlocked(documentId: string): Promise<string[]> {
+    const matching = new Set<string>();
+    const inspected = new Set<string>();
+    for (const record of await this.list()) {
+      try {
+        const manifest = JSON.parse(await fs.readFile(join(record.path, 'manifest.json'), 'utf8')) as BackupManifest;
+        inspected.add(record.backupId);
+        if (manifest.sourceDocumentIds.includes(documentId)) matching.add(record.backupId);
+      } catch {
+        // A backup that became unreadable after list() is conservatively included in the confirmation scope.
+        matching.add(record.backupId);
+      }
+    }
+    // Invalid/uninspectable .ready directories may still contain the source. Include them conservatively rather than
+    // claiming the application-managed scope is clear.
+    for (const backupId of await this.managedDirectoryIds()) if (!inspected.has(backupId)) matching.add(backupId);
+    return [...matching].sort();
+  }
+
+  async deleteManagedBackups(
+    backupIds: string[],
+    tokenScope: string[]
+  ): Promise<{ deletedIds: string[]; remainingIds: string[] }> {
+    return this.exclusive(() => this.deleteManagedBackupsUnlocked(backupIds, tokenScope));
+  }
+
+  private async deleteManagedBackupsUnlocked(
+    backupIds: string[],
+    tokenScope: string[]
+  ): Promise<{ deletedIds: string[]; remainingIds: string[] }> {
+    const requested = [...new Set(backupIds)].sort();
+    const scoped = [...new Set(tokenScope)].sort();
+    if (JSON.stringify(requested) !== JSON.stringify(scoped)) throw new Error('managed_backup_scope_mismatch');
+    const deletedIds: string[] = [];
+    for (const backupId of requested) {
+      try {
+        const path = join(this.backupsRoot, `${backupId}.ready`);
+        if (!existsSync(path) || await this.deleteManaged(backupId)) deletedIds.push(backupId);
+      } catch {
+        // Report the actual remainder; database deletion must not be misreported or rolled back.
+      }
+    }
+    const deleted = new Set(deletedIds);
+    return { deletedIds, remainingIds: requested.filter((backupId) => !deleted.has(backupId)) };
   }
 
   private async rotate(): Promise<void> {

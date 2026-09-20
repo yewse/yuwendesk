@@ -47,6 +47,9 @@ export const IMPLEMENTED_OPERATIONS = [
   'sources.retire',
   'sources.versions',
   'sources.readOriginal',
+  'sources.reclassify',
+  'sources.prepareDelete',
+  'sources.delete',
   'model.providers',
   'model.getConfig',
   'model.configure',
@@ -208,6 +211,7 @@ export interface SourceListItemDTO {
   classification: string;
   status: string;
   version: number;
+  revision: number;
   contentHash: string;
 }
 export interface SourceReadDTO {

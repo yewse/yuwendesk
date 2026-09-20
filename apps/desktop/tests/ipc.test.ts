@@ -44,7 +44,7 @@ function saveReq(key: string | undefined, content: unknown, revision?: unknown) 
 describe('IPC 白名单与外壳校验（SEC/规范 9.1）', () => {
   it('只承认已实现的白名单操作', () => {
     expect(isImplementedOperation('app.health')).toBe(true);
-    expect(isImplementedOperation('sources.delete')).toBe(false);
+    expect(isImplementedOperation('sources.delete')).toBe(true);
     expect(isImplementedOperation('shell.exec')).toBe(false);
   });
   it('拒绝未实现操作 / 版本不一致 / 通道不符', () => {
@@ -191,6 +191,9 @@ describe('白名单与目录一致性', () => {
       'sources.retire',
       'sources.versions',
       'sources.readOriginal',
+      'sources.reclassify',
+      'sources.prepareDelete',
+      'sources.delete',
       'model.providers',
       'model.getConfig',
       'model.configure',

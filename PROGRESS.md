@@ -185,7 +185,7 @@
 - **状态边界**：机器测试只证明事件、事务、IPC、隐私守卫、离线协议与渲染代码边界，不证明一般匿名化能力、真实云模型解释质量、教师实际实施质量或教学有效性；冻结验收未改为 PASS。真实学生材料隐私授权与逐次外发许可、开发态 Electron UI 走查、干净 Windows 安装、真实 API 归因质量、教学专业复核、Office/WPS 保真与正式签名仍为 `BLOCKED_EXTERNAL`。
 - 设计规格：`docs/superpowers/specs/2026-09-20-g08-feedback-attribution-design.md`；实施计划：`docs/superpowers/plans/2026-09-20-g08-feedback-attribution.md`。首版仍不保存学生原始作业正文；Observation 保持 `cloud_allowed=false`。
 
-## G09 保护与恢复 — IN_PROGRESS（T01 本地工程范围完成）
+## G09 保护与恢复 — IN_PROGRESS（T01–T02 本地工程范围完成）
 
 - [x] **G09-T01 WAL 一致快照与原子发布**：新增 `protection` 领域；使用 better-sqlite3 Online Backup API，而非复制主 `.db`。快照经独立 `integrity_check`，删除全部 `credential` 行，再与应用登记的成果文件逐项重算 SHA-256；任何缺失/不符均不发布。备份先写 `.partial`，完整校验后原子改名 `.ready`，列表忽略半成品。
 - [x] **日/周保留与自动触发**：成功业务写入后通知 `BackupCoordinator`，按本地日历日合并为每日最多一次；备份记录日/周标签，轮换保留最近 7 个日点和 4 个周点，并不删除唯一有效恢复点。自动备份失败不回滚已提交业务写入，维护错误保持独立。
@@ -197,10 +197,18 @@
 - **外部门/未覆盖**：真实两台 Windows 机器跨机恢复、干净 Win11 安装后恢复、真实 DPAPI、生产进程监听检查、签名与真实学生数据仍为 `BLOCKED_EXTERNAL`。本包不把 Node 伪后端或代码检查冒充这些验收证据。
 - 设计：`docs/superpowers/specs/2026-09-20-g09-protection-recovery-design.md`；计划：`docs/superpowers/plans/2026-09-20-g09-protection-recovery.md`。
 
+- [x] **G09-T02 学生敏感资料认证加密**：SQLite migration v11 新增 `source_sensitive_payload`、无内容 `source_tombstone`、文件隔离登记与 `maintenance_idempotency`；`source_document.revision` 独立于版本号。敏感导入和普通→敏感升级使用工作区数据密钥、随机 96 位 nonce、AES-256-GCM 与只含 workspace/document/version 内部 ID 及 payload 版本的 AAD；原件、全文与结构段按固定 v1 载荷整体认证加密。文档内版本分类必须一致，跨分类新增版本 fail-closed，普通→敏感只能走整文档升级；安全密钥不可用即 `PRIVACY_BLOCKED/KEY_UNAVAILABLE`，绝不降级落明文。
+- [x] **原子清理、派生去内容化与可恢复文件隔离**：升级先写密文，再逐界清理启用 FTS5 `secure-delete` 的两张索引、段、全文和 `source_file.original_blob`，换通用标题并推进文档修订号。精确引用的课时修订被去内容化并标 `valid=0/source_review_required=1`；相关 ReviewReport、ChangeProposal、材料包/文件、反馈、测量、归因、纠正、偏好/效果事件与模型缓存同时删除。受管材料文件先移入登记隔离区，SQLite 事务失败恢复原位；进程中断后启动按幂等提交状态恢复或清除。全部清理、依赖与幂等边界有故障回滚测试。
+- [x] **永久删除与稳定备份范围**：多版本永久删除在一个 `IMMEDIATE` 事务内清除正文、FTS、原件、密文、版本、文档及派生内容，只留 document ID、原因码、时间、版本数、备份范围与无正文工作流状态。主进程双确认 token 绑定 workspace/document/独立 revision/受管备份集合/策略；删除前在备份排他锁内重扫范围，漂移即要求重新确认。manifest 的 source ID 从已完成快照读取，不再从随后变化的 live store 读取；删除后再次扫描并如实报告残留。
+- [x] **崩溃可恢复的备份收尾**：数据库删除、受管备份处理、确定性删除后恢复点和最终结果分阶段持久化；启动时自动续做未完成阶段。删除后恢复点使用幂等确定 ID，已发布恢复点不会重复创建；授权范围内已先行删除的备份按幂等成功记录。损坏/不可读的 `.ready` 受管备份也保守纳入确认范围，并可按受管目录 ID 显式删除。外部/离线副本不可召回，SSD 物理擦除不作保证。
+- [x] **窄 IPC、先预留幂等与 UI**：开放命名 `sources.reclassify/sources.prepareDelete/sources.delete`，严格 schema 拒绝路径、密文和额外字段；preload 仅暴露命名方法。已过期、已消费或范围失效的 prepare grant 不重放旧 token，同一幂等请求会在重新确认后签发新 grant；备份范围漂移映射为 `VERSION_CONFLICT` 并要求核对最新范围。`backup.create` 在发布副作用前原子写入 `running` 预留，崩溃后以 `incomplete` fail-closed，避免重复发布；便携口令只以工作区密钥 HMAC 后的摘要参与语义指纹，原口令不持久化。资料页使用独立 revision 进行并发确认，并分开显示数据库、受管备份、外部副本和介质擦除范围。
+- **T02 实测（Windows 11 开发主机，Node 24.15.0；全为虚构数据与伪 safeStorage）**：代码复核发现的跨分类绕过、派生明文残留、FTS 残留、备份范围竞态、删除工作流续做、prepare grant 重放与不可读受管备份遗漏均逐项补测试并修复。最终重点定向 **45/45**；全量 Vitest **419 passed / 1 skipped（420 total，49 files）**。主/渲染 typecheck、ESLint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0；覆盖跨服务/跨重启幂等、全部清理边界、文件隔离回滚、备份范围漂移、快照/live 竞态、删除工作流重启续做和不可读备份的保守纳入/显式删除。既有跳过项未改为通过。
+- **T02 外部门/未覆盖**：真实学生资料处理授权、真实 Windows DPAPI、真实设备 SSD/备份介质销毁、已外发/离线副本召回均为 `BLOCKED_EXTERNAL` 或能力外边界；真实 API 不接收敏感资料，真实模型辅助归因仍需逐次隐私授权；教学有效性仍待有资质教师专业复核。本包只证明本地工程边界，不宣称完成上述外部验收。
+
 ## G10–G11 — NOT_STARTED
 
 升级与性能（G10）、完整发行验收（G11）尚未开始。
 
 ## 下一步
 
-见 `HANDOFF.md`。下一步执行 G09-T02 敏感重分类与彻底删除，不重做 G00–G09-T01。扫描件 OCR 未接入则继续阻塞。外部门保留：真实学生材料隐私授权与逐次外发许可、真实跨机 Windows/DPAPI 恢复、开发态 Electron 真实窗口走查、G01 目标环境安装验收、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。
+见 `HANDOFF.md`。下一步执行 G09-T03 最小诊断与故障恢复，不重做 G00–G09-T02。扫描件 OCR 未接入则继续阻塞。外部门保留：真实学生材料隐私授权与逐次外发许可、真实跨机 Windows/DPAPI 恢复、开发态 Electron 真实窗口走查、G01 目标环境安装验收、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。

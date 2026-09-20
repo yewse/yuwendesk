@@ -107,6 +107,7 @@ export interface IpcServiceContext {
   lessonChangeService?: LessonChangeService;
   // G09 备份/恢复服务；路径只由主进程原生对话框选择。
   protectionService?: ProtectionServiceLike;
+  sourcePrivacyService?: SourcePrivacyServiceLike;
   noteSuccessfulWrite?: (operation: OperationName) => void;
 }
 
@@ -121,6 +122,26 @@ export interface ProtectionServiceLike {
     confirmationToken?: string;
   }, idempotencyKey?: string): Promise<unknown>;
   delete(payload: { action: string; backupId: string; confirmationToken?: string }, idempotencyKey?: string): Promise<unknown>;
+}
+
+export interface SourcePrivacyServiceLike {
+  prepareDelete(input: {
+    workspaceId: string;
+    documentId: string;
+    expectedRevision: number;
+    idempotencyKey: string;
+    fingerprint: string;
+  }): Promise<unknown>;
+  delete(input: {
+    workspaceId: string;
+    documentId: string;
+    expectedRevision: number;
+    managedBackupIds: string[];
+    policy: 'delete_managed_and_create_post_delete' | 'keep_managed';
+    confirmationToken: string;
+    idempotencyKey: string;
+    fingerprint: string;
+  }): Promise<unknown>;
 }
 
 // 仅声明 IPC 需要的模型服务形状（避免主进程强耦合）。
@@ -139,7 +160,7 @@ export function isImplementedOperation(op: string): op is OperationName {
 }
 
 const BUSINESS_WRITE_OPERATIONS = new Set<OperationName>([
-  'ui.saveDraft', 'sources.import', 'sources.importFile', 'sources.retire',
+  'ui.saveDraft', 'sources.import', 'sources.importFile', 'sources.retire', 'sources.reclassify', 'sources.delete',
   'model.configure', 'model.run', 'lesson.buildDemo', 'plans.recordTeaching',
   'feedback.analyze', 'corrections.decide', 'corrections.revert',
   'observations.add', 'observations.delete', 'change.apply', 'materials.generate'
@@ -237,6 +258,12 @@ export class IpcService {
         return this.sourcesVersions(request);
       case 'sources.readOriginal':
         return this.sourcesReadOriginal(request);
+      case 'sources.reclassify':
+        return this.sourcesReclassify(request);
+      case 'sources.prepareDelete':
+        return this.sourcesPrepareDelete(request);
+      case 'sources.delete':
+        return this.sourcesDelete(request);
       case 'model.providers':
         return this.ctx.modelService ? { ok: true, data: { providers: this.ctx.modelService.providerCatalog() } } : { ok: true, data: { providers: [] } };
       case 'model.getConfig':
@@ -414,10 +441,17 @@ export class IpcService {
 
   private mapImportResult(r: import('./store').SourceImportResult): IpcResponse {
     if (r.status === 'blocked_sensitive') {
+      if (r.reason === 'classification_transition_blocked') {
+        return errorResponse(
+          'PRIVACY_BLOCKED',
+          '未新增版本：同一资料不能混用普通明文与学生敏感分类。',
+          '请先把整份资料升级为学生敏感资料，再导入敏感新版本。'
+        );
+      }
       return errorResponse(
         'PRIVACY_BLOCKED',
-        '敏感资料（学生材料）导入已被阻止：完整加密资料路径尚未实现，不会将正文写入普通存储。',
-        '普通非敏感资料可正常导入；敏感材料待加密业务落点实现后再启用。'
+        '敏感资料未导入：当前设备的安全密钥后端不可用，正文不会写入普通存储。',
+        '请在受支持的 Windows 安全存储可用后重试，或继续处理非敏感资料。'
       );
     }
     if (r.status === 'rejected') {
@@ -445,6 +479,120 @@ export class IpcService {
     if (!src) return { ok: true, data: { versions: [] } };
     const p = req.payload as { documentId: string };
     return { ok: true, data: { versions: src.getSourceVersions(p.documentId) } };
+  }
+
+  private sourcesReclassify(req: IpcRequest): IpcResponse {
+    const src = this.ctx.sourceStore;
+    if (!src) return errorResponse('SOURCE_MISSING', '资料不存在。', '请刷新资料列表。');
+    const expectedRevision = req.expected_revision;
+    if (typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || !req.idempotency_key?.trim()) {
+      return errorResponse('INPUT_INVALID', '重分类请求缺少有效版本或幂等标识。', '请刷新资料后重试。');
+    }
+    const payload = req.payload as { documentId: string; targetClassification: string };
+    if (payload.targetClassification !== 'student_sensitive') {
+      return errorResponse('PRIVACY_BLOCKED', '学生敏感资料不可降级为普通明文资料。', '如需移除，请使用永久删除。');
+    }
+    const workspaceId = req.workspace_id ?? 'workspace_local';
+    const fingerprint = createHash('sha256').update(JSON.stringify({
+      operation: 'sources.reclassify', workspaceId, documentId: payload.documentId,
+      expectedRevision, targetClassification: payload.targetClassification
+    })).digest('hex');
+    try {
+      const result = src.reclassifySource({
+        workspaceId,
+        documentId: payload.documentId,
+        expectedRevision,
+        targetClassification: 'student_sensitive',
+        idempotencyKey: req.idempotency_key,
+        fingerprint,
+        updatedAt: new Date().toISOString()
+      });
+      if (result.status === 'missing') return errorResponse('SOURCE_MISSING', '资料不存在。', '请刷新资料列表。');
+      if (result.status === 'conflict') return errorResponse('VERSION_CONFLICT', '资料版本已经变化。', '请刷新后重新确认。');
+      if (result.status === 'blocked') {
+        return errorResponse(result.reason === 'KEY_UNAVAILABLE' ? 'KEY_UNAVAILABLE' : 'PRIVACY_BLOCKED', '敏感资料保护未执行。', '请检查设备安全存储。');
+      }
+      return { ok: true, data: result };
+    } catch (error) {
+      if (error instanceof StoreProtectedError) return errorResponse('DATABASE_LOCKED', '本地数据暂停写入。', '请先完成数据恢复。');
+      if ((error as Error).message.includes('idempotency')) return errorResponse('INPUT_INVALID', '幂等标识已用于不同请求。', '请刷新后重试。');
+      return errorResponse('DISK_FULL', '敏感升级未完成，原资料保持不变。', '请检查存储后重试。', true);
+    }
+  }
+
+  private async sourcesPrepareDelete(req: IpcRequest): Promise<IpcResponse> {
+    const service = this.ctx.sourcePrivacyService;
+    if (!service) return errorResponse('PRIVACY_BLOCKED', '永久删除功能当前不可用。', '请重启应用后重试。');
+    const expectedRevision = req.expected_revision;
+    if (typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || !req.idempotency_key?.trim()) {
+      return errorResponse('INPUT_INVALID', '删除确认缺少有效版本或幂等标识。', '请刷新资料后重试。');
+    }
+    const payload = req.payload as { documentId: string };
+    const workspaceId = req.workspace_id ?? 'workspace_local';
+    const fingerprint = createHash('sha256').update(JSON.stringify({
+      operation: 'sources.prepareDelete', workspaceId, documentId: payload.documentId, expectedRevision
+    })).digest('hex');
+    try {
+      const prepared = await service.prepareDelete({
+        workspaceId,
+        documentId: payload.documentId,
+        expectedRevision,
+        idempotencyKey: req.idempotency_key,
+        fingerprint
+      });
+      return { ok: true, data: prepared ?? { cancelled: true } };
+    } catch {
+      return errorResponse('PRIVACY_BLOCKED', '未能完成删除范围确认。', '请刷新资料与备份列表后重试。');
+    }
+  }
+
+  private async sourcesDelete(req: IpcRequest): Promise<IpcResponse> {
+    const service = this.ctx.sourcePrivacyService;
+    if (!service) return errorResponse('PRIVACY_BLOCKED', '永久删除功能当前不可用。', '请重启应用后重试。');
+    const expectedRevision = req.expected_revision;
+    if (typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || !req.idempotency_key?.trim()) {
+      return errorResponse('INPUT_INVALID', '删除请求缺少有效版本或幂等标识。', '请重新确认删除。');
+    }
+    const payload = req.payload as {
+      documentId: string;
+      confirmationToken: string;
+      managedBackupIds: unknown[];
+      policy: string;
+    };
+    if (
+      payload.managedBackupIds.some((id) => typeof id !== 'string' || id.length === 0 || id.length > 128) ||
+      !['delete_managed_and_create_post_delete', 'keep_managed'].includes(payload.policy)
+    ) return errorResponse('INPUT_INVALID', '删除范围无效。', '请重新确认删除。');
+    const workspaceId = req.workspace_id ?? 'workspace_local';
+    const fingerprint = createHash('sha256').update(JSON.stringify({
+      operation: 'sources.delete', workspaceId, documentId: payload.documentId,
+      expectedRevision, managedBackupIds: [...payload.managedBackupIds].sort(), policy: payload.policy
+    })).digest('hex');
+    try {
+      const result = await service.delete({
+        workspaceId,
+        documentId: payload.documentId,
+        expectedRevision,
+        managedBackupIds: payload.managedBackupIds as string[],
+        policy: payload.policy as 'delete_managed_and_create_post_delete' | 'keep_managed',
+        confirmationToken: payload.confirmationToken,
+        idempotencyKey: req.idempotency_key,
+        fingerprint
+      });
+      const status = (result as { status?: string }).status;
+      if (status === 'missing') return errorResponse('SOURCE_MISSING', '资料不存在或已经删除。', '请刷新资料列表。');
+      if (status === 'conflict') return errorResponse('VERSION_CONFLICT', '资料版本已经变化。', '请刷新后重新确认。');
+      return { ok: true, data: result };
+    } catch (error) {
+      if ((error as Error).message === 'source_delete_confirmation_invalid') {
+        return errorResponse('PRIVACY_BLOCKED', '删除确认已失效或与当前资料/备份范围不匹配。', '请重新执行两步确认。');
+      }
+      if ((error as Error).message === 'source_delete_scope_changed') {
+        return errorResponse('VERSION_CONFLICT', '应用受管备份范围已经变化，本次未删除。', '请重新执行两步确认并核对最新备份范围。');
+      }
+      if ((error as Error).message.includes('idempotency')) return errorResponse('INPUT_INVALID', '幂等标识已用于不同请求。', '请刷新后重试。');
+      return errorResponse('DISK_FULL', '永久删除未能安全完成。', '请检查存储并重新确认。', true);
+    }
   }
 
   private modelConfigure(req: IpcRequest): IpcResponse {

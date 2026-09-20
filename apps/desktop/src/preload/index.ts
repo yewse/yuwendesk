@@ -119,6 +119,44 @@ const api = {
   sourceVersions: (documentId: string) => call<{ versions: SourceVersionDTO[] }>('sources.versions', { payload: { documentId } }),
   readOriginal: (versionId: string) =>
     call<{ base64: string; originalHash: string; byteSize: number; mime: string }>('sources.readOriginal', { payload: { versionId } }),
+  reclassifySourceSensitive: (documentId: string, expectedRevision: number, idempotencyKey: string) =>
+    call<{
+      status: 'succeeded'; documentId: string; classification: 'student_sensitive'; revision: number;
+      protectedVersionIds: string[]; invalidatedLessonRevisionIds: string[]; deletedModelJobIds: string[]; replayed: boolean;
+    }>('sources.reclassify', {
+      workspace_id: 'workspace_local',
+      expected_revision: expectedRevision,
+      idempotency_key: idempotencyKey,
+      payload: { documentId, targetClassification: 'student_sensitive' }
+    }),
+  prepareSourceDelete: (documentId: string, expectedRevision: number, idempotencyKey: string) =>
+    call<{
+      cancelled?: boolean; confirmationToken?: string; expiresAt?: number; managedBackupIds?: string[];
+      policy?: 'delete_managed_and_create_post_delete' | 'keep_managed';
+      externalOrOfflineBackups?: 'cannot_be_recalled'; ssdPhysicalErasure?: 'not_guaranteed';
+    }>('sources.prepareDelete', {
+      workspace_id: 'workspace_local',
+      expected_revision: expectedRevision,
+      idempotency_key: idempotencyKey,
+      payload: { documentId }
+    }),
+  deleteSourcePermanently: (
+    documentId: string,
+    expectedRevision: number,
+    confirmationToken: string,
+    managedBackupIds: string[],
+    policy: 'delete_managed_and_create_post_delete' | 'keep_managed',
+    idempotencyKey: string
+  ) => call<{
+    status: 'succeeded'; documentId: string; databaseDeleted: true; deletedVersionCount: number;
+    managedBackupDeletedIds: string[]; managedBackupRemainingIds: string[]; postDeleteBackupId: string | null;
+    externalOrOfflineBackups: 'not_recalled'; ssdPhysicalErasure: 'not_guaranteed'; replayed: boolean;
+  }>('sources.delete', {
+    workspace_id: 'workspace_local',
+    expected_revision: expectedRevision,
+    idempotency_key: idempotencyKey,
+    payload: { documentId, confirmationToken, managedBackupIds, policy }
+  }),
   // G04 模型（教师不写提示词；此处仅配置/探测/运行/查看）。
   modelProviders: () => call<{ providers: { id: string; defaultModel: string; requiresKey: boolean }[] }>('model.providers'),
   modelGetConfig: () => call<{ config: unknown }>('model.getConfig'),

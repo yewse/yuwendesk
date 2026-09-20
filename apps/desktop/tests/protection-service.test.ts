@@ -3,12 +3,119 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ProtectionService } from '../src/main/protection/service';
+import { SqliteStore } from '../src/main/db/sqliteStore';
 
 function temp(): string {
   return mkdtempSync(join(tmpdir(), 'yuwendesk-protection-service-'));
 }
 
 describe('G09 ProtectionService main-process authority', () => {
+  it('reserves persistent backup idempotency before side effects and binds portable passphrases with a local-secret digest', async () => {
+    const root = temp();
+    const store = new SqliteStore(root, {
+      safeStorage: {
+        isEncryptionAvailable: () => true,
+        encryptString: (value) => Buffer.from(`SAFE:${Buffer.from(value).toString('base64')}`),
+        decryptString: (value) => Buffer.from(value.toString().slice(5), 'base64').toString()
+      }
+    });
+    await store.load();
+    let localCalls = 0;
+    const output = join(root, 'portable.yuwenbackup');
+    const options = {
+      userDataDir: root,
+      backup: {
+        createLocal: async () => { localCalls += 1; throw new Error('published_then_uncertain'); },
+        exportPortable: async () => ({ container: Buffer.from('encrypted'), manifest: { backupId: 'portable_bound' } }),
+        list: async () => [],
+        deleteManaged: async () => true
+      },
+      idempotencyStore: store,
+      choosePortableSavePath: async () => output,
+      choosePortableOpenPath: async () => null,
+      confirmRestore: async () => false,
+      confirmDelete: async () => false,
+      relaunch: () => undefined
+    };
+    try {
+      await expect(new ProtectionService(options).create({ mode: 'local' }, 'uncertain-local')).rejects.toThrow('published_then_uncertain');
+      await expect(new ProtectionService(options).create({ mode: 'local' }, 'uncertain-local')).rejects.toThrow('protection_idempotency_incomplete');
+      expect(localCalls).toBe(1);
+
+      const first = await new ProtectionService(options).create({ mode: 'portable', passphrase: 'correct horse battery staple' }, 'portable-bound');
+      expect(await new ProtectionService(options).create({ mode: 'portable', passphrase: 'correct horse battery staple' }, 'portable-bound')).toEqual(first);
+      await expect(new ProtectionService(options).create({ mode: 'portable', passphrase: 'different passphrase value' }, 'portable-bound'))
+        .rejects.toThrow('protection_idempotency_key_reuse');
+      const row = store.getMaintenanceIdempotency('portable-bound');
+      expect(JSON.stringify(row)).not.toContain('correct horse battery staple');
+      expect(JSON.stringify(row)).not.toContain('different passphrase value');
+    } finally { store.close(); }
+  });
+
+  it('does not repeat a reserved backup side effect across concurrent service instances', async () => {
+    const root = temp();
+    const store = new SqliteStore(root);
+    await store.load();
+    let calls = 0;
+    let release!: () => void;
+    let started!: () => void;
+    const startedPromise = new Promise<void>((resolve) => { started = resolve; });
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const options = {
+      userDataDir: root,
+      backup: {
+        createLocal: async () => { calls += 1; started(); await blocked; return { backupId: 'concurrent_local' }; },
+        exportPortable: async () => ({ container: Buffer.from('encrypted'), manifest: { backupId: 'portable' } }),
+        list: async () => [], deleteManaged: async () => true
+      },
+      idempotencyStore: store,
+      choosePortableSavePath: async () => null, choosePortableOpenPath: async () => null,
+      confirmRestore: async () => false, confirmDelete: async () => false, relaunch: () => undefined
+    };
+    try {
+      const first = new ProtectionService(options).create({ mode: 'local' }, 'concurrent-reservation');
+      await startedPromise;
+      await expect(new ProtectionService(options).create({ mode: 'local' }, 'concurrent-reservation'))
+        .rejects.toThrow('protection_idempotency_incomplete');
+      release();
+      await expect(first).resolves.toEqual({ backupId: 'concurrent_local' });
+      expect(calls).toBe(1);
+    } finally { store.close(); }
+  });
+
+
+  it('replays completed backup creation from persistent maintenance idempotency after service restart', async () => {
+    const root = temp();
+    const store = new SqliteStore(root);
+    await store.load();
+    let calls = 0;
+    const options = {
+      userDataDir: root,
+      backup: {
+        createLocal: async () => { calls += 1; return { backupId: 'persistent_local', valid: true }; },
+        exportPortable: async () => ({ container: Buffer.from('encrypted'), manifest: { backupId: 'portable_1' } }),
+        list: async () => [],
+        deleteManaged: async () => true
+      },
+      idempotencyStore: store,
+      choosePortableSavePath: async () => null,
+      choosePortableOpenPath: async () => null,
+      confirmRestore: async () => false,
+      confirmDelete: async () => false,
+      relaunch: () => undefined
+    };
+    try {
+      const first = await new ProtectionService(options).create({ mode: 'local' }, 'persistent-create-key');
+      const replayed = await new ProtectionService(options).create({ mode: 'local' }, 'persistent-create-key');
+      expect(replayed).toEqual(first);
+      expect(calls).toBe(1);
+      await expect(new ProtectionService(options).create({ mode: 'portable', passphrase: 'a-long-enough-passphrase' }, 'persistent-create-key'))
+        .rejects.toThrow('protection_idempotency_key_reuse');
+    } finally {
+      store.close();
+    }
+  });
+
   it('uses native-selected paths and never returns the selected path to the renderer', async () => {
     const root = temp();
     const output = join(root, 'portable.yuwenbackup');

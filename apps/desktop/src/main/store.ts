@@ -104,7 +104,7 @@ export type SourceImportResult =
   | { status: 'duplicate'; documentId: string; versionId: string; version: number; contentHash: string }
   // 同标题但内容不同：仅“疑似关联”，需教师明确关系后再落库，不自动新增版本/切换当前版本。
   | { status: 'needs_confirmation'; contentHash: string; existing: SourceExistingSummary }
-  | { status: 'blocked_sensitive'; reason: 'not_implemented' | 'encryption_unavailable' }
+  | { status: 'blocked_sensitive'; reason: 'encryption_unavailable' | 'classification_transition_blocked' }
   // 取消：解析或提交前被取消，已取消任务不得静默入库。
   | { status: 'cancelled' }
   | { status: 'rejected'; reason: 'too_large' | 'empty' | 'bad_classification' | 'parse_failed' | 'limit_exceeded' };
@@ -131,6 +131,7 @@ export interface SourceListItem {
   classification: SourceClassification;
   status: string;
   version: number;
+  revision: number;
   contentHash: string;
 }
 export interface SourceReadResult {
@@ -181,6 +182,8 @@ export interface SourceStore {
   // 精确区间读取（不加任何前后文 padding）：用于模型上下文，避免复用带未授权前后文的展示预览。
   // 返回 { text, fullLength }；调用方据 fullLength 判断是否越界/需扩展授权，不静默截断。
   readExactRange(versionId: string, charStart: number, charEnd: number): { text: string; fullLength: number } | null;
+  reclassifySource(input: SourceReclassificationInput): SourceReclassificationResult;
+  deleteSourcePermanently(input: SourceDeletionInput): SourceDeletionResult;
 }
 export interface SourceVersionMeta {
   documentId: string;
@@ -197,6 +200,64 @@ export interface SourceOriginalResult {
   byteSize: number;
   mime: string;
 }
+
+export interface SourceReclassificationInput {
+  workspaceId: string;
+  documentId: string;
+  expectedRevision: number;
+  targetClassification: SourceClassification;
+  idempotencyKey: string;
+  fingerprint: string;
+  updatedAt: string;
+}
+export type SourceReclassificationResult =
+  | {
+      status: 'succeeded';
+      documentId: string;
+      classification: 'student_sensitive';
+      revision: number;
+      protectedVersionIds: string[];
+      invalidatedLessonRevisionIds: string[];
+      deletedModelJobIds: string[];
+      replayed: boolean;
+    }
+  | { status: 'conflict'; currentRevision: number }
+  | { status: 'missing' }
+  | { status: 'blocked'; reason: 'PRIVACY_BLOCKED' | 'KEY_UNAVAILABLE' };
+export interface SourceDeletionInput {
+  workspaceId: string;
+  documentId: string;
+  expectedRevision: number;
+  managedBackupIds: string[];
+  policy: 'delete_managed_and_create_post_delete' | 'keep_managed';
+  idempotencyKey: string;
+  fingerprint: string;
+  deletedAt: string;
+}
+export interface SourceDeletionWorkflow {
+  documentId: string;
+  idempotencyKey: string;
+  policy: 'delete_managed_and_create_post_delete' | 'keep_managed';
+  status: 'database_deleted' | 'managed_backups_processed' | 'completed';
+  managedBackupIds: string[];
+  managedBackupDeletedIds: string[];
+  managedBackupRemainingIds: string[];
+  postDeleteBackupId: string | null;
+  updatedAt: string;
+}
+export type SourceDeletionResult =
+  | {
+      status: 'succeeded';
+      documentId: string;
+      deletedVersionCount: number;
+      databaseDeleted: true;
+      invalidatedLessonRevisionIds: string[];
+      deletedModelJobIds: string[];
+      externalOrOfflineBackups: 'not_recalled';
+      replayed: boolean;
+    }
+  | { status: 'conflict'; currentRevision: number }
+  | { status: 'missing' };
 
 // ===== G04 模型配置与作业持久化 =====
 export interface ModelConfig {

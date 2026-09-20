@@ -101,10 +101,10 @@ afterEach(() => {
 });
 
 describe('G08-T01 real SQLite teaching event boundary', () => {
-  it('migrates to the G08 schema target', async () => {
+  it('preserves G08 tables while migrating to the current schema target', async () => {
     const store = await openStore(tempDir());
-    expect(SQLITE_SCHEMA_TARGET).toBe(10);
-    expect(store.schemaVersion()).toBe(10);
+    expect(SQLITE_SCHEMA_TARGET).toBe(11);
+    expect(store.schemaVersion()).toBe(11);
   });
 
   it('persists one teaching event without moving the lesson revision', async () => {

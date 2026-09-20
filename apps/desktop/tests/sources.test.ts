@@ -90,12 +90,17 @@ describe('G03 资料导入与版本/哈希', () => {
     expect(s.listSources().length).toBe(2);
   });
 
-  it('敏感分类 → 无条件阻塞（即使加密后端可用，也不落普通存储）', async () => {
+  it('敏感分类 → 安全后端可用时只落加密载荷；不可用时阻塞', async () => {
     const withSafe = await makeStore(tmp(), fakeSafe(true));
     const r = withSafe.importSource({ title: '学生作答', format: 'txt', content: '自拟样例', classification: 'student_sensitive' });
-    expect(r.status).toBe('blocked_sensitive');
-    if (r.status === 'blocked_sensitive') expect(r.reason).toBe('not_implemented');
-    expect(withSafe.listSources().length).toBe(0);
+    expect(r.status).toBe('imported');
+    expect(withSafe.listSources()[0].classification).toBe('student_sensitive');
+    expect(withSafe.listSources()[0].title).toMatch(/^学生作品/u);
+    const withoutSafe = await makeStore(tmp());
+    const blocked = withoutSafe.importSource({ title: '学生作答', format: 'txt', content: '自拟样例', classification: 'student_sensitive' });
+    expect(blocked.status).toBe('blocked_sensitive');
+    if (blocked.status === 'blocked_sensitive') expect(blocked.reason).toBe('encryption_unavailable');
+    expect(withoutSafe.listSources().length).toBe(0);
   });
 
   it('未知分类 → 拒绝；缺省分类为本地私有(不默认公开)', async () => {

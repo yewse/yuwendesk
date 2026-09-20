@@ -20,7 +20,8 @@
 - **G07 四包本地工程范围已完成**：T01 确定性审查/严格 `ReviewReport`/持久化；T02 受控变更/依赖失效/严格 `ChangeProposal`/五文件暂存哈希复核/SQLite 原子接纳/持久幂等；T03 单方案最少选择 UI/差异/历史/纸本提醒；T04 整包内容审查、17 个文件系统/SQLite 故障边界、三次持久失败截止，以及旧 `materials.generate` fail-closed 替换均已落地。旧修订与旧包保留，纯呈现变化不创建语义修订。证据见 `reports/G07_EVIDENCE.md`。
 - **G08 四包本地工程范围已完成**：采用/授课/观察/效果保持分离；固定五项测量门后才进入模型辅助归因；严格字段白名单、内容来源、G04 预算/授权/超时/幂等保护和 stale 审计已落地。T04 新增最小 `CorrectionProposal`、偏好/效果双轨追加事件、接受/拒绝/撤回、五处事务故障回滚、完整反馈历史与纠偏 UI。采用建议只返回类型化 G07 预览输入，不直接修改课时或五文件。证据见 `reports/G08_EVIDENCE.md`。
 - **G09-T01 本地工程范围已完成**：SQLite Online Backup 取得 WAL 一致净化快照；凭据排除、成果文件清单/哈希、`.partial`→`.ready`、每日/每周保留和首次成功写入调度已落地。便携包以校准 scrypt + AES-256-GCM 整包加密，并独立封装工作区数据密钥；目标机重新 safeStorage 包装，API 密钥保持为空。恢复先旁路验证路径/资源/hash/schema/空间/完整性，经主进程单次绑定令牌后登记 pending，重启前切换失败会恢复 rollback。设置页与命名 IPC 不暴露任意路径。
-- 当前仓库单测 **383 passed / 1 skipped（384 total，46 files）**（Windows 11 开发主机，Node 24.15.0；G09 测试全为虚构数据和伪 safeStorage，不替代真实 DPAPI/跨机验收）；G09-T01 提交前最终主/渲染 typecheck、lint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0。既有跳过项未改为通过。pdfjs 的可选 canvas/standardFontDataUrl 警告有如实记录，不等同于 Office/WPS 保真失败或通过。未签名 Windows EXE 见 `reports/WINDOWS_BUILD.md`。
+- **G09-T02 本地工程范围已完成**：学生敏感导入/普通→敏感升级只落 AES-256-GCM 认证载荷；文档级分类一致，跨分类新版本不能绕过整文档升级。两张 FTS 启用独立 secure-delete，普通原件/正文/段/索引与精确关联的课时内容、审查、修改、材料文件、反馈/测量/归因/纠正及模型缓存均清除。材料文件经可恢复隔离与启动调和；独立文档 revision 绑定双确认 token，过期/消费/范围失效后不重放旧 token。永久删除墓碑含原因和分阶段备份工作流，启动可续做；manifest 范围来自快照，删除前后在备份排他锁内复核，漂移要求重新确认。损坏/不可读的 `.ready` 受管备份也纳入确认范围并可显式删除；已先行删除的授权备份在续做时按幂等成功处理。`backup.create` 先持久预留再发布，便携口令只存工作区密钥 HMAC 摘要。外部副本和 SSD 物理擦除仍不在保证范围。
+- 当前仓库单测 **419 passed / 1 skipped（420 total，49 files）**（Windows 11 开发主机，Node 24.15.0；G09 测试全为虚构数据和伪 safeStorage，不替代真实学生资料授权、真实 DPAPI/跨机验收）；G09-T02 提交前最终主/渲染 typecheck、lint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0。代码复核发现的跨分类绕过、派生明文残留、FTS 残留、备份范围竞态、崩溃续做、prepare grant 重放和不可读受管备份遗漏均已补测试并修复；既有跳过项未改为通过。pdfjs 的可选 canvas/standardFontDataUrl 警告有如实记录，不等同于 Office/WPS 保真失败或通过。未签名 Windows EXE 见 `reports/WINDOWS_BUILD.md`。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -64,7 +65,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 
 ## 下一个有界工作包建议
 
-1. **G09-T02 敏感重分类与彻底删除**：在 T01 恢复基础上实现 `student_sensitive` 加密载荷、普通→敏感事务升级、明文 FTS/缓存清理、引用失效、主进程双确认永久删除与备份范围说明；不重做 G00–G09-T01。
+1. **G09-T03 最小诊断与故障恢复**：实现隐私化诊断预览/原生保存、原子发布、保护状态与 T01/T02 跨文件/数据库故障注入；不重做 G00–G09-T02。
 2. 获得真实学生材料处理授权、逐次外发许可和授权云 API 后，再执行 G08 真实归因质量与隐私门；随后由有资质教师完成教学专业复核。当前测试替身和离线协议不替代这些外部门。
 3. 补齐锁定 Electron 二进制后执行开发态窗口走查；获得干净 Windows VM 后再关闭 G01-T04 与目标安装验收（安装→启动→保存→重启→保留数据 + SQLite/凭据/导出），两者不互相替代。
 

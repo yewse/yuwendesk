@@ -20,6 +20,12 @@ interface BackupOperations {
 interface ProtectionServiceOptions {
   userDataDir: string;
   backup: BackupOperations | BackupService;
+  idempotencyStore?: {
+    getMaintenanceIdempotency(key: string): { fingerprint: string; operation: string; status: string; resultJson: string | null } | null;
+    reserveMaintenanceIdempotency(input: { key: string; fingerprint: string; operation: string; updatedAt: string }): 'reserved' | 'existing';
+    saveMaintenanceIdempotency(input: { key: string; fingerprint: string; operation: string; resultJson: string; updatedAt: string }): void;
+    maintenanceRequestDigest?(value: string): string;
+  };
   safeStorage?: SafeStorageLike;
   choosePortableSavePath(): Promise<string | null>;
   choosePortableOpenPath(): Promise<string | null>;
@@ -58,6 +64,7 @@ export class ProtectionService {
   private readonly restoreTokens = new Map<string, RestoreConfirmationGrant & { consumed: boolean }>();
   private readonly deleteTokens = new Map<string, { backupId: string; expiresAt: number; consumed: boolean }>();
   private readonly idempotency = new Map<string, { fingerprint: string; result: unknown }>();
+  private readonly inFlight = new Map<string, { fingerprint: string; promise: Promise<unknown> }>();
 
   constructor(private readonly options: ProtectionServiceOptions) {
     this.prepareRestoreImpl = options.prepareRestore ?? preparePortableRestore;
@@ -69,20 +76,80 @@ export class ProtectionService {
     this.now = options.now ?? (() => Date.now());
   }
 
-  private async once<T>(key: string | undefined, fingerprint: string, action: () => Promise<T>): Promise<T> {
+  private async once<T>(
+    key: string | undefined,
+    fingerprint: string,
+    action: () => Promise<T>,
+    persistentOperation?: string
+  ): Promise<T> {
     if (!key?.trim()) throw new Error('protection_idempotency_required');
     const existing = this.idempotency.get(key);
     if (existing) {
       if (existing.fingerprint !== fingerprint) throw new Error('protection_idempotency_key_reuse');
       return existing.result as T;
     }
-    const result = await action();
-    this.idempotency.set(key, { fingerprint, result });
-    return result;
+    const active = this.inFlight.get(key);
+    if (active) {
+      if (active.fingerprint !== fingerprint) throw new Error('protection_idempotency_key_reuse');
+      return active.promise as Promise<T>;
+    }
+    if (persistentOperation && this.options.idempotencyStore) {
+      const persisted = this.options.idempotencyStore.getMaintenanceIdempotency(key);
+      if (persisted) {
+        if (persisted.fingerprint !== fingerprint || persisted.operation !== persistentOperation) {
+          throw new Error('protection_idempotency_key_reuse');
+        }
+        if (persisted.status !== 'succeeded' || !persisted.resultJson) throw new Error('protection_idempotency_incomplete');
+        let result: T;
+        try { result = JSON.parse(persisted.resultJson) as T; } catch { throw new Error('protection_idempotency_corrupt'); }
+        this.idempotency.set(key, { fingerprint, result });
+        return result;
+      }
+      const reservation = this.options.idempotencyStore.reserveMaintenanceIdempotency({
+        key,
+        fingerprint,
+        operation: persistentOperation,
+        updatedAt: new Date(this.now()).toISOString()
+      });
+      if (reservation === 'existing') {
+        const raced = this.options.idempotencyStore.getMaintenanceIdempotency(key);
+        if (!raced || raced.status !== 'succeeded' || !raced.resultJson) throw new Error('protection_idempotency_incomplete');
+        let result: T;
+        try { result = JSON.parse(raced.resultJson) as T; } catch { throw new Error('protection_idempotency_corrupt'); }
+        this.idempotency.set(key, { fingerprint, result });
+        return result;
+      }
+    }
+    const promise = action().then((result) => {
+      if (persistentOperation && this.options.idempotencyStore) {
+        this.options.idempotencyStore.saveMaintenanceIdempotency({
+          key,
+          fingerprint,
+          operation: persistentOperation,
+          resultJson: JSON.stringify(result),
+          updatedAt: new Date(this.now()).toISOString()
+        });
+      }
+      this.idempotency.set(key, { fingerprint, result });
+      return result;
+    }).finally(() => {
+      this.inFlight.delete(key);
+    });
+    this.inFlight.set(key, { fingerprint, promise });
+    return promise;
   }
 
   async create(payload: { mode: string; passphrase?: string }, idempotencyKey?: string): Promise<unknown> {
-    return this.once(idempotencyKey, `create:${payload.mode}`, async () => {
+    if (idempotencyKey?.trim() && this.options.idempotencyStore) {
+      const persisted = this.options.idempotencyStore.getMaintenanceIdempotency(idempotencyKey);
+      if (persisted && !persisted.fingerprint.startsWith(`create:${payload.mode}:`)) {
+        throw new Error('protection_idempotency_key_reuse');
+      }
+    }
+    const passphraseDigest = payload.mode === 'portable' && payload.passphrase
+      ? (this.options.idempotencyStore?.maintenanceRequestDigest?.(payload.passphrase) ?? createHash('sha256').update(payload.passphrase).digest('hex'))
+      : '';
+    return this.once(idempotencyKey, `create:${payload.mode}:${passphraseDigest}`, async () => {
       if (payload.mode === 'local') return omitLocalPath(await this.options.backup.createLocal());
       if (payload.mode !== 'portable' || !payload.passphrase) throw new Error('backup_create_invalid');
       const destination = await this.options.choosePortableSavePath();
@@ -97,7 +164,7 @@ export class ProtectionService {
         sha256: createHash('sha256').update(exported.container).digest('hex'),
         byteSize: exported.container.length
       };
-    });
+    }, 'backup.create');
   }
 
   async list(): Promise<unknown[]> {
@@ -168,6 +235,6 @@ export class ProtectionService {
         return { backupId: payload.backupId, deleted };
       }
       throw new Error('backup_delete_action_invalid');
-    });
+    }, payload.action === 'confirm' ? 'backups.delete' : undefined);
   }
 }

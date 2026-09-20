@@ -34,6 +34,7 @@ import {
   type LessonChangeViewDiff
 } from './lessonChangeView';
 import { buildBackupRows, portableBackupNotice, restorePreviewNotice } from './protectionView';
+import { buildSourceDeleteSummary, sensitiveSourceNotice, type SourceDeleteSummary } from './sourcePrivacyView';
 
 type NavKey = 'prepare' | 'courses' | 'resources' | 'settings';
 
@@ -1463,7 +1464,7 @@ function ResourcesPage(): JSX.Element {
   const [progress, setProgress] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [pending, setPending] = useState<PendingItem[]>([]);
-  const [versionsFor, setVersionsFor] = useState<{ title: string; versions: SourceVersionDTO[] } | null>(null);
+  const [versionsFor, setVersionsFor] = useState<{ title: string; classification: string; versions: SourceVersionDTO[] } | null>(null);
   const [verify, setVerify] = useState<Record<string, string>>({});
   const [analysis, setAnalysis] = useState<{ title: string; text: string; isTestDouble: boolean; fromCache: boolean } | null>(null);
   const [aiMsg, setAiMsg] = useState<string | null>(null);
@@ -1471,6 +1472,10 @@ function ResourcesPage(): JSX.Element {
   const cancelRef = useRef(false);
   const currentJobRef = useRef<string | null>(null);
   const [currentJob, setCurrentJob] = useState<string | null>(null);
+  const [privacyBusy, setPrivacyBusy] = useState<string | null>(null);
+  const [privacyMessage, setPrivacyMessage] = useState<string | null>(null);
+  const [deleteSummary, setDeleteSummary] = useState<SourceDeleteSummary | null>(null);
+  const privacyKeysRef = useRef(new Map<string, string>());
 
   async function reloadList(): Promise<void> {
     const r = await window.yuwen.listSources();
@@ -1552,9 +1557,68 @@ function ResourcesPage(): JSX.Element {
     if (query.trim()) await runSearch(query);
   }
 
-  async function showVersions(documentId: string, title: string): Promise<void> {
+  async function showVersions(documentId: string, title: string, classification: string): Promise<void> {
     const r = await window.yuwen.sourceVersions(documentId);
-    if (r.ok) setVersionsFor({ title, versions: r.data.versions });
+    if (r.ok) setVersionsFor({ title, classification, versions: r.data.versions });
+  }
+
+  function privacyKey(action: string, documentId: string, revision: number): string {
+    const signature = `${action}:${documentId}:${revision}`;
+    const existing = privacyKeysRef.current.get(signature);
+    if (existing) return existing;
+    const created = `${action}-${crypto.randomUUID()}`;
+    privacyKeysRef.current.set(signature, created);
+    return created;
+  }
+
+  async function protectSource(source: SourceListItemDTO): Promise<void> {
+    if (privacyBusy) return;
+    setPrivacyBusy(source.documentId);
+    setPrivacyMessage(null);
+    const response = await window.yuwen.reclassifySourceSensitive(
+      source.documentId,
+      source.revision,
+      privacyKey('protect', source.documentId, source.revision)
+    );
+    setPrivacyMessage(response.ok
+      ? `已升级为学生敏感资料；${response.data.protectedVersionIds.length} 个版本已转入认证加密，相关课时需重新核对来源。`
+      : `敏感升级未完成：${response.error.message_zh}`);
+    if (response.ok) await reloadList();
+    setPrivacyBusy(null);
+  }
+
+  async function deleteSource(source: SourceListItemDTO): Promise<void> {
+    if (privacyBusy) return;
+    setPrivacyBusy(source.documentId);
+    setPrivacyMessage(null);
+    setDeleteSummary(null);
+    const prepared = await window.yuwen.prepareSourceDelete(
+      source.documentId,
+      source.revision,
+      privacyKey('prepare-delete', source.documentId, source.revision)
+    );
+    if (!prepared.ok || prepared.data.cancelled || !prepared.data.confirmationToken || !prepared.data.managedBackupIds || !prepared.data.policy) {
+      setPrivacyMessage(prepared.ok ? '已取消永久删除。' : `未能确认删除范围：${prepared.error.message_zh}`);
+      setPrivacyBusy(null);
+      return;
+    }
+    const deleted = await window.yuwen.deleteSourcePermanently(
+      source.documentId,
+      source.revision,
+      prepared.data.confirmationToken,
+      prepared.data.managedBackupIds,
+      prepared.data.policy,
+      privacyKey('delete', source.documentId, source.revision)
+    );
+    if (deleted.ok) {
+      setDeleteSummary(buildSourceDeleteSummary(deleted.data));
+      setPrivacyMessage('本机删除事务已完成；请逐项查看当前数据库、受管备份与外部副本范围。');
+      await reloadList();
+      if (query.trim()) await runSearch(query);
+    } else {
+      setPrivacyMessage(`永久删除未完成：${deleted.error.message_zh}`);
+    }
+    setPrivacyBusy(null);
   }
 
   // 原件核对：取回原件字节，在本机重算 SHA-256 与存储原件哈希比对（提取成功≠原文已核验）。
@@ -1670,7 +1734,7 @@ function ResourcesPage(): JSX.Element {
             e.target.value = '';
           }}
         />
-        <p className="muted small">Word / PDF 直接导入，无需先转换；教师私有为默认分类，敏感学生材料在安全路径实现前一律阻止。</p>
+        <p className="muted small">Word / PDF 直接导入，无需先转换；教师私有为默认分类。学生材料可在导入后升级为认证加密资料。</p>
         {progress && <p className="notice small">{progress}</p>}
         {message && <p className="notice small">{message}</p>}
       </div>
@@ -1742,6 +1806,17 @@ function ResourcesPage(): JSX.Element {
 
       <div className="card">
         <div className="card-title">已导入资料（{sources.length}）</div>
+        <p className="muted small">{sensitiveSourceNotice()}</p>
+        {privacyMessage && <p className="notice small">{privacyMessage}</p>}
+        {deleteSummary && (
+          <div className="notice warn small">
+            <div>{deleteSummary.database}</div>
+            <div>{deleteSummary.managedBackups}</div>
+            <div>{deleteSummary.postDeleteBackup}</div>
+            <div>{deleteSummary.externalBackups}</div>
+            <div>{deleteSummary.physicalErasure}</div>
+          </div>
+        )}
         {sources.length === 0 && <p className="muted small">暂无资料。用上方导入自拟的 txt / md / csv 打通完整路径。</p>}
         <ul className="src-list">
           {sources.map((s) => (
@@ -1754,8 +1829,16 @@ function ResourcesPage(): JSX.Element {
                 <div className="muted small mono">文本哈希 {s.contentHash?.slice(0, 16)}…</div>
               </div>
               <div className="src-actions">
-                <button className="btn small" onClick={() => void showVersions(s.documentId, s.title)}>
+                <button className="btn small" onClick={() => void showVersions(s.documentId, s.title, s.classification)}>
                   版本/来源
+                </button>
+                {s.classification !== 'student_sensitive' && (
+                  <button className="btn small" disabled={privacyBusy === s.documentId} onClick={() => void protectSource(s)}>
+                    升级为学生敏感资料
+                  </button>
+                )}
+                <button className="btn small danger" disabled={privacyBusy === s.documentId} onClick={() => void deleteSource(s)}>
+                  永久删除…
                 </button>
                 {s.status !== 'retired' && (
                   <button className="btn small" onClick={() => void retire(s.documentId)}>
@@ -1823,9 +1906,13 @@ function ResourcesPage(): JSX.Element {
                     <div className="muted small mono">文本哈希 {v.textHash.slice(0, 24)}…</div>
                     <div className="muted small">导入时间 {v.createdAt}</div>
                     <div className="row" style={{ marginTop: 6 }}>
-                      <button className="btn small" onClick={() => void verifyOriginal(v)}>
-                        核对原件
-                      </button>
+                      {versionsFor.classification === 'student_sensitive' ? (
+                        <span className="muted small">原件只保留在认证加密载荷中，不提供普通读取。</span>
+                      ) : (
+                        <button className="btn small" onClick={() => void verifyOriginal(v)}>
+                          核对原件
+                        </button>
+                      )}
                       {verify[v.versionId] && <span className="muted small">{verify[v.versionId]}</span>}
                     </div>
                   </li>

@@ -80,4 +80,16 @@ describe('G09 protection payload schemas', () => {
     }).ok).toBe(true);
     expect(checkPayload('backups.delete', { action: 'prepare', backupId: 'b1' }).ok).toBe(true);
   });
+
+  it('accepts only path-free source privacy intents', () => {
+    expect(checkPayload('sources.reclassify', { documentId: 'd1', targetClassification: 'student_sensitive' }).ok).toBe(true);
+    expect(checkPayload('sources.reclassify', { documentId: 'd1', targetClassification: 'student_sensitive', path: 'C:\\x' }).ok).toBe(false);
+    expect(checkPayload('sources.prepareDelete', { documentId: 'd1' }).ok).toBe(true);
+    expect(checkPayload('sources.delete', {
+      documentId: 'd1', confirmationToken: 't1', managedBackupIds: ['b1'], policy: 'keep_managed'
+    }).ok).toBe(true);
+    expect(checkPayload('sources.delete', {
+      documentId: 'd1', confirmationToken: 't1', managedBackupIds: ['b1'], policy: 'keep_managed', ciphertext: 'x'
+    }).ok).toBe(false);
+  });
 });
