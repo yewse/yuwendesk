@@ -591,6 +591,55 @@ export function inspectCandidateArtifact({
   };
 }
 
+export function validateCandidateBuildProvenanceValue(value) {
+  const allowed = new Set([
+    'schemaVersion', 'sourceCommit', 'builtAt', 'candidatePath', 'candidateSha256',
+    'candidateSizeBytes', 'buildCommand', 'buildEnvironment'
+  ]);
+  const environmentKeys = new Set(['os', 'release', 'arch', 'node', 'npm']);
+  return hasOnlyKeys(value, allowed) && value.schemaVersion === 1 &&
+    /^[a-f0-9]{7,64}$/.test(value.sourceCommit ?? '') && isIsoDate(value.builtAt) &&
+    value.candidatePath === FIXED_CANDIDATE_PATH && /^[a-f0-9]{64}$/.test(value.candidateSha256 ?? '') &&
+    Number.isSafeInteger(value.candidateSizeBytes) && value.candidateSizeBytes > 0 &&
+    value.buildCommand === 'npm run build:candidate' &&
+    hasOnlyKeys(value.buildEnvironment, environmentKeys) &&
+    Object.values(value.buildEnvironment).every(isNonEmptyString) &&
+    !SECRET_PATTERNS.some((pattern) => pattern.test(JSON.stringify(value)));
+}
+
+export function loadCandidateBuildProvenance({ root, sourceCommit }) {
+  const releaseRoot = resolve(root, 'apps', 'desktop', 'release');
+  const candidatePath = resolve(root, FIXED_CANDIDATE_PATH);
+  if (!existsSync(candidatePath) || !statSync(candidatePath).isFile()) return null;
+  const provenancePath = resolve(releaseRoot, 'acceptance', 'candidate-build-provenance.json');
+  if (!existsSync(provenancePath) || !statSync(provenancePath).isFile()) {
+    throw new Error('CANDIDATE_BUILD_PROVENANCE_MISSING');
+  }
+  const rootReal = realpathSync(root);
+  const releaseReal = realpathSync(releaseRoot);
+  const candidateReal = realpathSync(candidatePath);
+  const provenanceReal = realpathSync(provenancePath);
+  if (relative(releaseRoot, releaseReal) !== '' || !isWithin(rootReal, releaseReal) ||
+      !isWithin(releaseReal, candidateReal) || !isWithin(releaseReal, provenanceReal)) {
+    throw new Error('CANDIDATE_BUILD_PROVENANCE_PATH_REJECTED');
+  }
+  let value;
+  try {
+    value = JSON.parse(readFileSync(provenanceReal, 'utf8'));
+  } catch {
+    throw new Error('CANDIDATE_BUILD_PROVENANCE_INVALID');
+  }
+  if (!validateCandidateBuildProvenanceValue(value)) {
+    throw new Error('CANDIDATE_BUILD_PROVENANCE_INVALID');
+  }
+  const candidate = readFileSync(candidateReal);
+  if (value.sourceCommit !== sourceCommit || value.candidateSha256 !== sha256(candidate) ||
+      value.candidateSizeBytes !== candidate.byteLength) {
+    throw new Error('CANDIDATE_BUILD_PROVENANCE_MISMATCH');
+  }
+  return value;
+}
+
 export function validateCandidateArtifact(value) {
   const allowed = new Set([
     'schemaVersion', 'sourceCommit', 'checkedAt', 'expectedPath', 'artifactPresent', 'artifactClass',

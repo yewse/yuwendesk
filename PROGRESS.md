@@ -261,6 +261,13 @@
 - **验证**：打包/G11 候选边界定向 **51/51**，全量 Vitest **627 passed / 1 skipped（628 total，68 files）**；typecheck、lint、合同与 `git diff --check` 均退出 0。把无构建来源的临时 EXE 放在固定候选路径时，既有 G11 测试和合同检查按设计以 `CANDIDATE_BUILD_PROVENANCE_MISSING` 失败；移至隔离的 ignored provisional 目录后恢复全绿，没有放宽门禁。
 - **安全边界**：底层失败日志曾显示会展开子进程环境，因此后续构建在子进程环境中移除凭据型变量并关闭 debug；报告、源码和候选元数据不记录密钥。正式签名身份/时间戳与可信分发地址仍为 `BLOCKED_EXTERNAL`。
 
+## G11-E03 候选构建来源闭环 — 本地实现完成，实际候选待提交后生成
+
+- [x] **可验证来源记录**：新增 `npm run build:candidate`，只允许 Windows + clean tree；以无 shell 的 npm CLI 执行锁定的 `build:win`，在子进程移除凭据型环境变量并禁用自动签名发现。成功后才原子写入 ignored 的 `apps/desktop/release/acceptance/candidate-build-provenance.json`，绑定源码 commit、固定候选路径、SHA-256、size、时间、命令与 OS/Node/npm 环境；失败前先移除旧来源，避免旧记录为新/残留候选背书。
+- [x] **runner 闭环与漂移拒绝**：追加验收 runner 现先加载来源记录，逐字节复算候选 hash/size，并校验 source commit、固定路径、闭集字段和秘密模式；缺失、畸形、路径逃逸或字节漂移均拒绝。候选盘点不再存在“要求 build provenance 但没有输入通道”的死锁。
+- [x] **测试隔离**：G11 的缺失候选测试改用独立 fixture；60+24+170 静态覆盖测试不再读取可变的 ignored 候选或历史生成报告，避免实际候选出现时测试自相矛盾，同时保留派生篡改/伪造 RELEASE_READY 拒绝断言。
+- **验证状态**：新增 2 项来源绑定/漂移回归已先 RED 后 GREEN；G11/打包定向 **53/53**，全量 Vitest **629 passed / 1 skipped（630 total，68 files）**；typecheck、lint、合同、desktop build、Node 语法检查与 `git diff --check` 均退出 0。本包提交前不会生成正式固定候选；提交后必须用 `npm run build:candidate` 重新生成并再跑完整回归/追加验收。
+
 ## 下一步
 
 见 `HANDOFF.md`。G10 与 G11 四个本地工程包均已完成，不重做 G00–G11 或篡改冻结定义。下一步是外部门闭环：在锁定环境生成新候选，并补齐干净 Win11 8GB/SSD、正式签名/时间戳、可信分发身份、Office/WPS、真实 API/预算、学生资料隐私授权/逐次外发许可、缺陷审计和教学专业复核。缺输入继续标 `BLOCKED_EXTERNAL`；完成后创建绑定同一候选 commit 的追加验收运行，不覆盖本次 BLOCKED/NOT_RUN 记录。

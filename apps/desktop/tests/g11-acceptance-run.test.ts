@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildAcceptanceRun,
   inspectCandidateArtifact,
+  loadCandidateBuildProvenance,
   loadAcceptanceDefinitions,
   npmCliPathForNodeExecutable,
   recoverJsonSetAtomic,
@@ -587,14 +588,70 @@ describe('G11-T01 acceptance run invariants', () => {
   });
 
   it('records a missing fixed installer without borrowing a historical hash', () => {
-    const inventory = inspectCandidateArtifact({ root, sourceCommit: 'abcdef0123456789' });
-    if (!inventory.artifactPresent) {
-      expect(inventory.sha256).toBeNull();
-      expect(inventory.sizeBytes).toBeNull();
-      expect(inventory.artifactClass).toBe('NONE');
-      expect(inventory.buildCommand).toBeNull();
-      expect(inventory.buildEnvironment).toBeNull();
-    }
+    const fixtureRoot = makeFixtureRoot();
+    const inventory = inspectCandidateArtifact({ root: fixtureRoot, sourceCommit: 'abcdef0123456789' });
+    expect(inventory.sha256).toBeNull();
+    expect(inventory.sizeBytes).toBeNull();
+    expect(inventory.artifactClass).toBe('NONE');
+    expect(inventory.buildCommand).toBeNull();
+    expect(inventory.buildEnvironment).toBeNull();
+  });
+
+  it('loads build provenance only when it matches the current commit and candidate bytes', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const releaseRoot = join(fixtureRoot, 'apps', 'desktop', 'release');
+    const acceptanceRoot = join(releaseRoot, 'acceptance');
+    const candidatePath = join(releaseRoot, 'YuwenDesk-Setup-0.1.0-x64.exe');
+    mkdirSync(acceptanceRoot, { recursive: true });
+    writeFileSync(candidatePath, 'candidate bytes', 'utf8');
+    const candidate = readFileSync(candidatePath);
+    writeFileSync(join(acceptanceRoot, 'candidate-build-provenance.json'), `${JSON.stringify({
+      schemaVersion: 1,
+      sourceCommit: 'abcdef0123456789',
+      builtAt: '2026-09-21T00:00:00.000Z',
+      candidatePath: 'apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe',
+      candidateSha256: createHash('sha256').update(candidate).digest('hex'),
+      candidateSizeBytes: candidate.byteLength,
+      buildCommand: 'npm run build:candidate',
+      buildEnvironment: { os: 'win32', release: 'test', arch: 'x64', node: 'v24.15.0', npm: '11.12.1' }
+    })}\n`, 'utf8');
+
+    const provenance = loadCandidateBuildProvenance({
+      root: fixtureRoot,
+      sourceCommit: 'abcdef0123456789'
+    });
+    const inventory = inspectCandidateArtifact({
+      root: fixtureRoot,
+      sourceCommit: 'abcdef0123456789',
+      checkedAt: provenance.builtAt,
+      buildCommand: provenance.buildCommand,
+      buildEnvironment: provenance.buildEnvironment
+    });
+    expect(inventory.sha256).toBe(provenance.candidateSha256);
+    expect(inventory.sizeBytes).toBe(provenance.candidateSizeBytes);
+  });
+
+  it('rejects stale build provenance after candidate bytes change', () => {
+    const fixtureRoot = makeFixtureRoot();
+    const releaseRoot = join(fixtureRoot, 'apps', 'desktop', 'release');
+    const acceptanceRoot = join(releaseRoot, 'acceptance');
+    mkdirSync(acceptanceRoot, { recursive: true });
+    writeFileSync(join(releaseRoot, 'YuwenDesk-Setup-0.1.0-x64.exe'), 'changed candidate', 'utf8');
+    writeFileSync(join(acceptanceRoot, 'candidate-build-provenance.json'), `${JSON.stringify({
+      schemaVersion: 1,
+      sourceCommit: 'abcdef0123456789',
+      builtAt: '2026-09-21T00:00:00.000Z',
+      candidatePath: 'apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe',
+      candidateSha256: '0'.repeat(64),
+      candidateSizeBytes: 1,
+      buildCommand: 'npm run build:candidate',
+      buildEnvironment: { os: 'win32', release: 'test', arch: 'x64', node: 'v24.15.0', npm: '11.12.1' }
+    })}\n`, 'utf8');
+
+    expect(() => loadCandidateBuildProvenance({
+      root: fixtureRoot,
+      sourceCommit: 'abcdef0123456789'
+    })).toThrow(/CANDIDATE_BUILD_PROVENANCE_MISMATCH/);
   });
 
   it('rejects a fixed candidate path that resolves outside the repository', () => {

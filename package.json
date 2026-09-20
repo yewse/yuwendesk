@@ -12,6 +12,7 @@
     "build": "npm --workspace @yuwendesk/desktop run build",
     "build:dir": "npm --workspace @yuwendesk/desktop run build:dir",
     "build:win": "npm --workspace @yuwendesk/desktop run build:win",
+    "build:candidate": "node scripts/build-win-candidate.mjs",
     "lint": "npm --workspace @yuwendesk/desktop run lint",
     "typecheck": "npm --workspace @yuwendesk/desktop run typecheck",
     "test:unit": "npm --workspace @yuwendesk/desktop run test:unit",

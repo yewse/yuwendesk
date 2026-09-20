@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process';
 import {
   buildAcceptanceRun,
   inspectCandidateArtifact,
+  loadCandidateBuildProvenance,
   loadAcceptanceDefinitions,
   npmCliPathForNodeExecutable,
   recoverJsonSetAtomic,
@@ -265,7 +266,14 @@ try {
   writeJsonAtomic({ targetPath: runPath, value: acceptanceRun, validate: validateRun, noClobber: true });
   runPublished = true;
 
-  const candidate = inspectCandidateArtifact({ root, sourceCommit, checkedAt: completedAt });
+  const candidateBuild = loadCandidateBuildProvenance({ root, sourceCommit });
+  const candidate = inspectCandidateArtifact({
+    root,
+    sourceCommit,
+    checkedAt: completedAt,
+    buildCommand: candidateBuild?.buildCommand ?? null,
+    buildEnvironment: candidateBuild?.buildEnvironment ?? null
+  });
   const candidatePath = resolve(root, 'reports', 'release', 'candidate-artifact.json');
   const releaseInput = {
     schemaVersion: 1,

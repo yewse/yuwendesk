@@ -6,7 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 // @ts-expect-error pure root ESM module
-import { recoverJsonSetAtomic, writeFileSetAtomic } from '../../../scripts/lib/g11-acceptance.mjs';
+import {
+  loadAcceptanceDefinitions,
+  recoverJsonSetAtomic,
+  writeFileSetAtomic
+} from '../../../scripts/lib/g11-acceptance.mjs';
 
 // @ts-expect-error pure root ESM module
 import {
@@ -15,7 +19,6 @@ import {
   decideReleaseDisposition,
   G11_GENERATED_OUTPUT_PATHS,
   inspectRepositoryProvenance,
-  loadReleaseAggregationInputs,
   validateReleaseEvidence,
   verifyCandidateArtifactSnapshot,
   verifyDefectAuditSource
@@ -466,17 +469,42 @@ describe('G11-T02 release aggregation boundary', () => {
     expect(invalid.errors.map((error: { code: string }) => error.code)).toContain('RELEASE_EVIDENCE_INVALID');
   });
 
-  it('loads exact repository coverage for 60 base requirements, 24 CR-001 requirements, and 170 cases', () => {
-    const releaseInput = JSON.parse(readFileSync(join(root, 'reports', 'release', 'release-input.json'), 'utf8'));
-    const input = loadReleaseAggregationInputs({ root, releaseInput, generatedAt: '2026-09-20T00:01:00.000Z' });
+  it('loads exact static coverage without depending on mutable generated candidate state', () => {
+    const loaded = loadAcceptanceDefinitions(root);
+    const requirements = buildRequirementCoverage({
+      baseTrace: JSON.parse(readFileSync(join(root, 'planning', 'requirements-traceability.json'), 'utf8')),
+      crTrace: JSON.parse(readFileSync(join(root, 'planning', 'changes', 'CR001', 'traceability.json'), 'utf8')),
+      definitions: loaded.definitions
+    });
+    const input = minimalInput({
+      requirements,
+      caseDefinitions: loaded.definitions.map((item: { id: string; severity: string }) => ({
+        caseId: item.id,
+        severity: item.severity
+      })),
+      acceptanceRun: {
+        path: 'reports/acceptance-runs/run-20260920-abcdef0-01.json',
+        sha256: '1'.repeat(64),
+        sizeBytes: 100,
+        value: {
+          runId: 'run-20260920-abcdef0-01',
+          sourceCommit: 'abcdef0123456789',
+          repositoryDirty: true,
+          results: loaded.definitions.map((item: { id: string }) => ({
+            caseId: item.id,
+            status: 'NOT_RUN',
+            blockerCode: null,
+            externalInputIds: []
+          }))
+        }
+      }
+    });
     const evidence = aggregateReleaseEvidence(input);
-    expect(evidence.requirements.base).toHaveLength(60);
-    expect(evidence.requirements.cr001).toHaveLength(24);
+    expect(requirements.base).toHaveLength(60);
+    expect(requirements.cr001).toHaveLength(24);
     expect(evidence.cases).toHaveLength(170);
     expect(new Set(evidence.cases.map((item: { caseId: string }) => item.caseId)).size).toBe(170);
     expect(evidence.statuses.releaseDisposition).toBe('BLOCKED');
-    expect(evidence.knownGaps.map((item: { gapId: string }) => item.gapId)).toContain('SOURCE_RUN_DIRTY');
-    expect(validateReleaseEvidence({ root, evidence }).ok).toBe(true);
     const changedMapping = structuredClone(evidence);
     changedMapping.requirements.base[0].caseIds = [evidence.cases[1].caseId];
     expect(validateReleaseEvidence({ root, evidence: changedMapping }).errors

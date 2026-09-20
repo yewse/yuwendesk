@@ -39,6 +39,8 @@
 - **G11-E02 Windows 候选构建修复已实现，待 clean commit 重建**：实际 `build:win` 首轮因 electron-builder 重建 `pdfjs-dist` 可选 `canvas`、缺 Cairo/GTK 而失败；新增 2 项先 RED 后 GREEN 的打包合同测试，现关闭 broad rebuild、排除 `canvas`，并只用 `--only better-sqlite3 --types prod` 定向重建必需原生模块。修复后 Windows 11 Pro `10.0.26200` x64 实际生成 131,024,560-byte NSIS 安装器，Authenticode `NotSigned`；因该次构建来自未提交工作树，只证明构建路径已恢复，不可进入追加验收。提交 E02 后必须从 clean commit 重建固定候选。
 - **E02 验证**：打包/G11 候选边界定向 51/51；全量 **627 passed / 1 skipped（628 total，68 files）**；typecheck、lint、合同、diff 均退出 0。无构建来源的临时候选一度使 G11 测试/合同按设计拒绝，已隔离到 ignored provisional 目录，未放宽候选来源门禁。
 - **E02 日志安全**：原生构建失败输出可能展开子进程环境；后续构建先在子进程移除凭据型变量并关闭 debug。不得把任何密钥写入命令、仓库、验收输入或证据。
+- **G11-E03 候选来源闭环已实现，待 clean commit 实跑**：新增 `npm run build:candidate`，强制 Windows + clean tree，清理凭据型子进程环境，成功后原子写 ignored 来源记录，绑定 commit、固定 EXE hash/size、构建时间/命令及 OS/Node/npm。runner 会复算并拒绝缺失、路径逃逸、commit/字节漂移；修复了“候选存在但 runner 无来源输入通道”的死锁。新增 2 项回归先 RED 后 GREEN，G11/打包定向 53/53；全量 **629 passed / 1 skipped（630 total，68 files）**，typecheck/lint/contracts/build/Node 语法/diff 均通过。须提交 E03 后才运行该命令生成最终固定候选。
+- **E03 测试隔离**：缺失候选及 60+24+170 静态覆盖测试已脱离 live ignored 候选/历史报告，保留候选漂移、派生篡改和伪造 RELEASE_READY 拒绝门，不再因真实候选刚生成而自相矛盾。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -64,6 +66,8 @@ scripts/dev-run-xvfb.sh                      # 启动 Xvfb :99 + Electron（设 
 # Windows 安装包（Linux 上需 wine：sudo apt-get install -y wine wine64 wine32:i386）
 # 未签名工程测试包（无证书）：
 CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
+# 绑定 clean commit 并生成可供追加验收复核的固定候选（推荐）：
+npm run build:candidate
 # 产物 apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe（见 reports/WINDOWS_BUILD.md 的 SHA256）
 ```
 
@@ -84,7 +88,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 
 ## 下一个有界工作包建议
 
-1. 提交 G11-E02 后从该干净 commit 重建固定的未签名工程候选；不得复用本次 dirty 工作树候选、历史 EXE 或哈希。
+1. 提交 G11-E03 后运行 `npm run build:candidate`，从该 clean commit 重建带来源记录的未签名工程候选；不得复用任何 provisional/历史 EXE 或哈希。
 2. 对同一候选执行 DeepSeek 最小真实调用和 WPS 商业版打开/编辑/保存/分页/放映；密钥只进受保护应用输入，证据不得含密钥。
 3. 生成新的追加验收运行；只提升实际满足原定义的案例。干净标准用户 VM、Grok 旧定义、合法现用教材、真人教师复核、签名与分发继续保持阻断，随后重新运行发行证据链。
 
