@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync } from 'node:fs';
 import { buildLessonPlan, validateLessonPlan, type LessonPlanSpec } from '../src/main/lesson/build';
-import { buildMaterialSet } from '../src/main/materials/generate';
+import { buildMaterialSet, renderSectionsPdf, resolveCjkFont, studentSections, versionStamp, FontMissingError } from '../src/main/materials/generate';
 import { extractBuffer } from '../src/main/sources/extract';
-
-const hasCjkFont = ['/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf', '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc'].some((f) => existsSync(f));
 
 // 自拟《春》完整课时计划规格（明确标注为自拟内容）。
 function chunSpec(overrides: Partial<LessonPlanSpec> = {}): LessonPlanSpec {
@@ -87,20 +84,33 @@ describe('G06 三类五文件：生成/角色隔离/版本一致/一处修改联
     expect((await textOf(tDocx.bytes, 'docx')).length).toBeGreaterThan(10);
   });
 
-  it('角色隔离：教师专属内容不出现在学生版/投屏 PPTX；仅在教师版', async () => {
+  it('角色规则(CR-001)：私密内容不入学生/PPT；答案与追问可课堂推进后进 PPT，但不提前发学生；学生版含材料与书写区', async () => {
     const plan = buildLessonPlan(chunSpec());
     const set = await buildMaterialSet(plan, ORIGIN);
     const sDocxText = await textOf(set.files.find((f) => f.role === 'student' && f.format === 'docx')!.bytes, 'docx');
     const pptxText = await textOf(set.files.find((f) => f.format === 'pptx')!.bytes, 'pptx');
     const tDocxText = await textOf(set.files.find((f) => f.role === 'teacher' && f.format === 'docx')!.bytes, 'docx');
-    const teacherOnly = ['重音落在“盼望着”', '把比喻误判为拟人', '追问：为何反复', '范读并纠音', '本课以朗读带动修辞体会'];
-    for (const s of teacherOnly) {
-      expect(sDocxText.includes(s), `学生DOCX不应含: ${s}`).toBe(false);
-      expect(pptxText.includes(s), `投屏PPTX不应含: ${s}`).toBe(false);
-      expect(tDocxText.includes(s), `教师DOCX应含: ${s}`).toBe(true);
+
+    // 私密（学情/内部判断/教师小结/教师动作）：不入学生、不入 PPT；仅教师版
+    const privateOnly = ['是否已学过拟人', '以朗读带动修辞体会', '范读并纠音'];
+    for (const s of privateOnly) {
+      expect(sDocxText.includes(s), `学生不应含私密: ${s}`).toBe(false);
+      expect(pptxText.includes(s), `PPT不应含私密: ${s}`).toBe(false);
+      expect(tDocxText.includes(s), `教师应含: ${s}`).toBe(true);
     }
-    // 学生版应含学生任务
+    // 答案/追问/误区：不提前给学生；可在 PPT 课堂推进后展示；教师版保留
+    const revealable = ['赋予东风以人的动作', '把比喻误判为拟人', '拟人与比喻的区别'];
+    for (const s of revealable) {
+      expect(sDocxText.includes(s), `学生不应提前含答案/追问: ${s}`).toBe(false);
+      expect(pptxText.includes(s), `PPT应含(课堂推进后展示): ${s}`).toBe(true);
+      expect(tDocxText.includes(s), `教师应含: ${s}`).toBe(true);
+    }
+    // PPT 含“课堂推进后展示”的揭示页标记
+    expect(pptxText).toContain('课堂推进后展示');
+    // 学生版含任务、阅读材料/课本定位、书写留白
     expect(sDocxText).toContain('朗读第一段并标出重音与停连');
+    expect(sDocxText).toContain('课本定位');
+    expect(sDocxText).toContain('＿'); // 书写区
   });
 
   it('版本一致：五个文件都内嵌同一 plan_id 与 revision_id', async () => {
@@ -135,18 +145,21 @@ describe('G06 三类五文件：生成/角色隔离/版本一致/一处修改联
     expect(sText).toContain(plan2.revision_id);
   });
 
-  it.skipIf(!hasCjkFont)('PDF（学生/教师）可回解析且遵守角色隔离', async () => {
+  it('PDF 使用内置 CJK 字体（不跳过中文）：中文可回解析且遵守角色隔离', async () => {
+    // 内置字体已随仓库提供，中文用例始终执行，不因缺字体跳过。
+    expect(resolveCjkFont()).not.toBeNull();
     const plan = buildLessonPlan(chunSpec());
     const set = await buildMaterialSet(plan, ORIGIN);
-    const sPdf = set.files.find((f) => f.role === 'student' && f.format === 'pdf')!;
-    const tPdf = set.files.find((f) => f.role === 'teacher' && f.format === 'pdf')!;
-    const sText = await textOf(sPdf.bytes, 'pdf');
-    const tText = await textOf(tPdf.bytes, 'pdf');
-    expect(sText).toContain('朗读第一段');
-    // 用无花引号的纯中文教师专属标记做健壮断言（PDF 文本抽取会丢弃花引号）
+    const sText = await textOf(set.files.find((f) => f.role === 'student' && f.format === 'pdf')!.bytes, 'pdf');
+    const tText = await textOf(set.files.find((f) => f.role === 'teacher' && f.format === 'pdf')!.bytes, 'pdf');
+    expect(sText).toContain('朗读第一段'); // 中文渲染入 PDF
     expect(sText.includes('范读并纠音')).toBe(false); // 学生PDF无教师动作
-    expect(sText.includes('把比喻误判为拟人')).toBe(false); // 学生PDF无“典型误解”
     expect(tText.includes('范读并纠音')).toBe(true);
-    expect(tText.includes('把比喻误判为拟人')).toBe(true);
+  });
+
+  it('缺字体即失败：字体不可用时 PDF 生成抛 FontMissingError（不静默成功）', async () => {
+    const plan = buildLessonPlan(chunSpec());
+    const sections = studentSections(plan, versionStamp(plan, ORIGIN));
+    await expect(renderSectionsPdf(sections, null)).rejects.toBeInstanceOf(FontMissingError);
   });
 });

@@ -13,6 +13,11 @@ files:
   - dist/**/*
   - package.json
 
+# 随应用打包内置许可 CJK 字体（不依赖目标机系统字体路径）。运行期在 resources/assets/fonts 解析。
+extraResources:
+  - from: assets/fonts
+    to: assets/fonts
+
 asar: true
 
 # 仅打包目标平台运行依赖，构成离线安装包；不联网拉取运行时。

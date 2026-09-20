@@ -33,7 +33,7 @@ export interface LessonPlanSpec {
   title: string;
   declared_duration_sec: number;
   task_context_id: string;
-  objectives: { description: string; cognitive_demand: Objective['cognitive_demand'] }[];
+  objectives: { description: string; cognitive_demand: Objective['cognitive_demand']; curriculum_ref_ids?: string[] }[];
   anchors: LessonAnchorInput[];
   tasks: LessonTaskInput[];
   activities: LessonActivityInput[];
@@ -44,7 +44,8 @@ export interface LessonPlanSpec {
   plan_id?: string; // 修订同一 plan 时复用
 }
 
-export type LessonValidation = { ok: true } | { ok: false; errors: string[] };
+export type LessonValidation = { ok: true; warnings: string[] } | { ok: false; errors: string[]; warnings: string[] };
+const SCHEDULE_UNDERFILL_TOLERANCE_SEC = 600; // 欠时容忍（超出需解释，仅告警不拦截）
 
 // 自拟示例《春》完整课时计划规格（明确标注自拟；用于 G05/G06 确定性并行开发）。
 export function demoLessonSpec(overrides: Partial<LessonPlanSpec> = {}): LessonPlanSpec {
@@ -63,7 +64,9 @@ export function demoLessonSpec(overrides: Partial<LessonPlanSpec> = {}): LessonP
     ],
     activities: [
       { title: '导入齐读', start_sec: 0, end_sec: 300, actor: 'both', student_action: '齐读课文', teacher_action: '范读并纠音', priority: 'essential', taskIndexes: [1] },
-      { title: '研读修辞', start_sec: 300, end_sec: 1500, actor: 'student', student_action: '分组找修辞句', teacher_action: '巡视点拨并揭示合理答案', priority: 'essential', taskIndexes: [2] }
+      { title: '朗读标注', start_sec: 300, end_sec: 900, actor: 'student', student_action: '标出重音与停连并练读', teacher_action: '巡视纠音', priority: 'essential', taskIndexes: [1] },
+      { title: '研读修辞', start_sec: 900, end_sec: 2100, actor: 'student', student_action: '分组找修辞句', teacher_action: '巡视点拨并揭示合理答案', priority: 'essential', taskIndexes: [2] },
+      { title: '小结与作业', start_sec: 2100, end_sec: 2640, actor: 'both', student_action: '回顾并记录作业', teacher_action: '小结并布置作业', priority: 'compressible', taskIndexes: [] }
     ],
     homework: [{ description: '背诵第一段', necessary_reason: '积累语感', estimated_sec: 600, stop_condition: '能流畅背诵' }],
     teacher_summary: '以朗读带动修辞体会，注意情感与语言结合。',
@@ -74,6 +77,7 @@ export function demoLessonSpec(overrides: Partial<LessonPlanSpec> = {}): LessonP
 
 export function validateLessonPlan(p: LessonPlan): LessonValidation {
   const e: string[] = [];
+  const w: string[] = [];
   if (p.schema_version !== LESSONPLAN_SCHEMA_VERSION) e.push('schema_version');
   if (!p.title.trim()) e.push('title_empty');
   if (!Number.isInteger(p.declared_duration_sec) || p.declared_duration_sec < 300) e.push('duration_lt_300');
@@ -83,19 +87,30 @@ export function validateLessonPlan(p: LessonPlan): LessonValidation {
   if (p.activities.length < 1) e.push('activities_min');
   const anchorIds = new Set(p.source_anchors.map((a) => a.anchor_id));
   const rubricIds = new Set(p.rubrics.map((r) => r.rubric_id));
+  const taskIds = new Set(p.tasks.map((t) => t.task_id));
   for (const t of p.tasks) {
     if (!t.prompt.trim()) e.push(`task_prompt_empty:${t.task_id}`);
     if (!rubricIds.has(t.rubric_id)) e.push(`task_rubric_missing:${t.task_id}`);
+    // 引用完整性：无效锚点不得被静默忽略，必须报错。
     for (const a of t.material_anchor_ids) if (!anchorIds.has(a)) e.push(`task_anchor_missing:${t.task_id}:${a}`);
   }
   for (const r of p.rubrics) {
     if (r.kind === 'teacher_defined' && r.criteria.every((c) => c.acceptable_variants.length === 0)) e.push(`rubric_no_variants:${r.rubric_id}`);
+    for (const id of r.source_anchor_ids) if (!anchorIds.has(id)) e.push(`rubric_anchor_missing:${r.rubric_id}:${id}`);
   }
+  // 无课程依据不得标 mapped（应保持待确认）。
+  for (const o of p.objectives) if (o.curriculum_ref_ids.length === 0 && o.coverage_state === 'mapped') e.push(`objective_mapped_without_curriculum:${o.objective_id}`);
+  let maxEnd = 0;
   for (const a of p.activities) {
     if (!['teacher', 'student', 'both'].includes(a.actor)) e.push(`activity_actor:${a.activity_id}`);
     if (a.end_sec < a.start_sec || a.start_sec < 0) e.push(`activity_time:${a.activity_id}`);
+    for (const id of a.task_ids) if (!taskIds.has(id)) e.push(`activity_task_missing:${a.activity_id}:${id}`);
+    if (a.end_sec > p.declared_duration_sec) e.push(`activity_overtime:${a.activity_id}`); // 超声明课时 → 拦截
+    maxEnd = Math.max(maxEnd, a.end_sec);
   }
-  return e.length ? { ok: false, errors: e } : { ok: true };
+  // 欠时（大段未编排且未解释）→ 告警，不拦截。
+  if (p.activities.length && p.declared_duration_sec - maxEnd > SCHEDULE_UNDERFILL_TOLERANCE_SEC) w.push(`schedule_underfilled:${p.declared_duration_sec - maxEnd}s`);
+  return e.length ? { ok: false, errors: e, warnings: w } : { ok: true, warnings: w };
 }
 
 // 组建 LessonPlan：分配稳定 ID，连接 objectives/tasks/rubrics/activities/anchors。
@@ -112,17 +127,23 @@ export function buildLessonPlan(spec: LessonPlanSpec): LessonPlan {
     verification: a.verification ?? 'needs_review',
     source_class: a.source_class
   }));
-  const objectives: Objective[] = spec.objectives.map((o, i) => ({
-    objective_id: `obj_${i + 1}`,
-    description: o.description,
-    curriculum_ref_ids: [],
-    cognitive_demand: o.cognitive_demand,
-    independent_task_ids: [],
-    coverage_state: 'mapped'
-  }));
+  const objectives: Objective[] = spec.objectives.map((o, i) => {
+    const refs = o.curriculum_ref_ids ?? [];
+    return {
+      objective_id: `obj_${i + 1}`,
+      description: o.description,
+      curriculum_ref_ids: refs,
+      cognitive_demand: o.cognitive_demand,
+      independent_task_ids: [],
+      // 无课程依据 → 保持待确认，不靠填字段制造“已映射”。
+      coverage_state: refs.length ? 'mapped' : 'needs_source_confirmation'
+    };
+  });
   const rubrics: Rubric[] = [];
   const tasks: Task[] = spec.tasks.map((t, i) => {
     const rubricId = `rub_${i + 1}`;
+    // 不静默过滤无效引用：保留调用方给定的 anchor 引用，交由校验暴露错误。
+    const anchorRefs = t.anchorIndexes.map((n) => `anc_${n}`);
     rubrics.push({
       rubric_id: rubricId,
       kind: 'teacher_defined',
@@ -132,10 +153,10 @@ export function buildLessonPlan(spec: LessonPlanSpec): LessonPlan {
           description: `任务${i + 1}的评分要点`,
           acceptable_variants: t.acceptable_variants,
           insufficient_examples: t.insufficient_examples,
-          anchor_ids: t.anchorIndexes.map((n) => `anc_${n}`).filter((id) => anchors.some((a) => a.anchor_id === id))
+          anchor_ids: anchorRefs
         }
       ],
-      source_anchor_ids: t.anchorIndexes.map((n) => `anc_${n}`).filter((id) => anchors.some((a) => a.anchor_id === id)),
+      source_anchor_ids: anchorRefs,
       allows_alternatives: t.acceptable_variants.length > 1,
       professional_calibration: 'not_calibrated'
     });
@@ -143,7 +164,7 @@ export function buildLessonPlan(spec: LessonPlanSpec): LessonPlan {
       task_id: `task_${i + 1}`,
       objective_ids: objectives.length ? [objectives[Math.min(i, objectives.length - 1)].objective_id] : [],
       prompt: t.prompt,
-      material_anchor_ids: t.anchorIndexes.map((n) => `anc_${n}`).filter((id) => anchors.some((a) => a.anchor_id === id)),
+      material_anchor_ids: anchorRefs,
       cognitive_demand: t.cognitive_demand,
       support_level: t.support_level,
       rubric_id: rubricId,
@@ -155,7 +176,7 @@ export function buildLessonPlan(spec: LessonPlanSpec): LessonPlan {
     activity_id: `act_${i + 1}`,
     title: a.title,
     objective_ids: [],
-    task_ids: a.taskIndexes.map((n) => `task_${n}`).filter((id) => tasks.some((t) => t.task_id === id)),
+    task_ids: a.taskIndexes.map((n) => `task_${n}`), // 不静默过滤，交由校验暴露无效引用
     start_sec: a.start_sec,
     end_sec: a.end_sec,
     duration_kind: 'estimated',
