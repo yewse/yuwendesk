@@ -105,6 +105,22 @@ export interface IpcServiceContext {
   userDataDir?: string;
   // G07 一处修改服务；生产缺省时由 lessonStore + userDataDir 构造，测试可注入。
   lessonChangeService?: LessonChangeService;
+  // G09 备份/恢复服务；路径只由主进程原生对话框选择。
+  protectionService?: ProtectionServiceLike;
+  noteSuccessfulWrite?: (operation: OperationName) => void;
+}
+
+export interface ProtectionServiceLike {
+  create(payload: { mode: string; passphrase?: string }, idempotencyKey?: string): Promise<unknown>;
+  list(): Promise<unknown[]>;
+  restore(payload: {
+    action: string;
+    passphrase?: string;
+    restoreJobId?: string;
+    previewHash?: string;
+    confirmationToken?: string;
+  }, idempotencyKey?: string): Promise<unknown>;
+  delete(payload: { action: string; backupId: string; confirmationToken?: string }, idempotencyKey?: string): Promise<unknown>;
 }
 
 // 仅声明 IPC 需要的模型服务形状（避免主进程强耦合）。
@@ -121,6 +137,13 @@ export interface ModelServiceLike {
 export function isImplementedOperation(op: string): op is OperationName {
   return (IMPLEMENTED_OPERATIONS as readonly string[]).includes(op);
 }
+
+const BUSINESS_WRITE_OPERATIONS = new Set<OperationName>([
+  'ui.saveDraft', 'sources.import', 'sources.importFile', 'sources.retire',
+  'model.configure', 'model.run', 'lesson.buildDemo', 'plans.recordTeaching',
+  'feedback.analyze', 'corrections.decide', 'corrections.revert',
+  'observations.add', 'observations.delete', 'change.apply', 'materials.generate'
+]);
 
 // 统一请求外壳校验（对应规范 9.1）。结构校验通过不代表语义正确，语义在各处理函数继续检查。
 export function validateEnvelope(op: string, req: unknown): IpcResponse<never> | null {
@@ -167,6 +190,14 @@ export class IpcService {
   }
 
   async handle(op: string, req: unknown): Promise<IpcResponse> {
+    const response = await this.handleRequest(op, req);
+    if (response.ok && isImplementedOperation(op) && BUSINESS_WRITE_OPERATIONS.has(op)) {
+      this.ctx.noteSuccessfulWrite?.(op);
+    }
+    return response;
+  }
+
+  private async handleRequest(op: string, req: unknown): Promise<IpcResponse> {
     const invalid = validateEnvelope(op, req);
     if (invalid) return invalid;
     const request = req as IpcRequest;
@@ -262,8 +293,61 @@ export class IpcService {
         return this.ctx.lessonStore
           ? { ok: true, data: { artifacts: this.ctx.lessonStore.listMaterialArtifacts((request.payload as { planId: string }).planId) } }
           : { ok: true, data: { artifacts: [] } };
+      case 'backup.create':
+        return this.backupCreate(request);
+      case 'backup.restore':
+        return this.backupRestore(request);
+      case 'backups.list':
+        return this.backupsList();
+      case 'backups.delete':
+        return this.backupsDelete(request);
       default:
         return errorResponse('INPUT_INVALID', '未知操作。', '请重试当前操作。');
+    }
+  }
+
+  private async backupCreate(req: IpcRequest): Promise<IpcResponse> {
+    if (!this.ctx.protectionService) return errorResponse('BACKUP_INVALID', '备份功能当前不可用。', '请重启应用后重试。');
+    if (!req.idempotency_key?.trim()) return errorResponse('INPUT_INVALID', '备份请求缺少幂等标识。', '请重试当前操作。');
+    const payload = req.payload as { mode: string; passphrase?: string };
+    if (!['local', 'portable'].includes(payload.mode) || (payload.mode === 'portable' && typeof payload.passphrase !== 'string')) {
+      return errorResponse('INPUT_INVALID', '备份模式或口令无效。', '请选择备份类型并检查口令。');
+    }
+    try {
+      return { ok: true, data: await this.ctx.protectionService.create(payload, req.idempotency_key) };
+    } catch {
+      return errorResponse('BACKUP_INVALID', '备份未能完成，旧备份未被修改。', '请检查空间后重试。', true);
+    }
+  }
+
+  private async backupRestore(req: IpcRequest): Promise<IpcResponse> {
+    if (!this.ctx.protectionService) return errorResponse('BACKUP_INVALID', '恢复功能当前不可用。', '请重启应用后重试。');
+    if (!req.idempotency_key?.trim()) return errorResponse('INPUT_INVALID', '恢复请求缺少幂等标识。', '请重试当前操作。');
+    const payload = req.payload as { action: string; passphrase?: string; restoreJobId?: string; previewHash?: string; confirmationToken?: string };
+    if (!['preview', 'request-confirmation', 'confirm'].includes(payload.action)) {
+      return errorResponse('INPUT_INVALID', '恢复步骤无效。', '请重新选择备份。');
+    }
+    try {
+      return { ok: true, data: await this.ctx.protectionService.restore(payload, req.idempotency_key) };
+    } catch {
+      return errorResponse('BACKUP_INVALID', '备份无法验证或恢复。现有数据未更改。', '请检查口令和备份文件。');
+    }
+  }
+
+  private async backupsList(): Promise<IpcResponse> {
+    if (!this.ctx.protectionService) return { ok: true, data: { backups: [] } };
+    return { ok: true, data: { backups: await this.ctx.protectionService.list() } };
+  }
+
+  private async backupsDelete(req: IpcRequest): Promise<IpcResponse> {
+    if (!this.ctx.protectionService) return errorResponse('BACKUP_INVALID', '备份管理当前不可用。', '请重启应用后重试。');
+    if (!req.idempotency_key?.trim()) return errorResponse('INPUT_INVALID', '删除请求缺少幂等标识。', '请重试当前操作。');
+    const payload = req.payload as { action: string; backupId: string; confirmationToken?: string };
+    if (!['prepare', 'confirm'].includes(payload.action)) return errorResponse('INPUT_INVALID', '删除步骤无效。', '请重试当前操作。');
+    try {
+      return { ok: true, data: await this.ctx.protectionService.delete(payload, req.idempotency_key) };
+    } catch {
+      return errorResponse('BACKUP_INVALID', '备份未删除。', '请刷新备份列表后重试。');
     }
   }
 

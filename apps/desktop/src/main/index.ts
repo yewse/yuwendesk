@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import Database from 'better-sqlite3';
 import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -13,7 +14,10 @@ import { createWorkerParser } from './sources/parseHost';
 import { ModelService } from './model/service';
 import { FeedbackService } from './feedback/service';
 import { attachCsp, isAllowedExternalUrl, isTrustedRendererUrl, lockdownSession } from './security';
-import { SqliteStore } from './db/sqliteStore';
+import { SqliteStore, SQLITE_SCHEMA_TARGET } from './db/sqliteStore';
+import { BackupCoordinator, BackupService } from './protection/backup';
+import { ProtectionService } from './protection/service';
+import { applyPendingRestoreBeforeOpen } from './protection/restore';
 
 const APP_NAME_ZH = '语文备课工作台';
 
@@ -203,8 +207,22 @@ async function bootstrap(): Promise<void> {
     console.warn('[YuwenDesk] 开发验证模式：OS 沙箱已禁用（--no-sandbox）。正式发布包不得以该方式运行。');
   }
 
+  const userDataDir = app.getPath('userData');
+  await applyPendingRestoreBeforeOpen(userDataDir, async (directory) => {
+    let candidate: Database.Database | null = null;
+    try {
+      candidate = new Database(join(directory, 'yuwendesk.db'), { readonly: true });
+      return candidate.pragma('integrity_check', { simple: true }) === 'ok' &&
+        Number(candidate.pragma('user_version', { simple: true })) <= SQLITE_SCHEMA_TARGET;
+    } catch {
+      return false;
+    } finally {
+      candidate?.close();
+    }
+  });
+
   // 注入 Electron safeStorage 用于凭据/敏感 payload 保护（不可用时拒绝落明文，见 T03）。
-  store = new SqliteStore(app.getPath('userData'), {
+  store = new SqliteStore(userDataDir, {
     safeStorage,
     // 耗时原始文件解析放到 worker 线程，避免阻塞主进程。
     parseFile: createWorkerParser(join(__dirname, 'sources', 'parseWorker.js'))
@@ -213,6 +231,53 @@ async function bootstrap(): Promise<void> {
 
   const modelService = new ModelService(store);
   const feedbackService = new FeedbackService(store, store, modelService);
+  const backupService = new BackupService({ userDataDir, appVersion: app.getVersion(), store });
+  const backupCoordinator = new BackupCoordinator(backupService);
+  const protectionService = new ProtectionService({
+    userDataDir,
+    backup: backupService,
+    safeStorage,
+    choosePortableSavePath: async () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      const selected = await dialog.showSaveDialog(mainWindow, {
+        title: '导出跨机加密备份',
+        defaultPath: `YuwenDesk-${new Date().toISOString().slice(0, 10)}.yuwenbackup`,
+        filters: [{ name: '语文备课工作台加密备份', extensions: ['yuwenbackup'] }]
+      });
+      return selected.canceled ? null : selected.filePath;
+    },
+    choosePortableOpenPath: async () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      const selected = await dialog.showOpenDialog(mainWindow, {
+        title: '选择跨机加密备份', properties: ['openFile'],
+        filters: [{ name: '语文备课工作台加密备份', extensions: ['yuwenbackup'] }]
+      });
+      return selected.canceled ? null : selected.filePaths[0] ?? null;
+    },
+    confirmRestore: async (preview) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return false;
+      const selected = await dialog.showMessageBox(mainWindow, {
+        type: 'warning', buttons: ['取消', '重启并恢复'], defaultId: 0, cancelId: 0,
+        title: APP_NAME_ZH,
+        message: '确认用已验证备份替换当前本机数据？',
+        detail: `备份时间：${preview.createdAt}\n恢复成功后应用将重启。API 密钥不会迁移，需要重新连接 AI。当前数据会保留回滚副本。`
+      });
+      return selected.response === 1;
+    },
+    confirmDelete: async (backupId) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return false;
+      const selected = await dialog.showMessageBox(mainWindow, {
+        type: 'warning', buttons: ['取消', '删除此备份'], defaultId: 0, cancelId: 0,
+        title: APP_NAME_ZH,
+        message: '确认删除这个本机恢复点？',
+        detail: `备份 ID：${backupId}\n删除不会影响当前课程数据。`
+      });
+      return selected.response === 1;
+    },
+    relaunch: () => {
+      setTimeout(() => { app.relaunch(); app.exit(0); }, 100);
+    }
+  });
   ipcService = new IpcService({
     store,
     sourceStore: store,
@@ -237,7 +302,9 @@ async function bootstrap(): Promise<void> {
         expiresAt: Date.now() + 2 * 60_000
       };
     },
-    userDataDir: app.getPath('userData'),
+    userDataDir,
+    protectionService,
+    noteSuccessfulWrite: (operation) => backupCoordinator.noteSuccessfulWrite(operation),
     appVersion: app.getVersion(),
     appNameZh: APP_NAME_ZH,
     platformSupported: platform.supported,

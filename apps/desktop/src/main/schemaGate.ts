@@ -305,6 +305,38 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     properties: { planId: { type: 'string', minLength: 1, maxLength: 80 } },
     required: ['planId'],
     additionalProperties: false
+  },
+  'backup.create': {
+    type: 'object',
+    properties: {
+      mode: { type: 'string', minLength: 1, maxLength: 16 },
+      passphrase: { type: 'string', maxLength: 1024 }
+    },
+    required: ['mode'],
+    additionalProperties: false
+  },
+  'backup.restore': {
+    type: 'object',
+    properties: {
+      action: { type: 'string', minLength: 1, maxLength: 32 },
+      passphrase: { type: 'string', maxLength: 1024 },
+      restoreJobId: { type: 'string', maxLength: 128 },
+      previewHash: { type: 'string', maxLength: 64 },
+      confirmationToken: { type: 'string', maxLength: 256 }
+    },
+    required: ['action'],
+    additionalProperties: false
+  },
+  'backups.list': null,
+  'backups.delete': {
+    type: 'object',
+    properties: {
+      action: { type: 'string', minLength: 1, maxLength: 16 },
+      backupId: { type: 'string', minLength: 1, maxLength: 128 },
+      confirmationToken: { type: 'string', maxLength: 256 }
+    },
+    required: ['action', 'backupId'],
+    additionalProperties: false
   }
 };
 

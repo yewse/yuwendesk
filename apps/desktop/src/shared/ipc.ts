@@ -71,7 +71,11 @@ export const IMPLEMENTED_OPERATIONS = [
   'change.apply',
   'change.history',
   'materials.generate',
-  'materials.list'
+  'materials.list',
+  'backup.create',
+  'backup.restore',
+  'backups.list',
+  'backups.delete'
 ] as const;
 
 export type OperationName = (typeof IMPLEMENTED_OPERATIONS)[number];
@@ -149,6 +153,22 @@ export interface DraftData {
 
 export interface SaveDraftPayload {
   content: string;
+}
+
+export interface BackupRecordDTO {
+  backupId: string;
+  createdAt: string;
+  kind: 'local';
+  valid: boolean;
+  retention: Array<'daily' | 'weekly'>;
+  byteSize: number;
+}
+
+export interface RestorePreviewDTO {
+  backupId: string;
+  createdAt: string;
+  schemaVersion: number;
+  apiReconnectRequired: true;
 }
 
 // ---- G03 资料/来源（渲染层类型） ----

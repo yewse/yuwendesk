@@ -185,10 +185,22 @@
 - **状态边界**：机器测试只证明事件、事务、IPC、隐私守卫、离线协议与渲染代码边界，不证明一般匿名化能力、真实云模型解释质量、教师实际实施质量或教学有效性；冻结验收未改为 PASS。真实学生材料隐私授权与逐次外发许可、开发态 Electron UI 走查、干净 Windows 安装、真实 API 归因质量、教学专业复核、Office/WPS 保真与正式签名仍为 `BLOCKED_EXTERNAL`。
 - 设计规格：`docs/superpowers/specs/2026-09-20-g08-feedback-attribution-design.md`；实施计划：`docs/superpowers/plans/2026-09-20-g08-feedback-attribution.md`。首版仍不保存学生原始作业正文；Observation 保持 `cloud_allowed=false`。
 
-## G09–G11 — NOT_STARTED
+## G09 保护与恢复 — IN_PROGRESS（T01 本地工程范围完成）
 
-保护与恢复（G09）、升级与性能（G10）、完整发行验收（G11）尚未开始。界面相应后续能力仍标注“后续版本开放”。
+- [x] **G09-T01 WAL 一致快照与原子发布**：新增 `protection` 领域；使用 better-sqlite3 Online Backup API，而非复制主 `.db`。快照经独立 `integrity_check`，删除全部 `credential` 行，再与应用登记的成果文件逐项重算 SHA-256；任何缺失/不符均不发布。备份先写 `.partial`，完整校验后原子改名 `.ready`，列表忽略半成品。
+- [x] **日/周保留与自动触发**：成功业务写入后通知 `BackupCoordinator`，按本地日历日合并为每日最多一次；备份记录日/周标签，轮换保留最近 7 个日点和 4 个周点，并不删除唯一有效恢复点。自动备份失败不回滚已提交业务写入，维护错误保持独立。
+- [x] **跨机认证加密**：便携 `.yuwenbackup` 为版本化 ZIP 载荷的 AES-256-GCM 整包信封；口令经运行时校准、参数有界的 scrypt 派生，最低 `N=32768,r=8,p=1`，拒绝短/常见口令。信封头作为 AAD；错误口令或 header/nonce/ciphertext/tag/KDF 篡改均认证失败，不返回部分明文。
+- [x] **密钥迁移边界**：API 凭据永不进入同机或便携备份。便携快照移除原机 `secure_key`，将工作区数据密钥在整包内部再独立认证封装；恢复时只在目标 `safeStorage` 可用时重新包装。测试以两个互不兼容的伪机器后端证明敏感载荷可恢复、原机 DPAPI 式 blob 未复用、API 连接保持为空。
+- [x] **旁路恢复与启动切换**：解密后先执行容器/条目/展开量/压缩比限制、固定路径白名单、manifest/hash、磁盘空间、schema 和 SQLite 完整性检查；通过后写 `restore-staging`。恢复确认令牌由主进程原生对话框签发，绑定 job/preview hash、两分钟有效且单次使用；登记 pending 后受控重启，在数据库打开前切换，失败自动还原 rollback。
+- [x] **受限 IPC 与设置页**：实现 `backup.create/restore`、`backups.list/delete`，schemaGate 拒绝渲染层任意路径，预加载只暴露命名方法。设置页提供本机备份、跨机导出/恢复、已验证恢复点及删除；明确“忘记口令无法找回”“API 不迁移”“恢复需重启”。主进程返回值主动移除本机路径。
+- **T01 实测（Windows 11 开发主机，Node 24.15.0；全为虚构数据）**：新增 30 项保护测试；提交前最终全量 Vitest **383 passed / 1 skipped（384 total，46 files）**；主/渲染 typecheck、ESLint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0。首次完整门禁发现并修复 1 个 ESLint 未使用参数问题，修复后完成上述全门禁复跑。冻结 acceptance 状态未修改。
+- **外部门/未覆盖**：真实两台 Windows 机器跨机恢复、干净 Win11 安装后恢复、真实 DPAPI、生产进程监听检查、签名与真实学生数据仍为 `BLOCKED_EXTERNAL`。本包不把 Node 伪后端或代码检查冒充这些验收证据。
+- 设计：`docs/superpowers/specs/2026-09-20-g09-protection-recovery-design.md`；计划：`docs/superpowers/plans/2026-09-20-g09-protection-recovery.md`。
+
+## G10–G11 — NOT_STARTED
+
+升级与性能（G10）、完整发行验收（G11）尚未开始。
 
 ## 下一步
 
-见 `HANDOFF.md`。G08 四包本地工程范围已完成；下一步按总工作计划进入 G09 保护与恢复，不重做 G00–G08。扫描件 OCR 未接入则继续阻塞。外部门保留：真实学生材料隐私授权与逐次外发许可、开发态 Electron 二进制下载/真实窗口走查、G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。
+见 `HANDOFF.md`。下一步执行 G09-T02 敏感重分类与彻底删除，不重做 G00–G09-T01。扫描件 OCR 未接入则继续阻塞。外部门保留：真实学生材料隐私授权与逐次外发许可、真实跨机 Windows/DPAPI 恢复、开发态 Electron 真实窗口走查、G01 目标环境安装验收、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。

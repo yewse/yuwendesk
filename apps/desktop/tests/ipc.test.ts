@@ -215,9 +215,69 @@ describe('白名单与目录一致性', () => {
       'change.apply',
       'change.history',
       'materials.generate',
-      'materials.list'
+      'materials.list',
+      'backup.create',
+      'backup.restore',
+      'backups.list',
+      'backups.delete'
     ];
     expect([...IMPLEMENTED_OPERATIONS].sort()).toEqual([...expected].sort());
     expect(new Set(IMPLEMENTED_OPERATIONS).size).toBe(IMPLEMENTED_OPERATIONS.length);
+  });
+});
+
+describe('G09 backup IPC remains a named, path-free surface', () => {
+  it('notifies the automatic-backup coordinator only after a successful business write', async () => {
+    const { store } = makeService();
+    const writes: string[] = [];
+    const svc = new IpcService({
+      store,
+      appVersion: '0.1.0', appNameZh: '语文备课工作台', platformSupported: true,
+      httpListeners: 0, online: false, buildMode: 'production', sandboxEnabled: true,
+      platformDevOverride: false, platformTargetSupported: true, platformIdentity: 'win11',
+      noteSuccessfulWrite: (operation) => { writes.push(operation); }
+    });
+    await svc.handle('ui.saveDraft', saveReq('auto-backup', 'saved', 0));
+    await svc.handle('app.health', envelope('app.health'));
+    await svc.handle('ui.saveDraft', saveReq('conflict', 'stale', 0));
+    expect(writes).toEqual(['ui.saveDraft']);
+  });
+
+  it('routes backup operations to the injected protection service', async () => {
+    const { store } = makeService();
+    const calls: string[] = [];
+    const svc = new IpcService({
+      store,
+      appVersion: '0.1.0', appNameZh: '语文备课工作台', platformSupported: true,
+      httpListeners: 0, online: false, buildMode: 'production', sandboxEnabled: true,
+      platformDevOverride: false, platformTargetSupported: true, platformIdentity: 'win11',
+      protectionService: {
+        create: async (payload) => { calls.push(`create:${payload.mode}`); return { backupId: 'b1' }; },
+        list: async () => { calls.push('list'); return [{ backupId: 'b1' }]; },
+        restore: async (payload) => { calls.push(`restore:${payload.action}`); return { restoreJobId: 'r1' }; },
+        delete: async (payload) => { calls.push(`delete:${payload.action}`); return { backupId: payload.backupId }; }
+      }
+    });
+    const create = await svc.handle('backup.create', envelope('backup.create', {
+      idempotency_key: 'backup-create-1', payload: { mode: 'local' }
+    }));
+    const list = await svc.handle('backups.list', envelope('backups.list'));
+    const restore = await svc.handle('backup.restore', envelope('backup.restore', {
+      idempotency_key: 'backup-restore-1', payload: { action: 'preview', passphrase: 'restore-语文备份-strong-2026' }
+    }));
+    const deleted = await svc.handle('backups.delete', envelope('backups.delete', {
+      idempotency_key: 'backup-delete-1', payload: { action: 'prepare', backupId: 'b1' }
+    }));
+    expect([create.ok, list.ok, restore.ok, deleted.ok]).toEqual([true, true, true, true]);
+    expect(calls).toEqual(['create:local', 'list', 'restore:preview', 'delete:prepare']);
+  });
+
+  it('rejects renderer-supplied filesystem paths', async () => {
+    const { svc } = makeService();
+    const result = await svc.handle('backup.create', envelope('backup.create', {
+      idempotency_key: 'backup-create-path', payload: { mode: 'portable', passphrase: 'restore-语文备份-strong-2026', path: 'C:\\escape' }
+    }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('INPUT_INVALID');
   });
 });

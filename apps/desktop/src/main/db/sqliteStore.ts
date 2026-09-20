@@ -85,6 +85,7 @@ import {
   isSecureSafeStorage,
   type SafeStorageLike
 } from '../crypto/secrets';
+import type { BackupKind, SnapshotSummary } from '../protection/types';
 
 // 仅供测试的事务中途故障注入点（验证 outbox/幂等写入失败时整体回滚）。
 export interface CommitFaultHooks {
@@ -991,6 +992,28 @@ export class SqliteStore {
     if (!w.ok) return { ok: false, reason: 'unavailable' };
     db.prepare('INSERT INTO secure_key(id,wrapped,created_at) VALUES(1,?,?)').run(w.wrapped, new Date().toISOString());
     return { ok: true, key };
+  }
+
+  exportWorkspaceDataKey():
+    | { ok: true; key: Buffer | null }
+    | { ok: false; reason: 'unavailable' | 'decrypt_failed' } {
+    if (this.protectedState) return { ok: false, reason: 'unavailable' };
+    const current = this.readDataKey();
+    if (current.ok) return { ok: true, key: Buffer.from(current.key) };
+    if (current.reason === 'not_found') return { ok: true, key: null };
+    return { ok: false, reason: current.reason };
+  }
+
+  installWorkspaceDataKey(key: Buffer): { ok: true } | { ok: false; reason: 'unavailable' | 'already_exists' | 'invalid_key' } {
+    this.assertWritable();
+    if (key.length !== 32) return { ok: false, reason: 'invalid_key' };
+    if (!this.safeStorage || !isSecureSafeStorage(this.safeStorage)) return { ok: false, reason: 'unavailable' };
+    const db = this.requireDb();
+    if (db.prepare('SELECT 1 FROM secure_key WHERE id=1').get()) return { ok: false, reason: 'already_exists' };
+    const wrapped = new DataKeyManager(this.safeStorage).wrap(key);
+    if (!wrapped.ok) return { ok: false, reason: 'unavailable' };
+    db.prepare('INSERT INTO secure_key(id,wrapped,created_at) VALUES(1,?,?)').run(wrapped.wrapped, new Date().toISOString());
+    return { ok: true };
   }
 
   putSensitive(name: string, plaintext: string, aad: string): SensitiveResult<null> {
@@ -2599,6 +2622,13 @@ export class SqliteStore {
       .all() as SourceListItem[];
   }
 
+  listAllMaterialArtifacts(): import('../store').MaterialArtifactRecord[] {
+    if (!this.db) return [];
+    return this.db.prepare(
+      'SELECT id,plan_id planId,revision_id revisionId,role,format,filename,path,sha256,byte_size byteSize,content_origin contentOrigin,created_at createdAt,bundle_id bundleId FROM material_artifact ORDER BY created_at,id'
+    ).all() as import('../store').MaterialArtifactRecord[];
+  }
+
   // 通用事务原语（供业务事件事务复用）：抛出即回滚，不改动已提交状态。
   withTransaction<T>(fn: (db: Database.Database) => T): T {
     this.assertWritable();
@@ -2621,6 +2651,32 @@ export class SqliteStore {
   schemaVersion(): number {
     if (!this.db) return 0;
     return Number(this.db.pragma('user_version', { simple: true }));
+  }
+
+  async createSanitizedSnapshot(destination: string, mode: BackupKind): Promise<SnapshotSummary> {
+    this.assertWritable();
+    const db = this.requireDb();
+    mkdirSync(dirname(destination), { recursive: true });
+    await fs.rm(destination, { force: true });
+    await db.backup(destination);
+    let snapshot: Database.Database | null = null;
+    try {
+      snapshot = new Database(destination);
+      snapshot.pragma('foreign_keys = ON');
+      const integrity = snapshot.pragma('integrity_check', { simple: true });
+      if (integrity !== 'ok') throw new StoreProtectedError(`backup_integrity:${String(integrity)}`);
+      const credentialRowsRemoved = snapshot.prepare('DELETE FROM credential').run().changes;
+      const secureKeyRowsRemoved = mode === 'portable' ? snapshot.prepare('DELETE FROM secure_key').run().changes : 0;
+      const schemaVersion = Number(snapshot.pragma('user_version', { simple: true }));
+      snapshot.pragma('wal_checkpoint(TRUNCATE)');
+      snapshot.close();
+      snapshot = null;
+      return { schemaVersion, credentialRowsRemoved, secureKeyRowsRemoved };
+    } catch (error) {
+      snapshot?.close();
+      await fs.rm(destination, { force: true });
+      throw error;
+    }
   }
 
   close(): void {

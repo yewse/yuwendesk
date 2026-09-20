@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BootstrapData, HealthData, SourceHitDTO, SourceListItemDTO, SourceReadDTO, SourceVersionDTO } from '../shared/ipc';
+import type { BackupRecordDTO, BootstrapData, HealthData, RestorePreviewDTO, SourceHitDTO, SourceListItemDTO, SourceReadDTO, SourceVersionDTO } from '../shared/ipc';
 import type { ChangePreview, LessonChange } from '../main/change/types';
 import type {
   CorrectionRecord,
@@ -33,6 +33,7 @@ import {
   PRINTED_COPY_WARNING,
   type LessonChangeViewDiff
 } from './lessonChangeView';
+import { buildBackupRows, portableBackupNotice, restorePreviewNotice } from './protectionView';
 
 type NavKey = 'prepare' | 'courses' | 'resources' | 'settings';
 
@@ -1937,6 +1938,99 @@ function ModelPanel(): JSX.Element {
   );
 }
 
+function ProtectionPanel(): JSX.Element {
+  const [backups, setBackups] = useState<BackupRecordDTO[]>([]);
+  const [passphrase, setPassphrase] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async (): Promise<void> => {
+    const response = await window.yuwen.backupsList();
+    if (response.ok) setBackups(response.data.backups);
+  };
+  useEffect(() => { void refresh(); }, []);
+
+  const operationKey = (kind: string): string => `${kind}-${crypto.randomUUID()}`;
+  async function createLocal(): Promise<void> {
+    setBusy(true);
+    const response = await window.yuwen.backupCreateLocal(operationKey('backup-local'));
+    setMessage(response.ok ? '本机备份已完成并通过校验。' : response.error.message_zh);
+    if (response.ok) await refresh();
+    setBusy(false);
+  }
+  async function exportPortable(): Promise<void> {
+    setBusy(true);
+    const response = await window.yuwen.backupExportPortable(passphrase, operationKey('backup-portable'));
+    setMessage(response.ok ? (response.data.cancelled ? '已取消导出。' : '跨机加密备份已保存。') : response.error.message_zh);
+    if (response.ok && response.data.saved) setPassphrase('');
+    setBusy(false);
+  }
+  async function restorePortable(): Promise<void> {
+    setBusy(true);
+    const previewResponse = await window.yuwen.backupRestorePreview(passphrase, operationKey('restore-preview'));
+    if (!previewResponse.ok || previewResponse.data.cancelled || !previewResponse.data.restoreJobId || !previewResponse.data.previewHash || !previewResponse.data.preview) {
+      setMessage(previewResponse.ok ? '已取消恢复。' : previewResponse.error.message_zh);
+      setBusy(false);
+      return;
+    }
+    const preview: RestorePreviewDTO = previewResponse.data.preview;
+    setMessage(restorePreviewNotice(preview));
+    const grant = await window.yuwen.backupRestoreRequestConfirmation(
+      previewResponse.data.restoreJobId, previewResponse.data.previewHash, operationKey('restore-confirmation')
+    );
+    if (!grant.ok || grant.data.cancelled || !grant.data.confirmationToken) {
+      setMessage(grant.ok ? '已取消恢复。' : grant.error.message_zh);
+      setBusy(false);
+      return;
+    }
+    const confirmed = await window.yuwen.backupRestoreConfirm(
+      previewResponse.data.restoreJobId, previewResponse.data.previewHash, grant.data.confirmationToken, operationKey('restore-apply')
+    );
+    setMessage(confirmed.ok ? '恢复包已验证，将重启并安全切换。' : confirmed.error.message_zh);
+    setPassphrase('');
+    setBusy(false);
+  }
+  async function deleteBackup(backupId: string): Promise<void> {
+    const prepared = await window.yuwen.backupDeletePrepare(backupId, operationKey('backup-delete-prepare'));
+    if (!prepared.ok || prepared.data.cancelled || !prepared.data.confirmationToken) {
+      setMessage(prepared.ok ? '已取消删除。' : prepared.error.message_zh);
+      return;
+    }
+    const deleted = await window.yuwen.backupDeleteConfirm(backupId, prepared.data.confirmationToken, operationKey('backup-delete-confirm'));
+    setMessage(deleted.ok && deleted.data.deleted ? '备份已删除。' : deleted.ok ? '未找到可删除备份。' : deleted.error.message_zh);
+    if (deleted.ok) await refresh();
+  }
+
+  return (
+    <div className="card">
+      <div className="card-title">备份与恢复</div>
+      <p className="muted small">{portableBackupNotice()}</p>
+      <div className="confirm-actions">
+        <button className="btn small" disabled={busy} onClick={() => void createLocal()}>立即创建本机备份</button>
+      </div>
+      <div className="row">
+        <label className="muted small">跨机备份口令</label>
+        <input className="search-input" type="password" value={passphrase} minLength={14} autoComplete="new-password" onChange={(event) => setPassphrase(event.target.value)} />
+      </div>
+      <div className="confirm-actions">
+        <button className="btn small" disabled={busy || [...passphrase].length < 14} onClick={() => void exportPortable()}>导出跨机加密备份</button>
+        <button className="btn small" disabled={busy || [...passphrase].length < 14} onClick={() => void restorePortable()}>从加密备份恢复</button>
+      </div>
+      {message && <p className="notice small">{message}</p>}
+      {buildBackupRows(backups).length === 0 ? <p className="muted small">尚无已验证本机备份。</p> : (
+        <ul className="kv">
+          {buildBackupRows(backups).map((backup) => (
+            <li key={backup.backupId}>
+              <span>{backup.createdAt}<br /><small>{backup.retentionLabel} · {backup.sizeLabel}</small></span>
+              <b>{backup.statusLabel} <button className="btn small" onClick={() => void deleteBackup(backup.backupId)}>删除</button></b>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function SettingsPage({ boot }: { boot: BootstrapData | null }): JSX.Element {
   return (
     <div className="page">
@@ -1944,6 +2038,7 @@ function SettingsPage({ boot }: { boot: BootstrapData | null }): JSX.Element {
       <p className="lead">图形化连接 AI、设置费用上限、备份恢复、检查更新与导出诊断。无需命令行或编辑配置文件。教师无需编写或调试提示词。</p>
       <div className="grid">
         <ModelPanel />
+        <ProtectionPanel />
         <div className="card">
           <div className="card-title">关于</div>
           <ul className="kv">

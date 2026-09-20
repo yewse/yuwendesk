@@ -1,12 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   BootstrapData,
+  BackupRecordDTO,
   DraftData,
   HealthData,
   IpcRequest,
   IpcResponse,
   OperationName,
   SaveDraftPayload,
+  RestorePreviewDTO,
   SourceHitDTO,
   SourceImportPayload,
   SourceListItemDTO,
@@ -256,6 +258,42 @@ const api = {
   materialsGenerate: (planId: string) =>
     call<{ planId: string; revisionId: string; contentOrigin: string; versionStamp: string; files: { role: string; format: string; filename: string; path: string; sha256: string; byteSize: number }[] }>('materials.generate', { payload: { planId } }),
   materialsList: (planId: string) => call<{ artifacts: { role: string; format: string; filename: string; path: string; sha256: string; byteSize: number; revisionId: string; contentOrigin: string }[] }>('materials.list', { payload: { planId } }),
+  backupCreateLocal: (idempotencyKey: string) =>
+    call<{ backupId: string; valid: boolean }>('backup.create', {
+      idempotency_key: idempotencyKey,
+      payload: { mode: 'local' }
+    }),
+  backupExportPortable: (passphrase: string, idempotencyKey: string) =>
+    call<{ backupId?: string; saved?: boolean; cancelled?: boolean; sha256?: string; byteSize?: number }>('backup.create', {
+      idempotency_key: idempotencyKey,
+      payload: { mode: 'portable', passphrase }
+    }),
+  backupsList: () => call<{ backups: BackupRecordDTO[] }>('backups.list'),
+  backupRestorePreview: (passphrase: string, idempotencyKey: string) =>
+    call<{ cancelled?: boolean; restoreJobId?: string; previewHash?: string; preview?: RestorePreviewDTO }>('backup.restore', {
+      idempotency_key: idempotencyKey,
+      payload: { action: 'preview', passphrase }
+    }),
+  backupRestoreRequestConfirmation: (restoreJobId: string, previewHash: string, idempotencyKey: string) =>
+    call<{ cancelled?: boolean; confirmationToken?: string; expiresAt?: number }>('backup.restore', {
+      idempotency_key: idempotencyKey,
+      payload: { action: 'request-confirmation', restoreJobId, previewHash }
+    }),
+  backupRestoreConfirm: (restoreJobId: string, previewHash: string, confirmationToken: string, idempotencyKey: string) =>
+    call<{ restoreJobId: string; restartRequired: true }>('backup.restore', {
+      idempotency_key: idempotencyKey,
+      payload: { action: 'confirm', restoreJobId, previewHash, confirmationToken }
+    }),
+  backupDeletePrepare: (backupId: string, idempotencyKey: string) =>
+    call<{ cancelled?: boolean; confirmationToken?: string; expiresAt?: number }>('backups.delete', {
+      idempotency_key: idempotencyKey,
+      payload: { action: 'prepare', backupId }
+    }),
+  backupDeleteConfirm: (backupId: string, confirmationToken: string, idempotencyKey: string) =>
+    call<{ backupId: string; deleted: boolean }>('backups.delete', {
+      idempotency_key: idempotencyKey,
+      payload: { action: 'confirm', backupId, confirmationToken }
+    }),
   // 关闭前刷新握手：主进程在窗口关闭前通知渲染层落盘（带唯一 requestId）；渲染层完成后回执。
   // 仅暴露固定通道，不暴露任意 send/on。返回取消订阅函数，供组件卸载时释放监听。
   onBeforeClose: (handler: (requestId: string) => void | Promise<void>): (() => void) => {

@@ -69,3 +69,15 @@ describe('IPC 载荷 Schema 门（G02-T01 / SEC 边界）', () => {
     expect(checkPayload('app.bootstrap', {}).ok).toBe(true);
   });
 });
+
+describe('G09 protection payload schemas', () => {
+  it('accepts only path-free backup and restore intents', () => {
+    expect(checkPayload('backup.create', { mode: 'local' }).ok).toBe(true);
+    expect(checkPayload('backup.create', { mode: 'portable', passphrase: '12345678901234' }).ok).toBe(true);
+    expect(checkPayload('backup.create', { mode: 'portable', path: 'C:\\x' }).ok).toBe(false);
+    expect(checkPayload('backup.restore', {
+      action: 'confirm', restoreJobId: 'r1', previewHash: 'a'.repeat(64), confirmationToken: 'token'
+    }).ok).toBe(true);
+    expect(checkPayload('backups.delete', { action: 'prepare', backupId: 'b1' }).ok).toBe(true);
+  });
+});
