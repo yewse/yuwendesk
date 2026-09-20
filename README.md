@@ -2,7 +2,27 @@
 
 面向初中语文教师的中文 Windows 桌面备课应用（Electron + TypeScript + React）。教师最终只需安装、双击桌面图标使用，不接触命令行、网址或手工服务。
 
-> 当前进度：**G00 环境锁定 + G01 可安装骨架（工程验证级，非正式教学发布）**。数据基础、资料导入、AI 生成、材料导出、审查与纠正等（G02–G11）尚未实现。真实完成状态见 `PROGRESS.md` 与 `reports/G00_G01_EVIDENCE.md`。
+> 当前进度：**G00–G06 已在仓库落地**（环境锁定、可安装骨架、本地 SQLite、资料导入定位、可配置模型闭环、完整课时计划、三类五文件确定性生成）。G01 干净 Win11 实机安装、正式签名、真实云 API 备课质量仍为外部阻断。非正式教学发布。逐条真实状态以 `PROGRESS.md` 为准。
+
+## 进度与交接文件（随仓库一并提交）
+
+这些文件记录真实完成状态、交接与外部阻断，**不是可选附件**：
+
+| 文件 | 作用 |
+|---|---|
+| [`PROGRESS.md`](PROGRESS.md) | 逐阶段真实进度（DONE / IN_PROGRESS / BLOCKED / NOT_STARTED） |
+| [`HANDOFF.md`](HANDOFF.md) | 新会话交接：当前能力、构建命令、下一步 |
+| [`ENV_LOCK.json`](ENV_LOCK.json) | 环境锁定、受限命令、外部阻断门 |
+| [`MANIFEST.sha256`](MANIFEST.sha256) | 交付包哈希清单 |
+| [`SBOM.draft.json`](SBOM.draft.json) | 软件物料清单初稿 |
+| [`planning/AUTONOMOUS_WORKPLAN.md`](planning/AUTONOMOUS_WORKPLAN.md) | G00–G11 自主实施计划 |
+| [`planning/work-packages.json`](planning/work-packages.json) | 工作包与依赖 |
+| [`planning/EXTERNAL_INPUTS.json`](planning/EXTERNAL_INPUTS.json) | 外部输入与阻断项 |
+| [`planning/PROGRESS_TEMPLATE.md`](planning/PROGRESS_TEMPLATE.md) / [`planning/HANDOFF_TEMPLATE.md`](planning/HANDOFF_TEMPLATE.md) | 进度/交接模板 |
+| [`planning/RELEASE_CHECKLIST.md`](planning/RELEASE_CHECKLIST.md) | 发布核对清单 |
+| [`reports/`](reports/) | 构建、验收与审查证据（含 `G00_G01_EVIDENCE.md`、`WINDOWS_BUILD.md`） |
+| [`docs/adr/`](docs/adr/) | 工程决策记录 |
+| [`docs/reviews/`](docs/reviews/) | PR 审查与定向复现记录 |
 
 ## 工程文档（先读）
 
@@ -12,7 +32,7 @@
 - `docs/MODULES_AND_SKILLS.md`、`docs/IPC_AND_STORAGE.md`、`docs/REPOSITORY_AND_CI.md`。
 - `contracts/`：数据 Schema、IPC 目录、状态机、SQL 基线。
 - `acceptance/cases.json`：验收用例。`planning/`：工作包与外部输入。`baseline/`：原始 60 条需求（只读保留）。
-- `docs/adr/`：工程决策记录（ADR-0001 技术基线、ADR-0002 G01 本地草稿与受限 IPC）。
+- `docs/adr/`：工程决策记录。
 
 ## 目录
 

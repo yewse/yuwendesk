@@ -2,26 +2,24 @@
 
 新会话请先读：`README_START_HERE.md` → `AGENTS.md` → `docs/ENGINEERING_SPEC.md` → `planning/AUTONOMOUS_WORKPLAN.md` → 本文件与 `PROGRESS.md`。
 
-## CR-001 课堂成品需求（已归档，功能未实现）
+## CR-001 课堂成品需求（需求已归档；G06 确定性生成已交付）
 
 - 独立业务变更：最终课堂交付 = 可编辑 PPTX + 学生讲义 DOCX/PDF + 教师讲解版 DOCX/PDF（三类五文件）。教案/学校格式保留但不替代。
-- 现状：**需求已归档 / 合同待实现 / 功能未实现**。`CR001-R01–R24`、`CLS-001–040`（全部 NOT_RUN）。归档见 `docs/changes/CR-001/`、`planning/changes/CR001/`、`acceptance/addenda/`、规范 §15.4、ADR-0005。
-- 后续实现（不改现有阶段门/授权）：G05/G06 角色与内容映射合同 → G06 三类五文件与本地课堂模式 → G07 一处改动联动/旧版与失败恢复 → G09/G11 受众隔离与整包回归。实现阶段验收须提交真实 PPTX/DOCX/PDF + 角色清单 + 计划哈希 + 渲染/打开/编辑证据，不得用截图/提纲/自评替代。
+- 需求归档：`CR001-R01–R24`、`CLS-001–040`（验收用例仍 NOT_RUN）。归档见 `docs/changes/CR-001/`、`planning/changes/CR001/`、`acceptance/addenda/`、规范 §15.4、ADR-0005。
+- **G06 已交付确定性三类五文件**（角色隔离 / 版本一致 / 一处修改纯函数）；G07 跨成品自动重生成流水线、真实 Office 保真、CLS 验收执行尚未关闭。
 - 严格 schema（`additionalProperties:false`）不放宽：用伴随合同或受控版本升级表达新字段。
 
-## 当前状态（2026-09-19，最新）
+## 当前状态（2026-09-20，与 `PROGRESS.md` 对齐）
 
 - **G00 + G01 可执行项完成**并经三轮审查修复（F01–F08 + R3-01–R3-05）；唯一剩余 G01 门（干净 Win11 x64 实机安装 = G01-T04）为 BLOCKED_EXTERNAL。
-- **G02 本地数据能力已交付（T01–T04）**：
-  - T01 受限 IPC + **Schema 门**（`schemaGate.ts`，`hasOwnProperty` 白名单）。
-  - T02 **真实 SQLite 存储**（`db/sqliteStore.ts`，WAL/外键、版本迁移、IMMEDIATE 事务原子乐观并发、失败回滚、旧 JSON 安全迁入、高版本/必需记录/隔离·归档失败保护），主进程 `index.ts` 用 `SqliteStore`。
-  - T03 **凭据/敏感 payload 保护**（`crypto/secrets.ts`：safeStorage 包裹凭据、AES-256-GCM 敏感载荷、加密不可用拒绝落明文、解密失败不覆盖），迁移 v3 + 注入 electron.safeStorage + health 显示。
-  - T04 **持久幂等 + outbox 单事务**（`commitDraftSave`：业务修改+幂等结果+事件同一事务；跨进程重启不重复；IpcService 已委托）。
-  - 联合验证：Node 128 项 + 真实 Electron 运行（SQLite 保存/迁移/保护/冲突/重载 + 凭据探测 + outbox）；证据 `reports/` 与 artifacts。**Windows 目标环境验收 BLOCKED_EXTERNAL**。
-- 后续门（不在 G02 范围）：G03 资料/敏感数据落点、G04 provider.configure（凭据用户入口）；或获 Win11 后关闭 G01-T04 + G02 Windows 目标验收。
-- 仓库单测 **128 项通过**；typecheck/lint/`verify:contracts` 通过。已产出未签名 Windows EXE（本地 Linux+wine + 原生 Windows CI，哈希见 `reports/WINDOWS_BUILD.md`）。
+- **G02 本地数据能力已交付（T01–T04）**：Schema 门、真实 SQLite、凭据/敏感加密、持久幂等 + outbox 单事务。Windows 目标环境验收 BLOCKED_EXTERNAL。
+- **G03 资料与来源已交付**：TXT/MD/CSV + PDF/DOCX/XLSX/PPTX 解析定位、中文 FTS/短词回退、原件核对、处理边界（大小/限额/超时/取消/worker）。扫描件 OCR 未接入则阻塞。
+- **G04 模型闭环已交付（测试替身 + DeepSeek 真实协议离线）**：可配置服务商、提示词工程、上下文边界、预算/缓存/取消/重试、保护收尾。真实云 API 备课质量 BLOCKED（需授权账户与联网）。
+- **G05 完整 LessonPlan 已交付**：按 `contracts/LessonPlan.schema.json` 组建并校验；`lesson_outline` 仅为中间产物。
+- **G06 三类五文件已交付**：课堂 PPTX + 学生 DOCX/PDF + 教师 DOCX/PDF；角色隔离、版本水印、内容来源身份。真实 Office/LibreOffice 保真未验证。
+- 仓库单测 **220 项通过**（以 `PROGRESS.md` 最近实测为准）；typecheck/lint/`verify:contracts` 通过。未签名 Windows EXE 见 `reports/WINDOWS_BUILD.md`。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
-- 数据基础说明：生产改用 `apps/desktop`（app.getPath('userData')）下的 `yuwendesk.db`；旧 `yuwendesk-local-state.json` 首次运行安全迁入并备份为 `.migrated.*`。LocalStore(JSON) 保留为迁入来源与 G01 回归。
+- 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
 
 ## 如何构建 / 运行 / 测试
 
@@ -62,9 +60,9 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 
 ## 下一个有界工作包建议
 
-1. G03 资料与来源（安全解析导入、中文 FTS、精确锚点）——敏感 payload 保护（T03 能力）在此获得真实业务落点。
-2. G04 provider.configure/probe/clear（凭据用户入口 + 真实 Grok 连通）——凭据保护（T03 能力）在此端到端接入；需 EXT03/04。
-3. 获得 Windows VM 后关闭 G01-T04 与 G02 Windows 目标环境验收（安装→启动→保存→重启→保留数据 + SQLite/凭据在真实 Windows 的行为）。
+1. **G07 审查与一处修改**：受影响依赖失效/重算、ChangeProposal、旧版与失败恢复；跨成品自动重生成接入 UI。
+2. 获得授权云 API 后关闭 G04 真实备课质量门（当前仅测试替身 + DeepSeek 离线协议；不伪造实网成功）。
+3. 获得 Windows VM 后关闭 G01-T04 与 Windows 目标环境验收（安装→启动→保存→重启→保留数据 + SQLite/凭据/导出在真实 Windows 的行为）。
 
 ## 重要纪律
 
