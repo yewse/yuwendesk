@@ -20,6 +20,7 @@ import type { ReviewReport } from '../main/review/types';
 import type { ChangePreview, LessonChange } from '../main/change/types';
 import type { LessonChangeApplyOutcome } from '../main/store';
 import type { DiagnosticSaveResult, DiagnosticsPreview } from '../main/protection/diagnostics';
+import type { UpdateInspectionResult, UpdateStageResult } from '../main/update/service';
 import type {
   FeedbackHistory,
   FeedbackAnalysisHistory,
@@ -342,6 +343,23 @@ const api = {
       idempotency_key: idempotencyKey,
       payload: { action: 'save', previewHash }
     }),
+  updateStatus: () => call<{
+    state: 'trust_not_configured' | 'idle' | 'verified_ready';
+    trustConfigured: boolean;
+    currentVersion: string;
+    ready: Array<{ state: 'verified_ready' | 'superseded'; releaseId: string; targetVersion: string; manifestSha256: string; packageSha256: string }>;
+    noticeZh: string;
+  }>('updates.status'),
+  inspectOfflineUpdate: () => call<{ cancelled: true } | UpdateInspectionResult>('updates.inspectOffline'),
+  stageOfflineUpdate: (
+    payload: {
+      confirmationToken: string;
+      manifestSha256: string;
+      currentVersion: string;
+      targetVersion: string;
+    },
+    idempotencyKey: string
+  ) => call<UpdateStageResult>('updates.stageOffline', { idempotency_key: idempotencyKey, payload }),
   // 关闭前刷新握手：主进程在窗口关闭前通知渲染层落盘（带唯一 requestId）；渲染层完成后回执。
   // 仅暴露固定通道，不暴露任意 send/on。返回取消订阅函数，供组件卸载时释放监听。
   onBeforeClose: (handler: (requestId: string) => void | Promise<void>): (() => void) => {

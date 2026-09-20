@@ -669,6 +669,16 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.update-card {
+  grid-column: 1 / -1;
+}
+
+.update-summary b {
+  max-width: 70%;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
 .diagnostics-preview {
   max-height: 26rem;
   overflow: auto;

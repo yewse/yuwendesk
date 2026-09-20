@@ -17,6 +17,7 @@ import type {
 import { observationCoverageSummary } from '../main/feedback/observation';
 import type { LessonPlan } from '../main/lesson/types';
 import type { LessonChangeApplyResult } from '../main/store';
+import type { UpdateSummary } from '../main/update/types';
 import { DraftController, DraftSnapshot, getDraftController } from './draftController';
 import {
   OBSERVATION_OUTCOME_OPTIONS,
@@ -33,6 +34,7 @@ import {
   PRINTED_COPY_WARNING,
   type LessonChangeViewDiff
 } from './lessonChangeView';
+import { buildUpdateSummaryRows, canStageUpdate, updateReadyNotice, updateTrustNotice } from './updateView';
 import { buildBackupRows, portableBackupNotice, restorePreviewNotice } from './protectionView';
 import { buildSourceDeleteSummary, sensitiveSourceNotice, type SourceDeleteSummary } from './sourcePrivacyView';
 import type { DiagnosticsPreview } from '../main/protection/diagnostics';
@@ -2175,6 +2177,79 @@ function DiagnosticsPanel(): JSX.Element {
   );
 }
 
+function UpdatePanel(): JSX.Element {
+  const [trustConfigured, setTrustConfigured] = useState(false);
+  const [summary, setSummary] = useState<UpdateSummary | null>(null);
+  const [confirmationToken, setConfirmationToken] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void window.yuwen.updateStatus().then((response) => {
+      if (response.ok) {
+        setTrustConfigured(response.data.trustConfigured);
+        setMessage(response.data.noticeZh);
+      } else {
+        setMessage(response.error.message_zh);
+      }
+    });
+  }, []);
+
+  async function inspect(): Promise<void> {
+    setBusy(true);
+    const response = await window.yuwen.inspectOfflineUpdate();
+    if (!response.ok) {
+      setMessage(response.error.message_zh);
+      setSummary(null);
+      setConfirmationToken(null);
+    } else if (response.data.cancelled) {
+      setMessage('已取消选择离线更新包。');
+    } else {
+      setSummary(response.data.summary);
+      setConfirmationToken(response.data.confirmationToken);
+      setMessage(response.data.noticeZh);
+    }
+    setBusy(false);
+  }
+
+  async function stage(): Promise<void> {
+    if (!summary || !confirmationToken) return;
+    setBusy(true);
+    const response = await window.yuwen.stageOfflineUpdate({
+      confirmationToken,
+      manifestSha256: summary.manifestSha256,
+      currentVersion: summary.currentVersion,
+      targetVersion: summary.targetVersion
+    }, `update-stage-${crypto.randomUUID()}`);
+    setMessage(response.ok ? updateReadyNotice() : `${response.error.message_zh} ${response.error.next_action}`);
+    setConfirmationToken(null);
+    setBusy(false);
+  }
+
+  return (
+    <div className="card update-card">
+      <div className="card-title">可信离线更新</div>
+      <p className="muted small">{updateTrustNotice(trustConfigured)}</p>
+      <div className="confirm-actions">
+        <button className="btn small" disabled={busy || !trustConfigured} onClick={() => void inspect()}>
+          选择并验证离线更新包
+        </button>
+        <button
+          className="btn small"
+          disabled={!canStageUpdate({ trustConfigured, confirmationToken, busy }) || !summary}
+          onClick={() => void stage()}
+        >仅暂存已验证更新</button>
+      </div>
+      {message && <p className="notice small" role="status" aria-live="polite">{message}</p>}
+      {summary && (
+        <ul className="kv update-summary">
+          {buildUpdateSummaryRows(summary).map((row) => <li key={row.label}><span>{row.label}</span><b>{row.value}</b></li>)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function SettingsPage({ boot }: { boot: BootstrapData | null }): JSX.Element {
   return (
     <div className="page">
@@ -2183,6 +2258,7 @@ function SettingsPage({ boot }: { boot: BootstrapData | null }): JSX.Element {
       <div className="grid">
         <ModelPanel />
         <ProtectionPanel />
+        <UpdatePanel />
         <DiagnosticsPanel />
         <div className="card">
           <div className="card-title">关于</div>

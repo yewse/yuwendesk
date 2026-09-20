@@ -26,6 +26,8 @@ import { ProtectionService } from './protection/service';
 import { applyPendingRestoreBeforeOpen } from './protection/restore';
 import { SourcePrivacyService } from './protection/sourcePrivacy';
 import { DiagnosticsService } from './protection/diagnostics';
+import { UpdateService } from './update/service';
+import { trustedUpdateKeys } from './update/trust';
 
 const APP_NAME_ZH = '语文备课工作台';
 
@@ -347,6 +349,24 @@ async function bootstrap(): Promise<void> {
       return selected.canceled ? null : selected.filePath;
     }
   });
+  const updateTrust = trustedUpdateKeys();
+  const updateService = new UpdateService({
+    userDataDir,
+    currentVersion: app.getVersion(),
+    appId: 'org.yuwendesk.app',
+    platform: process.platform,
+    arch: process.arch,
+    trustedKeys: updateTrust.trustedKeys,
+    chooseOfflinePath: async () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      const selected = await dialog.showOpenDialog(mainWindow, {
+        title: '选择可信离线更新包',
+        properties: ['openFile'],
+        filters: [{ name: '语文备课工作台离线更新', extensions: ['yuwenupdate'] }]
+      });
+      return selected.canceled ? null : selected.filePaths[0] ?? null;
+    }
+  });
   ipcService = new IpcService({
     store,
     sourceStore: store,
@@ -375,6 +395,7 @@ async function bootstrap(): Promise<void> {
     protectionService,
     sourcePrivacyService,
     diagnosticsService,
+    updateService,
     noteSuccessfulWrite: (operation) => backupCoordinator.noteSuccessfulWrite(operation),
     appVersion: app.getVersion(),
     appNameZh: APP_NAME_ZH,

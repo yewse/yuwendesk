@@ -223,6 +223,9 @@ describe('白名单与目录一致性', () => {
       'backup.restore',
       'backups.list',
       'backups.delete',
+      'updates.status',
+      'updates.inspectOffline',
+      'updates.stageOffline',
       'diagnostics.export'
     ];
     expect([...IMPLEMENTED_OPERATIONS].sort()).toEqual([...expected].sort());

@@ -79,6 +79,9 @@ export const IMPLEMENTED_OPERATIONS = [
   'backup.restore',
   'backups.list',
   'backups.delete',
+  'updates.status',
+  'updates.inspectOffline',
+  'updates.stageOffline',
   'diagnostics.export'
 ] as const;
 

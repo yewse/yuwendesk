@@ -218,10 +218,12 @@
 - **T04 实测（Windows 11 开发主机，Node 24.15.0 / npm 11.12.1；全为合成攻击样例与伪 safeStorage）**：最终重点定向 **111/111**；全量 Vitest **458 passed / 1 skipped（459 total，54 files）**。主/渲染 typecheck、ESLint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0；首轮独立复审的 4 项 Important 全部先以新增失败测试复现再修复，第二轮复审 Critical 0 / Important 0、Ready。覆盖认证信封篡改、路径穿越/绝对路径/UNC、原始及 Windows 别名重复、尾点/设备名、symlink、local/central 元数据不一致、目录/压缩/低报大小炸弹、额外条目、manifest/hash/size/path/missing、损坏 SQLite、未来 schema、瞬时写入路径审计、越权 sender/导航、原型继承载荷、模型异常去自由文本、token 过期/重放/跨对象、提示/宏/脚本/PDF URI 被动化与敏感文件名跨存储不可搜索。既有跳过项未改为通过。
 - **T04 外部门/未覆盖**：真实学生材料隐私授权与逐次外发许可、真实 API 模型辅助归因质量、教学专业复核、生产进程监听动态证据、真实两机 Windows/DPAPI 恢复、开发态 Electron 窗口、干净 Win11 安装、Office/WPS 保真、正式签名及公开上传授权仍为 `BLOCKED_EXTERNAL`；本地威胁测试不替代这些门。
 
-## G10–G11 — NOT_STARTED
+## G10 升级与性能 — IN_PROGRESS；G11 — NOT_STARTED
 
-升级与性能（G10）、完整发行验收（G11）尚未开始。
+- [x] **G10-T01 签名更新清单和离线更新（本地工程范围）**：固定 `.yuwenupdate` 容器、闭集规范 manifest、Ed25519 已安装信任锚、app/platform/arch 与严格版本单调性、package size/hash 均已落地。生产信任集当前为空并 fail-closed；测试 keypair 只在进程内生成。原生选择不接受 renderer 路径，短时单次 token 绑定 manifest/current/target；确认时按句柄限额重读复验，只写固定 `.partial`，三个文件回读再跑签名/版本/hash 后原子发布 `.ready`。损坏 ready 不列出或重放；跨 service 同请求幂等、同键异包拒绝。设置页无绕过按钮并明确“已验证并暂存，未安装；不会自动关闭或重启”。证据见 `reports/G10_UPDATE_EVIDENCE.md`。
+- **T01 测试**：55 项新增测试；重点门禁 74/74。首次全量因既有固定 IPC 白名单未登记 3 个新操作而 1 failed；独立复核首轮 Critical 0 / Important 3 / Not ready，三项以 RED 复现后改为流式整包处理、独立原子幂等 ledger、故障钩子后及 rename 后双重复验，并补严格闭集/superseded。第二轮 Critical 0 / Important 2 / Not ready 指出 ready/ledger 故障一致性与证据数字滞后；继续以 RED 覆盖发布后 ledger 丢失恢复、ledger 写入/改名失败回滚与 token 恢复、完整结果绑定和按序列化字节淘汰。第三轮复核 Critical 0 / Important 0、Ready。最终 **513 passed / 1 skipped（514 total，58 files）**；typecheck、lint、合同、build、diff 均通过。冻结 acceptance 哈希未变，状态未改为 PASS。
+- **T01 外部门**：真实发布公钥/私钥托管与轮换、持有人签名服务、授权分发地址、真实签名安装器、SmartScreen 和干净 Windows 升级仍 `BLOCKED_EXTERNAL`；UPD-001 仅记本地工程证据，UPD-004 保持 `NOT_RUN/BLOCKED_EXTERNAL`。T02–T04 尚未执行。
 
 ## 下一步
 
-见 `HANDOFF.md`。下一步执行 G10-T01 签名更新清单和离线更新；在没有发布身份、签名服务、可信更新公钥和授权分发地址时，只完成可独立验证的清单/离线更新工程范围，并将正式签名与在线发布保持 `BLOCKED_EXTERNAL`。不重做 G00–G09。扫描件 OCR 未接入则继续阻塞；真实学生材料隐私授权与逐次外发许可、真实跨机 Windows/DPAPI 恢复、开发态 Electron 真实窗口走查、G01 目标环境安装验收、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权等外部门继续保留。
+见 `HANDOFF.md`。下一步执行 G10-T02 迁移失败恢复与不兼容回退，复用 G09 可验证恢复点和本包已验证暂存摘要；没有真实签名安装器和 Windows 安装环境时，旧程序二进制恢复仍标 `BLOCKED_EXTERNAL`，继续完成旁路迁移、journal、原数据保留和旧版 fail-closed。不要重做 G00–G10-T01。扫描件 OCR、真实学生材料授权/逐次外发许可、真实跨机 Windows/DPAPI、开发态 Electron 窗口、G01 目标安装、真实 API/归因质量、教学复核、Office/WPS、签名与公开上传等外部门继续保留。

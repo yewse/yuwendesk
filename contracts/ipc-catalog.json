@@ -377,6 +377,39 @@
       "arbitrary_path_allowed": false
     },
     {
+      "operation": "updates.status",
+      "kind": "read",
+      "scope": "application",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": false,
+      "output_contract": "可信发布身份配置状态与已验证暂存摘要",
+      "semantic_guard": "不返回路径、签名、公钥或包字节；未配置信任时 fail-closed",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "updates.inspectOffline",
+      "kind": "user_action",
+      "scope": "application",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": false,
+      "output_contract": "原生选择后的签名验证摘要与短时确认令牌",
+      "semantic_guard": "renderer 不提交路径；信任锚只来自已安装应用",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "updates.stageOffline",
+      "kind": "user_action",
+      "scope": "application",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": true,
+      "output_contract": "固定应用目录中的已验证暂存摘要",
+      "semantic_guard": "重读复验、单次令牌、幂等；不执行安装器、不退出或重启",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
       "operation": "updates.check",
       "kind": "user_action",
       "scope": "application",

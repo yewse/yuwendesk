@@ -364,6 +364,19 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     required: ['action', 'backupId'],
     additionalProperties: false
   },
+  'updates.status': null,
+  'updates.inspectOffline': null,
+  'updates.stageOffline': {
+    type: 'object',
+    properties: {
+      confirmationToken: { type: 'string', minLength: 1, maxLength: 256 },
+      manifestSha256: { type: 'string', minLength: 64, maxLength: 64 },
+      currentVersion: { type: 'string', minLength: 5, maxLength: 64 },
+      targetVersion: { type: 'string', minLength: 5, maxLength: 64 }
+    },
+    required: ['confirmationToken', 'manifestSha256', 'currentVersion', 'targetVersion'],
+    additionalProperties: false
+  },
   'diagnostics.export': {
     type: 'object',
     properties: {

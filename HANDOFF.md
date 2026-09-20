@@ -23,7 +23,8 @@
 - **G09-T02 本地工程范围已完成**：学生敏感导入/普通→敏感升级只落 AES-256-GCM 认证载荷；文档级分类一致，跨分类新版本不能绕过整文档升级。两张 FTS 启用独立 secure-delete，普通原件/正文/段/索引与精确关联的课时内容、审查、修改、材料文件、反馈/测量/归因/纠正及模型缓存均清除。材料文件经可恢复隔离与启动调和；独立文档 revision 绑定双确认 token，过期/消费/范围失效后不重放旧 token。永久删除墓碑含原因和分阶段备份工作流，启动可续做；manifest 范围来自快照，删除前后在备份排他锁内复核，漂移要求重新确认。损坏/不可读的 `.ready` 受管备份也纳入确认范围并可显式删除；已先行删除的授权备份在续做时按幂等成功处理。`backup.create` 先持久预留再发布，便携口令只存工作区密钥 HMAC 摘要。外部副本和 SSD 物理擦除仍不在保证范围。
 - **G09-T03 本地工程范围已完成**：诊断预览/ZIP 只含固定白名单字段和闭集错误代码聚合，未知错误统一为 `UNKNOWN`，八类 canary 与真实 SQLite 全大写自由错误文本不可搜索；预览哈希绑定当前状态，在原生保存对话框返回和原子发布前重验，漂移不会留下 running 幂等预留。路径只由主进程选择，ZIP 仅有 `diagnostics.json` / `README.txt`，没有自动上传。集中构造器故障钩子覆盖备份、恢复、重分类、删除与诊断原子边界；恢复逐项记录旧数据移动，仅在组件全集与原 DB 哈希可证明时报告回滚成功，已有不确定 rollback 时停止而不删除。自动备份同码连续三次失败后停止自动重试，手动成功清零连续计数但保留历史错误。
 - **G09-T04 本地工程范围已完成**：IPC 信任绑定实际窗口、sender、精确 top frame 与固定本地 URL；闭集普通对象校验拒绝原型继承、额外字段、URL 形输入和非法 Base64，模型 provider 的任意异常/路径/密钥样式文本只映射为闭集代码与固定中文说明。便携恢复在解压前读取 ZIP 中央目录，目录和文件均计数；拒绝原始及 Windows 别名重复、尾点/设备名、symlink、路径穿越、local/central 名称与元数据不一致、数据重叠和资源炸弹，并以带硬截止的流式解压复核实际展开量。归档条目必须与 manifest 精确相等；hash/schema/SQLite 在隔离 staging 内校验，失败清理，写入审计证明没有 staging 外瞬时写入。提示注入、DOCM 宏、OOXML 外部关系、HTML/script、PDF URI 只作为被动字节，测试中无网络派发。逐项状态和复现证据见 `reports/G09_THREAT_CHECKLIST.md`、`reports/G09_EVIDENCE.md`；SEC-006 保持 `NOT_RUN`，INS-008/DAT-002 保持 `BLOCKED_EXTERNAL`，冻结 acceptance 未改。
-- 当前仓库单测 **458 passed / 1 skipped（459 total，54 files）**（Windows 11 开发主机，Node 24.15.0；G09 测试全为合成状态、canary、攻击归档与伪 safeStorage，不替代真实学生资料授权、真实 DPAPI/跨机验收）；G09-T04 提交前最终主/渲染 typecheck、lint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0。最终重点定向 111/111；首轮独立复审 4 项 Important 均以 RED 测试复现并修复，第二轮复审 Critical 0 / Important 0、Ready；既有跳过项未改为通过。pdfjs 的可选 canvas/standardFontDataUrl 警告有如实记录，不等同于 Office/WPS 保真失败或通过。G09 提交序列：`be728a2`（T01）、`3536a8e`（T02）、`0560bad`（T03）、当前 T04 提交 `test(G09-T04): verify protection threat boundaries`。未签名 Windows EXE 见 `reports/WINDOWS_BUILD.md`。
+- **G10-T01 本地工程范围已完成**：固定非 ZIP 容器、规范闭集 manifest、Ed25519 应用内信任锚、目标/严格版本/package 完整性验证；生产信任集为空时 fail-closed。选择路径只在主进程，renderer 只取得安全摘要和两分钟单次绑定 token；确认时限额重读复验，固定 `.partial` 回读签名/版本/hash 后原子发布 `.ready`。损坏 ready 不列出/重放，同键异包拒绝；没有安装器执行、退出或重启能力。UI 无绕过并诚实显示未配置信任或“已验证暂存、未安装”。真实公钥/签名/分发/Windows 升级仍 `BLOCKED_EXTERNAL`。证据见 `reports/G10_UPDATE_EVIDENCE.md`。
+- 当前仓库单测 **513 passed / 1 skipped（514 total，58 files）**（Windows 11 开发主机，Node 24.15.0；G10-T01 使用进程内临时 Ed25519 keypair 和虚构安装器字节，不替代真实签名/安装）；最终重点 74/74，typecheck、lint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0。首次全量如实保留 1 个白名单失败；独立复核首轮 Critical 0 / Important 3 / Not ready，均以 RED 复现并改为流式整包处理、独立原子幂等 ledger、故障钩子后及 rename 后复验，另补严格闭集与 superseded。第二轮 Critical 0 / Important 2 / Not ready 后又补发布后 ledger 丢失恢复、ledger 写入/改名故障回滚与 token 恢复、完整结果绑定和按实际字节淘汰；第三轮 Critical 0 / Important 0、Ready。既有跳过项未改为通过，pdfjs 可选警告仍有如实记录。G09 提交序列：`be728a2`、`3536a8e`、`0560bad`、`27cbe9e`；G10 设计/计划：`4d5ee39`、`f1b76d6`；T01 待本次提交。未签名 Windows EXE 见 `reports/WINDOWS_BUILD.md`。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -67,7 +68,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 
 ## 下一个有界工作包建议
 
-1. **G10-T01 签名更新清单和离线更新**：先实现无需发布凭据即可验证的更新清单、真实性/版本/降级边界与离线更新路径；没有发布身份、签名服务、可信更新公钥和授权分发地址时，将正式签名与在线发布标 `BLOCKED_EXTERNAL`，不伪造签名或联网证据。
+1. **G10-T02 迁移失败恢复与不兼容回退**：先以失败测试固定迁移中断、完整性失败、切换 journal、既有 rollback、空间不足、未来 schema/数据世代和重复启动；复用 G09 恢复点，在旁路副本迁移并验证后才切换。真实旧程序二进制恢复需签名安装器与 Windows，继续 `BLOCKED_EXTERNAL`。
 2. 获得真实学生材料处理授权、逐次外发许可和授权云 API 后，再执行 G08 真实归因质量与隐私门；随后由有资质教师完成教学专业复核。当前测试替身和离线协议不替代这些外部门。
 3. 补齐锁定 Electron 二进制后执行开发态窗口走查；获得干净 Windows VM 后再关闭 G01-T04 与目标安装验收（安装→启动→保存→重启→保留数据 + SQLite/凭据/导出），两者不互相替代。
 

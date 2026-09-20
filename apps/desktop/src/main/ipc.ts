@@ -57,6 +57,8 @@ import {
 } from './feedback/types';
 import { createObservationRecord, ObservationPrivacyError } from './feedback/observation';
 import type { CorrectionDecisionInput, CorrectionRevertInput, FeedbackAnalyzeInput } from './feedback/service';
+import { UpdateValidationError } from './update/types';
+import type { UpdateStageInput } from './update/service';
 
 function errorResponse(
   code: ErrorCode,
@@ -109,6 +111,7 @@ export interface IpcServiceContext {
   protectionService?: ProtectionServiceLike;
   sourcePrivacyService?: SourcePrivacyServiceLike;
   diagnosticsService?: DiagnosticsServiceLike;
+  updateService?: UpdateServiceLike;
   noteSuccessfulWrite?: (operation: OperationName) => void;
 }
 
@@ -148,6 +151,12 @@ export interface SourcePrivacyServiceLike {
 export interface DiagnosticsServiceLike {
   preview(): Promise<unknown>;
   save(input: { previewHash: string; idempotencyKey: string }): Promise<unknown>;
+}
+
+export interface UpdateServiceLike {
+  status(): Promise<unknown>;
+  inspectOffline(): Promise<unknown>;
+  stageOffline(input: UpdateStageInput): Promise<unknown>;
 }
 
 // 仅声明 IPC 需要的模型服务形状（避免主进程强耦合）。
@@ -354,10 +363,72 @@ export class IpcService {
         return this.backupsList();
       case 'backups.delete':
         return this.backupsDelete(request);
+      case 'updates.status':
+        return this.updatesStatus();
+      case 'updates.inspectOffline':
+        return this.updatesInspectOffline();
+      case 'updates.stageOffline':
+        return this.updatesStageOffline(request);
       case 'diagnostics.export':
         return this.diagnosticsExport(request);
       default:
         return errorResponse('INPUT_INVALID', '未知操作。', '请重试当前操作。');
+    }
+  }
+
+  private updateError(error: unknown): IpcResponse<never> {
+    if (error instanceof UpdateValidationError) {
+      const message = error.code === 'UPDATE_TRUST_NOT_CONFIGURED'
+        ? '尚未配置可信发布身份，离线更新验证被阻止。'
+        : error.code === 'UPDATE_SIGNATURE_INVALID'
+          ? '更新签名未通过可信发布身份验证。'
+          : error.code === 'UPDATE_VERSION_REJECTED'
+            ? '更新版本不适用于当前应用。'
+            : error.code === 'UPDATE_TARGET_MISMATCH'
+              ? '更新包不适用于当前应用、系统或架构。'
+              : error.code === 'UPDATE_SPACE_INSUFFICIENT'
+                ? '本机空间不足，更新未暂存。'
+                : error.code === 'UPDATE_STATE_CHANGED'
+                  ? '更新选择或应用状态已变化，本次未暂存。'
+                  : '更新包未通过完整验证，本次未暂存。';
+      return errorResponse('UPDATE_UNTRUSTED', message, '请重新选择由可信发布方提供的离线更新包。');
+    }
+    return errorResponse('UPDATE_UNTRUSTED', '更新验证或暂存未能安全完成。', '请保留现有版本并重新选择更新包。', true);
+  }
+
+  private async updatesStatus(): Promise<IpcResponse> {
+    if (!this.ctx.updateService) {
+      return { ok: true, data: {
+        state: 'trust_not_configured', trustConfigured: false, currentVersion: this.ctx.appVersion, ready: [],
+        noticeZh: '尚未配置可信发布身份，离线更新验证被阻止。'
+      } };
+    }
+    try {
+      return { ok: true, data: await this.ctx.updateService.status() };
+    } catch (error) {
+      return this.updateError(error);
+    }
+  }
+
+  private async updatesInspectOffline(): Promise<IpcResponse> {
+    if (!this.ctx.updateService) return this.updateError(new UpdateValidationError('UPDATE_TRUST_NOT_CONFIGURED'));
+    try {
+      return { ok: true, data: await this.ctx.updateService.inspectOffline() };
+    } catch (error) {
+      return this.updateError(error);
+    }
+  }
+
+  private async updatesStageOffline(req: IpcRequest): Promise<IpcResponse> {
+    if (!this.ctx.updateService) return this.updateError(new UpdateValidationError('UPDATE_TRUST_NOT_CONFIGURED'));
+    if (!req.idempotency_key?.trim()) {
+      return errorResponse('INPUT_INVALID', '更新暂存请求缺少幂等标识。', '请重新确认暂存。');
+    }
+    const payload = req.payload as Omit<UpdateStageInput, 'idempotencyKey'>;
+    try {
+      return { ok: true, data: await this.ctx.updateService.stageOffline({ ...payload, idempotencyKey: req.idempotency_key }) };
+    } catch (error) {
+      return this.updateError(error);
     }
   }
 
