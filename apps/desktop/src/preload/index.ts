@@ -105,6 +105,13 @@ const api = {
     call<{ status: string; jobId?: string; result?: unknown; costCents?: number; fromCache?: boolean }>('model.run', { payload }),
   modelCancel: (jobId: string) => call<{ cancelled: boolean }>('model.cancel', { payload: { jobId } }),
   modelListJobs: (limit?: number) => call<{ jobs: unknown[] }>('model.listJobs', { payload: limit ? { limit } : {} }),
+  // G05/G06 课时计划与三类五文件（自拟/测试内容明确标注）。
+  lessonBuildDemo: () => call<{ planId: string; revisionId: string; title: string; valid: boolean; contentOrigin: string }>('lesson.buildDemo'),
+  lessonList: () => call<{ plans: { planId: string; title: string; currentRevisionId: string | null; updatedAt: string }[] }>('lesson.list'),
+  lessonGet: (planId: string) => call<{ plan: unknown; contentOrigin: string; valid: boolean; revisionId: string }>('lesson.get', { payload: { planId } }),
+  materialsGenerate: (planId: string) =>
+    call<{ planId: string; revisionId: string; contentOrigin: string; versionStamp: string; files: { role: string; format: string; filename: string; path: string; sha256: string; byteSize: number }[] }>('materials.generate', { payload: { planId } }),
+  materialsList: (planId: string) => call<{ artifacts: { role: string; format: string; filename: string; path: string; sha256: string; byteSize: number; revisionId: string; contentOrigin: string }[] }>('materials.list', { payload: { planId } }),
   // 关闭前刷新握手：主进程在窗口关闭前通知渲染层落盘（带唯一 requestId）；渲染层完成后回执。
   // 仅暴露固定通道，不暴露任意 send/on。返回取消订阅函数，供组件卸载时释放监听。
   onBeforeClose: (handler: (requestId: string) => void | Promise<void>): (() => void) => {

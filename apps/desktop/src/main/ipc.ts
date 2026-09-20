@@ -10,9 +10,14 @@ import type {
 } from '../shared/ipc';
 import { IMPLEMENTED_OPERATIONS, IPC_SCHEMA_VERSION } from '../shared/ipc';
 import type { ErrorCode } from '../shared/ipc';
-import type { DraftStore, SourceStore } from './store';
+import type { DraftStore, LessonStore, MaterialArtifactRecord, SourceStore } from './store';
 import { StoreProtectedError } from './store';
 import { checkPayload } from './schemaGate';
+import { buildLessonPlan, demoLessonSpec, validateLessonPlan } from './lesson/build';
+import { buildMaterialSet } from './materials/generate';
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 function errorResponse(
   code: ErrorCode,
@@ -41,6 +46,10 @@ export interface IpcServiceContext {
   sourceStore?: SourceStore;
   // G04 模型服务；缺省时模型操作返回未实现。
   modelService?: ModelServiceLike;
+  // G05/G06 课时计划与成品存储（由 SqliteStore 提供）。
+  lessonStore?: LessonStore;
+  // 成品文件输出根目录（userData）。
+  userDataDir?: string;
 }
 
 // 仅声明 IPC 需要的模型服务形状（避免主进程强耦合）。
@@ -148,6 +157,18 @@ export class IpcService {
         return this.ctx.modelService
           ? { ok: true, data: { jobs: this.ctx.modelService.listJobs((request.payload as { limit?: number } | undefined)?.limit ?? 50) } }
           : { ok: true, data: { jobs: [] } };
+      case 'lesson.buildDemo':
+        return this.lessonBuildDemo();
+      case 'lesson.list':
+        return this.ctx.lessonStore ? { ok: true, data: { plans: this.ctx.lessonStore.listLessonPlans() } } : { ok: true, data: { plans: [] } };
+      case 'lesson.get':
+        return this.lessonGet(request);
+      case 'materials.generate':
+        return this.materialsGenerate(request);
+      case 'materials.list':
+        return this.ctx.lessonStore
+          ? { ok: true, data: { artifacts: this.ctx.lessonStore.listMaterialArtifacts((request.payload as { planId: string }).planId) } }
+          : { ok: true, data: { artifacts: [] } };
       default:
         return errorResponse('INPUT_INVALID', '未知操作。', '请重试当前操作。');
     }
@@ -297,6 +318,60 @@ export class IpcService {
       ? (code as ErrorCode)
       : 'MODEL_NOT_AVAILABLE';
     return errorResponse(known, r.note ?? '调用未成功。', '请检查片段授权、预算与服务商状态。');
+  }
+
+  // G05：组建自拟示例完整课时计划并持久化（内容来源 authored，明确标注自拟）。
+  private lessonBuildDemo(): IpcResponse {
+    const ls = this.ctx.lessonStore;
+    if (!ls) return errorResponse('INPUT_INVALID', '课时计划功能不可用。', '请重启应用。');
+    const plan = buildLessonPlan(demoLessonSpec());
+    const v = validateLessonPlan(plan);
+    if (!v.ok) return errorResponse('EXPORT_INVALID', `计划不合格：${v.errors.join(',')}`, '请检查计划结构。');
+    ls.saveLessonRevision(
+      { revisionId: plan.revision_id, planId: plan.plan_id, previousRevisionId: plan.previous_revision_id, title: plan.title, contentJson: JSON.stringify(plan), contentOrigin: 'authored', valid: true, createdAt: new Date().toISOString() },
+      true
+    );
+    return { ok: true, data: { planId: plan.plan_id, revisionId: plan.revision_id, title: plan.title, valid: true, contentOrigin: 'authored' } };
+  }
+
+  private lessonGet(req: IpcRequest): IpcResponse {
+    const ls = this.ctx.lessonStore;
+    if (!ls) return errorResponse('SOURCE_MISSING', '不可用。', '请重启应用。');
+    const rec = ls.getLessonRevision((req.payload as { planId: string }).planId);
+    if (!rec) return errorResponse('SOURCE_MISSING', '课时计划不存在。', '请先组建计划。');
+    return { ok: true, data: { plan: JSON.parse(rec.contentJson), contentOrigin: rec.contentOrigin, valid: rec.valid, revisionId: rec.revisionId } };
+  }
+
+  // G06：由当前修订确定性生成三类五文件，写入 userData 并登记清单（版本一致记录）。
+  private async materialsGenerate(req: IpcRequest): Promise<IpcResponse> {
+    const ls = this.ctx.lessonStore;
+    if (!ls) return errorResponse('INPUT_INVALID', '成品生成不可用。', '请重启应用。');
+    const rec = ls.getLessonRevision((req.payload as { planId: string }).planId);
+    if (!rec) return errorResponse('SOURCE_MISSING', '课时计划不存在。', '请先组建计划。');
+    const plan = JSON.parse(rec.contentJson);
+    const set = await buildMaterialSet(plan, rec.contentOrigin);
+    const dir = join(this.ctx.userDataDir ?? '.', 'materials', set.revisionId);
+    try {
+      mkdirSync(dir, { recursive: true });
+    } catch {
+      /* ignore */
+    }
+    const now = new Date().toISOString();
+    const recs: MaterialArtifactRecord[] = set.files.map((f) => {
+      const p = join(dir, f.filename);
+      try {
+        writeFileSync(p, f.bytes);
+      } catch {
+        /* ignore write errors; manifest still returned */
+      }
+      return { id: randomUUID(), planId: set.planId, revisionId: set.revisionId, role: f.role, format: f.format, filename: f.filename, path: p, sha256: f.sha256, byteSize: f.bytes.length, contentOrigin: set.contentOrigin, createdAt: now };
+    });
+    try {
+      ls.saveMaterialArtifacts(recs);
+    } catch {
+      /* ignore */
+    }
+    return { ok: true, data: { planId: set.planId, revisionId: set.revisionId, contentOrigin: set.contentOrigin, versionStamp: set.versionStamp, files: recs.map((r) => ({ role: r.role, format: r.format, filename: r.filename, path: r.path, sha256: r.sha256, byteSize: r.byteSize })) } };
   }
 
   private sourcesReadOriginal(req: IpcRequest): IpcResponse {

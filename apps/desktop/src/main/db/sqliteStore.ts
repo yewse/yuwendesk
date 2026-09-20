@@ -300,6 +300,28 @@ const MIGRATIONS: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_revision_plan ON lesson_revision(plan_id);
       `);
     }
+  },
+  {
+    version: 8,
+    up: (db) => {
+      // G06 成品清单（版本一致记录：某修订产出哪些文件及其哈希与内容来源）。
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS material_artifact (
+          id             TEXT PRIMARY KEY,
+          plan_id        TEXT NOT NULL,
+          revision_id    TEXT NOT NULL,
+          role           TEXT NOT NULL,
+          format         TEXT NOT NULL,
+          filename       TEXT NOT NULL,
+          path           TEXT NOT NULL,
+          sha256         TEXT NOT NULL,
+          byte_size      INTEGER NOT NULL,
+          content_origin TEXT NOT NULL,
+          created_at     TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_artifact_plan ON material_artifact(plan_id, revision_id);
+      `);
+    }
   }
 ];
 
@@ -1148,6 +1170,22 @@ export class SqliteStore {
   listLessonPlans(): import('../store').LessonPlanListItem[] {
     if (!this.db) return [];
     return this.db.prepare('SELECT plan_id planId, title, current_revision_id currentRevisionId, updated_at updatedAt FROM lesson_plan ORDER BY updated_at DESC').all() as import('../store').LessonPlanListItem[];
+  }
+  saveMaterialArtifacts(recs: import('../store').MaterialArtifactRecord[]): void {
+    this.assertWritable();
+    const db = this.requireDb();
+    const ins = db.prepare('INSERT INTO material_artifact(id,plan_id,revision_id,role,format,filename,path,sha256,byte_size,content_origin,created_at) VALUES(@id,@planId,@revisionId,@role,@format,@filename,@path,@sha256,@byteSize,@contentOrigin,@createdAt)');
+    const tx = db.transaction(() => {
+      for (const r of recs) ins.run(r);
+    });
+    tx.immediate();
+  }
+  listMaterialArtifacts(planId: string, revisionId?: string): import('../store').MaterialArtifactRecord[] {
+    if (!this.db) return [];
+    const rows = revisionId
+      ? this.db.prepare('SELECT id,plan_id planId,revision_id revisionId,role,format,filename,path,sha256,byte_size byteSize,content_origin contentOrigin,created_at createdAt FROM material_artifact WHERE plan_id=? AND revision_id=? ORDER BY created_at').all(planId, revisionId)
+      : this.db.prepare('SELECT id,plan_id planId,revision_id revisionId,role,format,filename,path,sha256,byte_size byteSize,content_origin contentOrigin,created_at createdAt FROM material_artifact WHERE plan_id=? ORDER BY created_at').all(planId);
+    return rows as import('../store').MaterialArtifactRecord[];
   }
 
   // ===== G04 模型配置/作业持久化 =====

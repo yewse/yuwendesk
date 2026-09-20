@@ -197,7 +197,12 @@ describe('白名单与目录一致性', () => {
       'model.probe',
       'model.run',
       'model.cancel',
-      'model.listJobs'
+      'model.listJobs',
+      'lesson.buildDemo',
+      'lesson.list',
+      'lesson.get',
+      'materials.generate',
+      'materials.list'
     ];
     expect([...IMPLEMENTED_OPERATIONS].sort()).toEqual([...expected].sort());
     expect(new Set(IMPLEMENTED_OPERATIONS).size).toBe(IMPLEMENTED_OPERATIONS.length);

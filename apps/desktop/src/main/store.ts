@@ -221,10 +221,25 @@ export interface LessonPlanListItem {
   currentRevisionId: string | null;
   updatedAt: string;
 }
+export interface MaterialArtifactRecord {
+  id: string;
+  planId: string;
+  revisionId: string;
+  role: string;
+  format: string;
+  filename: string;
+  path: string;
+  sha256: string;
+  byteSize: number;
+  contentOrigin: string;
+  createdAt: string;
+}
 export interface LessonStore {
   saveLessonRevision(rec: LessonRevisionRecord, makeCurrent: boolean): void;
   getLessonRevision(planId: string, revisionId?: string): LessonRevisionRecord | null;
   listLessonPlans(): LessonPlanListItem[];
+  saveMaterialArtifacts(recs: MaterialArtifactRecord[]): void;
+  listMaterialArtifacts(planId: string, revisionId?: string): MaterialArtifactRecord[];
 }
 
 export interface ModelStore {

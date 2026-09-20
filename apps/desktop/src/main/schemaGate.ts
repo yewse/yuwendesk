@@ -143,6 +143,26 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     properties: { limit: { type: 'integer', min: 1 } },
     required: [],
     additionalProperties: false
+  },
+  'lesson.buildDemo': null,
+  'lesson.list': null,
+  'lesson.get': {
+    type: 'object',
+    properties: { planId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['planId'],
+    additionalProperties: false
+  },
+  'materials.generate': {
+    type: 'object',
+    properties: { planId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['planId'],
+    additionalProperties: false
+  },
+  'materials.list': {
+    type: 'object',
+    properties: { planId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['planId'],
+    additionalProperties: false
   }
 };
 

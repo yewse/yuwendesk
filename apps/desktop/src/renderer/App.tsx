@@ -215,17 +215,94 @@ function PreparePage({ boot, health }: { boot: BootstrapData | null; health: Hea
   );
 }
 
+interface PlanItem {
+  planId: string;
+  title: string;
+  currentRevisionId: string | null;
+  updatedAt: string;
+}
+interface ArtifactItem {
+  role: string;
+  format: string;
+  filename: string;
+  path: string;
+  sha256: string;
+  byteSize: number;
+}
 function CoursesPage(): JSX.Element {
+  const [plans, setPlans] = useState<PlanItem[]>([]);
+  const [manifest, setManifest] = useState<{ planId: string; revisionId: string; contentOrigin: string; versionStamp: string; files: ArtifactItem[] } | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function reload(): Promise<void> {
+    const r = await window.yuwen.lessonList();
+    if (r.ok) setPlans(r.data.plans);
+  }
+  useEffect(() => {
+    void reload();
+  }, []);
+
+  async function buildDemo(): Promise<void> {
+    const r = await window.yuwen.lessonBuildDemo();
+    setMsg(r.ok ? `已组建自拟课时计划（${r.data.title}，修订 ${r.data.revisionId.slice(0, 12)}…，内容来源 ${r.data.contentOrigin}）` : `组建失败：${r.error.message_zh}`);
+    await reload();
+  }
+  async function generate(planId: string): Promise<void> {
+    const r = await window.yuwen.materialsGenerate(planId);
+    if (r.ok) setManifest(r.data);
+    else setMsg(`生成失败：${r.error.message_zh}`);
+  }
+
   return (
     <div className="page">
       <h1>我的课程</h1>
-      <p className="lead">单元与课时、采用与实际授课分离、版本差异。生成、采用、已授课、有效果是不同状态。</p>
+      <p className="lead">完整课时计划（LessonPlan）与三类五文件成品：课堂 PPT、学生讲义(DOCX/PDF)、教师讲义(DOCX/PDF)。生成、采用、已授课、有效果是不同状态。</p>
       <div className="card">
-        <div className="card-title">暂无课程</div>
-        <p className="muted">
-          当前为可安装骨架（G01）。备课生成、材料导出与审查将在后续阶段（G05–G07）开放。
-        </p>
+        <div className="card-title">课时计划</div>
+        <p className="muted small">无真实模型授权时，可用“自拟完整计划”并行开发；模拟/自拟内容明确标注，不冒充真实备课质量。</p>
+        <div className="confirm-actions">
+          <button className="btn small" onClick={() => void buildDemo()}>
+            组建自拟完整课时计划（测试）
+          </button>
+        </div>
+        {msg && <p className="notice small">{msg}</p>}
+        <ul className="src-list">
+          {plans.map((p) => (
+            <li key={p.planId} className="src-item">
+              <div>
+                <b>{p.title}</b> <span className="tag">完整 LessonPlan</span>
+                <div className="muted small mono">{p.planId}</div>
+              </div>
+              <div className="src-actions">
+                <button className="btn small" onClick={() => void generate(p.planId)}>
+                  生成三类五文件
+                </button>
+              </div>
+            </li>
+          ))}
+          {plans.length === 0 && <p className="muted small">暂无课时计划。点击上方按钮组建自拟完整计划。</p>}
+        </ul>
       </div>
+
+      {manifest && (
+        <div className="card">
+          <div className="card-title">三类五文件（版本一致 · 角色隔离）</div>
+          <p className="notice small">{manifest.versionStamp}</p>
+          <p className="muted small">内容来源：{manifest.contentOrigin}（自拟/模拟内容明确标注；真实备课质量需真实模型与教师核验）</p>
+          <ul className="src-list">
+            {manifest.files.map((f) => (
+              <li key={f.filename} className="src-item">
+                <div>
+                  <b>{f.filename}</b>{' '}
+                  <span className="tag">{f.role === 'presentation' ? '课堂PPT' : f.role === 'student' ? '学生' : '教师'}</span>{' '}
+                  <span className="tag">{f.format}</span>
+                  <div className="muted small mono">{f.byteSize} 字节 · sha256 {f.sha256.slice(0, 16)}…</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

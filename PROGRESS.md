@@ -133,7 +133,15 @@
 - **保护收尾**：派发前**联网授权**(allowRealNetwork+受保护密钥，否则不发起)；**预算预留(running 计入)与结算**(succeeded 实际/uncertain 保留/明确未发生才置0，不因“失败”直接认定未计费)；**相同任务在途去重**；**取消后迟到结果不提交为成功**(cancelled 不缓存)；**超时→uncertain(REQUEST_UNCERTAIN)** 费用不确定；**探测遵守授权与预算**。
 - **实测**：Node 单测 **211 项**（新增 model-deepseek 8 离线协议、model-protect 9 边界/去重/取消/超时/预算/探测；含既有 G04 定向检查转正式回归）；真实 Electron e2e：DeepSeek 真实协议经 App IPC **离线注入传输跑通**(provider=deepseek、isTestDouble=false、结算成本)，真实实网仍未验证。证据 `/opt/cursor/artifacts/g04b-walkthrough.mp4`、`g04b-*.png`、`g04b-transcript.json`。
 
-### G05 课时计划接入（依赖满足部分）
+### G04 保护收尾（第六批）+ G05 完整 LessonPlan + G06 首套三类五文件
+
+- **G04 收尾**：取消/费用分离（已派发取消→费用不确定，保留预留额；未派发→0）；未知用量/已派发后网络异常→uncertain 保留预留，不自动按零结算；预留含 输入+输出+重试(×(retries+1))+探测余量；**模拟费率与真实价格分离**（PricingConfig：币种/来源/生效时间/isEstimate）。取消/超时经 **AbortSignal 传播到传输层**；**真正增量流式**（async-iterable 分片消费）+核对 finish_reason 与 [DONE]，**截断/未完成不入可用成功缓存**；探测遵守授权与预算。**内容来源身份**（real/offline-injected/simulated）随 result/缓存/成品传递——经 DeepSeek 适配器的离线注入仍标 offline-injected（模拟内容）。补齐输出合同类型/必填/数值/异常检查。
+- **G05 完整 LessonPlan**：`lesson/build.ts` 按 `contracts/LessonPlan.schema.json` 组建 objectives/tasks/rubrics(criteria: acceptable_variants 合理答案 + insufficient_examples 误解)/activities(actor+student_action+teacher_action+start/end_sec 时间与角色)/source_anchors(文本依据)/homework/unknowns；`validateLessonPlan` 校验时长≥300、minItems、角色枚举、anchor/rubric 引用。迁移 v7 lesson_plan/lesson_revision（修订链+content_origin）。lesson_outline 仅中间产物，不作最终成果。
+- **G06 三类五文件**：`materials/generate.ts` 确定性生成 课堂 PPTX + 学生 DOCX/PDF + 教师 DOCX/PDF。**角色隔离**（教师合理答案/误解/教师动作/追问/小结仅教师版；学生版与投屏 PPTX 不含）；**版本一致**（内嵌 plan_id/revision_id/内容来源）；**一处修改联动**（成品为计划修订的纯函数）。迁移 v8 material_artifact 清单。
+- **实测**：Node 单测 **220 项**（新增 materials 7：build/validate、生成回解析、角色隔离、版本一致、一处修改联动、PDF 角色隔离；model-deepseek/model-protect 扩充）。真实五文件工件 `/opt/cursor/artifacts/materials/`（回解析验证角色隔离/版本一致/一处修改联动全 true）。真实 Electron UI e2e：组建自拟完整计划→生成三类五文件→清单（版本水印/内容来源标注）。证据 `g06-walkthrough.mp4`、`g06-*.png`、`materials/MANIFEST.json`。
+- **未验证/阻塞**：真实模型备课质量未通过（需真实 API 授权，保持 BLOCKED；自拟/模拟内容明确标注不冒充）；生成的 PPTX/DOCX 由本管线回解析验证结构有效，真实 Office 保真未用 Office/LibreOffice 验证（环境无）；一处修改联动的跨成品自动重生成流水线（G07）尚未接入 UI 自动触发。
+
+### G05 课时计划接入（依赖满足部分·历史）
 
 - 任务/方法示例/**课时计划合同** `lesson_outline.v1`（objectives/steps[stage,minutes,activity,citations]/notes），受同一输出合同校验；资料页“生成课时计划”按获准片段生成，**模拟结果明确标注“测试替身（非真实模型）”**，不冒充真实备课；教师不写提示词。无授权不调用真实 API。
 

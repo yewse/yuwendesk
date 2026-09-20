@@ -53,7 +53,12 @@ export const IMPLEMENTED_OPERATIONS = [
   'model.probe',
   'model.run',
   'model.cancel',
-  'model.listJobs'
+  'model.listJobs',
+  'lesson.buildDemo',
+  'lesson.list',
+  'lesson.get',
+  'materials.generate',
+  'materials.list'
 ] as const;
 
 export type OperationName = (typeof IMPLEMENTED_OPERATIONS)[number];

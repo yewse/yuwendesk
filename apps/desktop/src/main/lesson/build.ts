@@ -46,6 +46,32 @@ export interface LessonPlanSpec {
 
 export type LessonValidation = { ok: true } | { ok: false; errors: string[] };
 
+// 自拟示例《春》完整课时计划规格（明确标注自拟；用于 G05/G06 确定性并行开发）。
+export function demoLessonSpec(overrides: Partial<LessonPlanSpec> = {}): LessonPlanSpec {
+  return {
+    title: '《春》第一课时',
+    declared_duration_sec: 45 * 60,
+    task_context_id: 'ctx_demo',
+    objectives: [
+      { description: '朗读课文，把握重音与停连', cognitive_demand: 'aesthetic_response' },
+      { description: '找出比喻与拟人并体会其表达效果', cognitive_demand: 'explain' }
+    ],
+    anchors: [{ source_version_id: 'ver_demo', locator: { line: 2 }, quote: '盼望着，东风来了，春天的脚步近了。', source_class: 'public_reference', verification: 'exact_checked' }],
+    tasks: [
+      { prompt: '朗读第一段并标出重音与停连', cognitive_demand: 'aesthetic_response', support_level: 'partial_prompt', teacher_notes: '追问：为何反复“盼望着”？', acceptable_variants: ['重音落在盼望着，反复表期盼'], insufficient_examples: ['只标句末停顿'], anchorIndexes: [1] },
+      { prompt: '找出一处拟人句并说明效果', cognitive_demand: 'explain', support_level: 'independent', teacher_notes: '追问：拟人与比喻区别？', acceptable_variants: ['东风来了赋予人的动作'], insufficient_examples: ['把比喻误判为拟人'], anchorIndexes: [1] }
+    ],
+    activities: [
+      { title: '导入齐读', start_sec: 0, end_sec: 300, actor: 'both', student_action: '齐读课文', teacher_action: '范读并纠音', priority: 'essential', taskIndexes: [1] },
+      { title: '研读修辞', start_sec: 300, end_sec: 1500, actor: 'student', student_action: '分组找修辞句', teacher_action: '巡视点拨并揭示合理答案', priority: 'essential', taskIndexes: [2] }
+    ],
+    homework: [{ description: '背诵第一段', necessary_reason: '积累语感', estimated_sec: 600, stop_condition: '能流畅背诵' }],
+    teacher_summary: '以朗读带动修辞体会，注意情感与语言结合。',
+    unknowns: ['本班是否已学拟人（需教师核实）'],
+    ...overrides
+  };
+}
+
 export function validateLessonPlan(p: LessonPlan): LessonValidation {
   const e: string[] = [];
   if (p.schema_version !== LESSONPLAN_SCHEMA_VERSION) e.push('schema_version');
