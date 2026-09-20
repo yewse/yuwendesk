@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { BackupRecordDTO, BootstrapData, HealthData, RestorePreviewDTO, SourceHitDTO, SourceListItemDTO, SourceReadDTO, SourceVersionDTO } from '../shared/ipc';
 import type { ChangePreview, LessonChange } from '../main/change/types';
 import type {
@@ -45,6 +45,7 @@ import { buildBackupRows, portableBackupNotice, restorePreviewNotice } from './p
 import { buildSourceDeleteSummary, sensitiveSourceNotice, type SourceDeleteSummary } from './sourcePrivacyView';
 import type { DiagnosticsPreview } from '../main/protection/diagnostics';
 import { diagnosticsPreviewText, diagnosticsSaveEnabled, diagnosticsScopeNotice } from './diagnosticsView';
+import { MAIN_CONTENT_ID, startDialogFocusSession } from './accessibilityLayout';
 
 type NavKey = 'prepare' | 'courses' | 'resources' | 'settings';
 
@@ -54,6 +55,64 @@ const NAV: { key: NavKey; label: string; hint: string }[] = [
   { key: 'resources', label: '资料', hint: '导入 · 来源 · 覆盖' },
   { key: 'settings', label: '帮助与设置', hint: '连接 · 备份 · 诊断' }
 ];
+
+function AccessibleDialog({ label, onClose, children }: {
+  label: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const firstControl = dialogRef.current?.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') ?? null;
+    return startDialogFocusSession(previousFocus, firstControl);
+  }, []);
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key === 'Tab') {
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) ?? []).filter((element) => element.getAttribute('aria-hidden') !== 'true');
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  };
+
+  return (
+    <div className="reader-mask" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        className="reader"
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        tabIndex={-1}
+        onKeyDown={onKeyDown}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function useBootstrap(): { boot: BootstrapData | null; health: HealthData | null } {
   const [boot, setBoot] = useState<BootstrapData | null>(null);
@@ -75,8 +134,8 @@ function useBootstrap(): { boot: BootstrapData | null; health: HealthData | null
 
 function StatusPill({ online }: { online: boolean }): JSX.Element {
   return (
-    <span className={`pill ${online ? 'pill-on' : 'pill-off'}`}>
-      <span className="dot" />
+    <span className={`pill ${online ? 'pill-on' : 'pill-off'}`} role="status" aria-live="polite">
+      <span className="dot" aria-hidden="true" />
       {online ? '已连接 AI' : '离线可用'}
     </span>
   );
@@ -112,6 +171,7 @@ function DraftNote(): JSX.Element {
       </p>
       <textarea
         className="draft"
+        aria-label="备课草稿"
         value={snap.content}
         onChange={(e) => onChange(e.target.value)}
         placeholder="例如：本课《春》——朗读中体会比喻与排比，学生尝试仿写一句…"
@@ -226,7 +286,9 @@ function HealthPanel({ health }: { health: HealthData | null }): JSX.Element {
       <ul className="status-list">
         {rows.map((r) => (
           <li key={r.label}>
-            <span className={`tick ${r.ok ? 'ok' : 'bad'}`}>{r.ok ? '✓' : '!'}</span>
+            <span className={`tick ${r.ok ? 'ok' : 'bad'}`} aria-label={r.ok ? '通过' : '需处理'}>
+              <span aria-hidden="true">{r.ok ? '✓' : '!'}</span>
+            </span>
             <span className="status-label">{r.label}</span>
             <span className="muted">{r.text}</span>
           </li>
@@ -858,7 +920,7 @@ function CoursesPage(): JSX.Element {
             组建自拟完整课时计划（测试）
           </button>
         </div>
-        {msg && <p className="notice small">{msg}</p>}
+        {msg && <LiveMessage urgent={messageNeedsAlert(msg)} warning={messageNeedsAlert(msg)}>{msg}</LiveMessage>}
         <ul className="src-list">
           {plans.map((p) => (
             <li key={p.planId} className="src-item">
@@ -929,7 +991,7 @@ function CoursesPage(): JSX.Element {
           <button className="btn" disabled={recordingTeaching || !teachingStatus.canRecordTeaching} onClick={() => void recordTeaching()}>
             {recordingTeaching ? '正在记录…' : '记录已授课'}
           </button>
-          {teachingMessage && <p className={`notice small ${teachingMessage.startsWith('授课记录未写入') ? 'warn' : ''}`}>{teachingMessage}</p>}
+          {teachingMessage && <LiveMessage urgent={messageNeedsAlert(teachingMessage)} warning={messageNeedsAlert(teachingMessage)}>{teachingMessage}</LiveMessage>}
           {teachingEvents.length > 0 && (
             <ul className="history-list teaching-history">
               {teachingEvents.map((event) => (
@@ -1076,7 +1138,7 @@ function CoursesPage(): JSX.Element {
           </ul>
         </div>
       )}
-      {selectedPlan && observationMessage && <p className={`notice small ${observationMessage.includes('未') ? 'warn' : ''}`}>{observationMessage}</p>}
+      {selectedPlan && observationMessage && <LiveMessage urgent={messageNeedsAlert(observationMessage)} warning={messageNeedsAlert(observationMessage)}>{observationMessage}</LiveMessage>}
 
       {selectedPlan && teachingEvents.length > 0 && (
         <div className="card attribution-panel">
@@ -1098,7 +1160,7 @@ function CoursesPage(): JSX.Element {
           <button className="btn" disabled={analyzing} onClick={() => void analyzeFeedback()}>
             {analyzing ? '正在检查并分析…' : '先检查测量条件，再辅助归因'}
           </button>
-          {analysisMessage && <p className={`notice small ${analysisMessage.includes('阻断') || analysisMessage.includes('不足') || analysisMessage.includes('不确定') ? 'warn' : ''}`}>{analysisMessage}</p>}
+          {analysisMessage && <LiveMessage urgent={messageNeedsAlert(analysisMessage)} warning={messageNeedsAlert(analysisMessage)}>{analysisMessage}</LiveMessage>}
           {analysisResult && (() => {
             const view = buildAnalysisView(analysisResult);
             return (
@@ -1171,7 +1233,7 @@ function CoursesPage(): JSX.Element {
                 </article>
               );
             })}
-            {correctionMessage && <p className={`notice small ${correctionMessage.includes('未完成') ? 'warn' : ''}`}>{correctionMessage}</p>}
+            {correctionMessage && <LiveMessage urgent={messageNeedsAlert(correctionMessage)} warning={messageNeedsAlert(correctionMessage)}>{correctionMessage}</LiveMessage>}
           </div>
         );
       })()}
@@ -1365,7 +1427,7 @@ function CoursesPage(): JSX.Element {
               </button>
             </div>
           )}
-          {changeMessage && <p className={`notice small ${changeMessage.startsWith('旧版未受影响') ? 'warn' : ''}`}>{changeMessage}</p>}
+          {changeMessage && <LiveMessage urgent={messageNeedsAlert(changeMessage)} warning={messageNeedsAlert(changeMessage)}>{changeMessage}</LiveMessage>}
         </div>
       )}
 
@@ -1742,6 +1804,7 @@ function ResourcesPage(): JSX.Element {
         <input
           ref={fileRef}
           type="file"
+          aria-label="选择资料文件"
           multiple
           accept={ACCEPT}
           style={{ display: 'none' }}
@@ -1751,8 +1814,8 @@ function ResourcesPage(): JSX.Element {
           }}
         />
         <p className="muted small">Word / PDF 直接导入，无需先转换；教师私有为默认分类。学生材料可在导入后升级为认证加密资料。</p>
-        {progress && <p className="notice small">{progress}</p>}
-        {message && <p className="notice small">{message}</p>}
+        {progress && <LiveMessage>{progress}</LiveMessage>}
+        {message && <LiveMessage urgent={messageNeedsAlert(message)} warning={messageNeedsAlert(message)}>{message}</LiveMessage>}
       </div>
 
       {pending.map((item, i) => (
@@ -1779,6 +1842,7 @@ function ResourcesPage(): JSX.Element {
         <div className="row">
           <input
             className="search-input"
+            aria-label="检索资料关键词"
             placeholder="输入关键词（支持单字短词回退）"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -1790,7 +1854,7 @@ function ResourcesPage(): JSX.Element {
             搜索
           </button>
         </div>
-        {aiMsg && <p className="notice warn small">{aiMsg}</p>}
+        {aiMsg && <LiveMessage urgent warning>{aiMsg}</LiveMessage>}
         {searched && hits.length === 0 && <p className="muted small">未找到匹配的资料。</p>}
         <ul className="hit-list">
           {hits.map((h) => (
@@ -1823,7 +1887,7 @@ function ResourcesPage(): JSX.Element {
       <div className="card">
         <div className="card-title">已导入资料（{sources.length}）</div>
         <p className="muted small">{sensitiveSourceNotice()}</p>
-        {privacyMessage && <p className="notice small">{privacyMessage}</p>}
+        {privacyMessage && <LiveMessage urgent={messageNeedsAlert(privacyMessage)} warning={messageNeedsAlert(privacyMessage)}>{privacyMessage}</LiveMessage>}
         {deleteSummary && (
           <div className="notice warn small">
             <div>{deleteSummary.database}</div>
@@ -1868,44 +1932,39 @@ function ResourcesPage(): JSX.Element {
       </div>
 
       {reader && (
-        <div className="reader-mask" onClick={() => setReader(null)}>
-          <div className="reader" onClick={(e) => e.stopPropagation()}>
+        <AccessibleDialog label={`${reader.title} 原文预览`} onClose={() => setReader(null)}>
             <div className="reader-head">
               <b>{reader.title}</b> <span className="tag">v{reader.version}</span>
               {reader.char_start !== null && <span className="muted small">定位跨度 {reader.char_start}–{reader.char_end}</span>}
-              <button className="btn small" onClick={() => setReader(null)}>
+              <button className="btn small" type="button" onClick={() => setReader(null)}>
                 关闭
               </button>
             </div>
             <pre className="reader-body">{reader.text}</pre>
             {reader.truncated && <p className="muted small">（原文较长，已截断预览）</p>}
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
 
       {analysis && (
-        <div className="reader-mask" onClick={() => setAnalysis(null)}>
-          <div className="reader" onClick={(e) => e.stopPropagation()}>
+        <AccessibleDialog label={`${analysis.title} 分析结果`} onClose={() => setAnalysis(null)}>
             <div className="reader-head">
               <b>{analysis.title}</b>
               {analysis.isTestDouble && <span className="pill pill-off">测试替身（非真实模型）</span>}
               {analysis.fromCache && <span className="tag">缓存复用</span>}
-              <button className="btn small" onClick={() => setAnalysis(null)}>
+              <button className="btn small" type="button" onClick={() => setAnalysis(null)}>
                 关闭
               </button>
             </div>
             <pre className="reader-body">{analysis.text}</pre>
             <p className="muted small">依据仅限所选获准片段；精确事实/引文/版本需教师核实。</p>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
 
       {versionsFor && (
-        <div className="reader-mask" onClick={() => setVersionsFor(null)}>
-          <div className="reader" onClick={(e) => e.stopPropagation()}>
+        <AccessibleDialog label={`${versionsFor.title} 版本与来源核对`} onClose={() => setVersionsFor(null)}>
             <div className="reader-head">
               <b>{versionsFor.title} · 版本与来源核对</b>
-              <button className="btn small" onClick={() => setVersionsFor(null)}>
+              <button className="btn small" type="button" onClick={() => setVersionsFor(null)}>
                 关闭
               </button>
             </div>
@@ -1935,8 +1994,7 @@ function ResourcesPage(): JSX.Element {
                 ))}
               </ul>
             </div>
-          </div>
-        </div>
+        </AccessibleDialog>
       )}
     </div>
   );
@@ -1989,8 +2047,9 @@ function ModelPanel(): JSX.Element {
       <div className="card-title">AI 连接（可配置服务商）</div>
       <p className="muted small">产品运行模型可配置，不绑定单一厂商。默认使用本机“测试替身”打通本地链路；真实云模型需授权账户与联网，未授权保持 BLOCKED。</p>
       <div className="row">
-        <label className="muted small">服务商</label>
+        <label className="muted small" htmlFor="model-provider">服务商</label>
         <select
+          id="model-provider"
           className="search-input"
           value={provider}
           onChange={(e) => {
@@ -2007,18 +2066,18 @@ function ModelPanel(): JSX.Element {
         </select>
       </div>
       <div className="row">
-        <label className="muted small">模型 ID</label>
-        <input className="search-input" value={model} placeholder={current?.defaultModel} onChange={(e) => setModel(e.target.value)} />
+        <label className="muted small" htmlFor="model-id">模型 ID</label>
+        <input id="model-id" className="search-input" value={model} placeholder={current?.defaultModel} onChange={(e) => setModel(e.target.value)} />
       </div>
       <div className="row">
-        <label className="muted small">预算上限(分)</label>
-        <input className="search-input" value={budget} onChange={(e) => setBudget(e.target.value)} />
+        <label className="muted small" htmlFor="model-budget">预算上限(分)</label>
+        <input id="model-budget" className="search-input" inputMode="numeric" value={budget} onChange={(e) => setBudget(e.target.value)} />
       </div>
       {current?.requiresKey && (
         <>
           <div className="row">
-            <label className="muted small">API 密钥</label>
-            <input className="search-input" type="password" value={apiKey} placeholder="仅经系统加密保存，无安全后端将拒绝" onChange={(e) => setApiKey(e.target.value)} />
+            <label className="muted small" htmlFor="model-api-key">API 密钥</label>
+            <input id="model-api-key" className="search-input" type="password" value={apiKey} placeholder="仅经系统加密保存，无安全后端将拒绝" onChange={(e) => setApiKey(e.target.value)} />
           </div>
           <div className="row">
             <label className="muted small">
@@ -2035,8 +2094,8 @@ function ModelPanel(): JSX.Element {
           探测
         </button>
       </div>
-      {msg && <p className="notice small">{msg}</p>}
-      {probeNote && <p className="notice small">{probeNote}</p>}
+      {msg && <LiveMessage urgent={messageNeedsAlert(msg)} warning={messageNeedsAlert(msg)}>{msg}</LiveMessage>}
+      {probeNote && <LiveMessage urgent={messageNeedsAlert(probeNote)} warning={messageNeedsAlert(probeNote)}>{probeNote}</LiveMessage>}
     </div>
   );
 }
@@ -2112,14 +2171,14 @@ function ProtectionPanel(): JSX.Element {
         <button className="btn small" disabled={busy} onClick={() => void createLocal()}>立即创建本机备份</button>
       </div>
       <div className="row">
-        <label className="muted small">跨机备份口令</label>
-        <input className="search-input" type="password" value={passphrase} minLength={14} autoComplete="new-password" onChange={(event) => setPassphrase(event.target.value)} />
+        <label className="muted small" htmlFor="backup-passphrase">跨机备份口令</label>
+        <input id="backup-passphrase" className="search-input" type="password" value={passphrase} minLength={14} autoComplete="new-password" onChange={(event) => setPassphrase(event.target.value)} />
       </div>
       <div className="confirm-actions">
         <button className="btn small" disabled={busy || [...passphrase].length < 14} onClick={() => void exportPortable()}>导出跨机加密备份</button>
         <button className="btn small" disabled={busy || [...passphrase].length < 14} onClick={() => void restorePortable()}>从加密备份恢复</button>
       </div>
-      {message && <p className="notice small">{message}</p>}
+      {message && <LiveMessage urgent={messageNeedsAlert(message)} warning={messageNeedsAlert(message)}>{message}</LiveMessage>}
       {buildBackupRows(backups).length === 0 ? <p className="muted small">尚无已验证本机备份。</p> : (
         <ul className="kv">
           {buildBackupRows(backups).map((backup) => (
@@ -2131,6 +2190,27 @@ function ProtectionPanel(): JSX.Element {
         </ul>
       )}
     </div>
+  );
+}
+
+function messageNeedsAlert(message: string): boolean {
+  return /(失败|未完成|未通过|未写入|阻断|不足|不确定|错误|拒绝|冲突)/u.test(message);
+}
+
+function LiveMessage({ children, urgent = false, warning = false }: {
+  children: React.ReactNode;
+  urgent?: boolean;
+  warning?: boolean;
+}): JSX.Element {
+  return (
+    <p
+      className={`notice ${warning ? 'warn ' : ''}small`}
+      role={urgent ? 'alert' : 'status'}
+      aria-live={urgent ? 'assertive' : 'polite'}
+      aria-atomic="true"
+    >
+      {children}
+    </p>
   );
 }
 
@@ -2183,7 +2263,7 @@ function DiagnosticsPanel(): JSX.Element {
           onClick={() => void save()}
         >保存当前预览</button>
       </div>
-      {message && <p className="notice small">{message}</p>}
+      {message && <LiveMessage urgent={messageNeedsAlert(message)} warning={messageNeedsAlert(message)}>{message}</LiveMessage>}
       {preview && <pre className="diagnostics-preview">{diagnosticsPreviewText(preview)}</pre>}
     </div>
   );
@@ -2257,7 +2337,7 @@ function UpdatePanel({ protectionKind }: { protectionKind: HealthData['storage_p
           onClick={() => void stage()}
         >仅暂存已验证更新</button>
       </div>
-      {message && <p className="notice small" role="status" aria-live="polite">{message}</p>}
+      {message && <LiveMessage urgent={messageNeedsAlert(message)} warning={messageNeedsAlert(message)}>{message}</LiveMessage>}
       {summary && (
         <ul className="kv update-summary">
           {buildUpdateSummaryRows(summary).map((row) => <li key={row.label}><span>{row.label}</span><b>{row.value}</b></li>)}
@@ -2296,7 +2376,20 @@ function SettingsPage({ boot, health }: { boot: BootstrapData | null; health: He
 
 export function App(): JSX.Element {
   const [nav, setNav] = useState<NavKey>('prepare');
+  const [largeText, setLargeText] = useState(false);
   const { boot, health } = useBootstrap();
+
+  useEffect(() => {
+    setLargeText(window.localStorage.getItem('yuwendesk.largeText') === 'true');
+  }, []);
+
+  const toggleLargeText = (): void => {
+    setLargeText((current) => {
+      const next = !current;
+      window.localStorage.setItem('yuwendesk.largeText', String(next));
+      return next;
+    });
+  };
 
   // 关闭前刷新握手在 App 级注册（跨页面生存），卸载时释放订阅（F01）。
   // 控制器为模块单例，页面切换不会丢失在途保存或 dirty 状态。
@@ -2320,8 +2413,9 @@ export function App(): JSX.Element {
   }, []);
 
   return (
-    <div className="app">
-      <aside className="sidebar">
+    <div className={`app ${largeText ? 'large-text' : ''}`}>
+      <a className="skip-link" href={`#${MAIN_CONTENT_ID}`}>跳到主要内容</a>
+      <aside className="sidebar" aria-label="应用侧栏">
         <div className="brand">
           <div className="brand-mark">语</div>
           <div>
@@ -2329,11 +2423,13 @@ export function App(): JSX.Element {
             <div className="brand-sub">YuwenDesk</div>
           </div>
         </div>
-        <nav>
+        <nav aria-label="主导航">
           {NAV.map((n) => (
             <button
               key={n.key}
+              type="button"
               className={`nav-item ${nav === n.key ? 'active' : ''}`}
+              aria-current={nav === n.key ? 'page' : undefined}
               onClick={() => setNav(n.key)}
             >
               <span className="nav-label">{n.label}</span>
@@ -2345,10 +2441,15 @@ export function App(): JSX.Element {
           面向初中语文教师 · 数据留在本机
         </div>
       </aside>
-      <main className="content">
+      <main id={MAIN_CONTENT_ID} className="content" tabIndex={-1} aria-label={`主要内容：${NAV.find((n) => n.key === nav)?.label ?? ''}`}>
         <header className="topbar">
           <div className="crumb">{NAV.find((n) => n.key === nav)?.label}</div>
-          <StatusPill online={boot?.connection === 'connected'} />
+          <div className="topbar-actions">
+            <button className="btn text-size-toggle" type="button" aria-pressed={largeText} onClick={toggleLargeText}>
+              大字模式：{largeText ? '开' : '关'}
+            </button>
+            <StatusPill online={boot?.connection === 'connected'} />
+          </div>
         </header>
         <div className="scroll">
           {nav === 'prepare' && <PreparePage boot={boot} health={health} />}
