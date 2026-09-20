@@ -164,10 +164,16 @@
 - **本包实测（Windows 11 开发主机，Node 24.15.0）**：`g07-bundle-failure.test.ts` 20、`materials.test.ts` 16、`g07-change-sqlite.test.ts` 5 均通过；全量 Vitest **279 passed / 1 skipped（280 total，29 files）**；主/渲染 typecheck、ESLint、合同校验、renderer/main build、`git diff --check` 均退出 0。一次实际自拟材料包的五个 SHA-256 与命令记录见 `reports/G07_EVIDENCE.md`。pdfjs 仍输出可选 canvas/standardFontDataUrl 警告，但相应文字抽取断言通过；不把它当 Office/WPS 保真证据。
 - **外部门保持分离**：开发态 Electron UI（锁定包缺二进制）、干净 Win11 标准账户安装、真实 API 语义审查、PowerPoint/WPS/Word 视觉保真、正式签名均为 `BLOCKED_EXTERNAL`。冻结验收定义与 NOT_RUN 状态未删除、未伪改为 PASS。
 
-## G08–G11 — NOT_STARTED
+## G08 反馈与教学纠正 — NOT_STARTED（设计已确认）
 
-反馈与教学纠正（G08）、保护与恢复（G09）、升级与性能（G10）、完整发行验收（G11）尚未开始。界面相应后续能力仍标注“后续版本开放”。
+- 已确认四包设计：采用与实际授课分离、可选结构化 Observation、确定性测量门后模型辅助归因、最小纠正与偏好/效果双轨撤回。
+- 首版不保存学生原始作业正文；Observation 保持 `cloud_allowed=false`。真实模型只接收独立构造的去身份化白名单上下文，并要求受保护密钥、联网授权、预算和逐次派发许可。
+- 设计规格：`docs/superpowers/specs/2026-09-20-g08-feedback-attribution-design.md`。G08-T01–T04 尚未实现或验收，冻结用例仍为 NOT_RUN；真实 API 与教学专业复核保持 BLOCKED_EXTERNAL。
+
+## G09–G11 — NOT_STARTED
+
+保护与恢复（G09）、升级与性能（G10）、完整发行验收（G11）尚未开始。界面相应后续能力仍标注“后续版本开放”。
 
 ## 下一步
 
-见 `HANDOFF.md`。四包 G07 本地工程范围已完成；下一独立阶段可进入 G08 反馈与教学纠正。扫描件 OCR 未接入则继续阻塞。外部门保留：开发态 Electron 二进制下载/真实窗口走查、G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课质量、Office/WPS 保真与公开上传授权。
+见 `HANDOFF.md`。G08 设计已确认，下一步为写实施计划并按 G08-T01–T04 内联执行。扫描件 OCR 未接入则继续阻塞。外部门保留：开发态 Electron 二进制下载/真实窗口走查、G01 目标环境安装验收、Windows 加密、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。

@@ -18,6 +18,7 @@
 - **G05 完整 LessonPlan 已交付**：按 `contracts/LessonPlan.schema.json` 组建并校验；`lesson_outline` 仅为中间产物。
 - **G06 三类五文件已交付**：课堂 PPTX + 学生 DOCX/PDF + 教师 DOCX/PDF；角色隔离、版本水印、内容来源身份。真实 Office/LibreOffice 保真未验证。
 - **G07 四包本地工程范围已完成**：T01 确定性审查/严格 `ReviewReport`/持久化；T02 受控变更/依赖失效/严格 `ChangeProposal`/五文件暂存哈希复核/SQLite 原子接纳/持久幂等；T03 单方案最少选择 UI/差异/历史/纸本提醒；T04 整包内容审查、17 个文件系统/SQLite 故障边界、三次持久失败截止，以及旧 `materials.generate` fail-closed 替换均已落地。旧修订与旧包保留，纯呈现变化不创建语义修订。证据见 `reports/G07_EVIDENCE.md`。
+- **G08 设计已确认，实施未开始**：四包边界为授课事件、可选结构化 Observation、确定性测量门后的模型辅助归因、最小纠正与偏好/效果双轨撤回。首版不保存学生原始作业正文；Observation 不上云，真实模型只允许接收单独构造的去身份化白名单上下文并要求逐次派发许可。规格见 `docs/superpowers/specs/2026-09-20-g08-feedback-attribution-design.md`；G08 冻结验收仍为 NOT_RUN，真实 API 与教学专业复核为 BLOCKED_EXTERNAL。
 - 仓库单测 **279 passed / 1 skipped（280 total，29 files）**（以 `PROGRESS.md` 最近实测为准）；主/渲染 typecheck、lint、`verify:contracts`、renderer/main build、`git diff --check` 通过。既有跳过项未改为通过。pdfjs 的可选 canvas/standardFontDataUrl 警告有如实记录，不等同于 Office/WPS 保真失败或通过。未签名 Windows EXE 见 `reports/WINDOWS_BUILD.md`。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
@@ -62,7 +63,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 
 ## 下一个有界工作包建议
 
-1. **G08 反馈与教学纠正**：从既有计划/修订/审查/修改历史继续，不重做 G00–G07；先按工作计划划定一个有界包并保持“软件审查不等于教学有效”。
+1. **G08 反馈与教学纠正**：先依据已确认规格写实施计划，再按 G08-T01–T04 内联执行；不重做 G00–G07，保持“模型辅助归因不等于教学有效”。
 2. 获得授权云 API 后关闭 G04/G07 真实语义复核门（当前仅测试替身 + 离线协议；不伪造实网成功）。
 3. 补齐锁定 Electron 二进制后执行开发态窗口走查；获得干净 Windows VM 后再关闭 G01-T04 与目标安装验收（安装→启动→保存→重启→保留数据 + SQLite/凭据/导出），两者不互相替代。
 
