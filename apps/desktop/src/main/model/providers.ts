@@ -170,8 +170,16 @@ export interface DeepseekOpts {
 
 export function createDeepseekProvider(transport: HttpTransport = realFetchTransport, opts: DeepseekOpts = {}): ModelProvider {
   const contentOrigin: ContentOrigin = opts.contentOrigin ?? 'real';
-  // 真实价格：核实前为估算（isEstimate=true），保留币种/来源/生效时间。
-  const pricing: PricingConfig = opts.pricing ?? { currency: 'CNY', per1kInputCents: 1, per1kOutputCents: 2, source: 'config-estimate', effectiveDate: 'N/A', isEstimate: true };
+  // DeepSeek-V4.1-Flash 官方峰值费率（缓存未命中输入 ¥2/百万、输出 ¥8/百万）。
+  // 预算门始终按较高峰值计价；实际夜间扣费可能更低，但不得用低价放宽硬上限。
+  const pricing: PricingConfig = opts.pricing ?? {
+    currency: 'CNY',
+    per1kInputCents: 0.2,
+    per1kOutputCents: 0.8,
+    source: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/',
+    effectiveDate: '2026-09-10',
+    isEstimate: false
+  };
   const baseUrl = opts.baseUrl ?? 'https://api.deepseek.com';
 
   async function call(

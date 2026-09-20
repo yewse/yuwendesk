@@ -59,6 +59,30 @@ function streamTransport(chunks: string[], finish = 'stop', done = true): HttpTr
 }
 
 describe('DeepSeek 真实协议（离线注入传输，禁止实网）', () => {
+  it('按官方 2026-09-10 峰值费率保守结算，10 元上限可覆盖一百万输入加一百万输出 token', async () => {
+    const transport: HttpTransport = async () => ({
+      status: 200,
+      text: JSON.stringify({
+        choices: [{ message: { content: okBody }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 }
+      })
+    });
+    const ds = createDeepseekProvider(transport);
+    const result = await ds.complete(
+      { system: 's', user: 'u', params: { temperature: 0, maxTokens: 1 }, outputContract: 'analyze_text.v1' },
+      { model: 'deepseek-flash', apiKey: 'test-key', timeoutMs: 1000 }
+    );
+    expect(result.costCents).toBe(1000);
+    expect(result.pricing).toEqual({
+      currency: 'CNY',
+      per1kInputCents: 0.2,
+      per1kOutputCents: 0.8,
+      source: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/',
+      effectiveDate: '2026-09-10',
+      isEstimate: false
+    });
+  });
+
   it('成功：构造请求并解析响应内容与用量', async () => {
     const seen: { url: string; auth: string; body: unknown } = { url: '', auth: '', body: null };
     const transport: HttpTransport = async (req) => {

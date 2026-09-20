@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { arch, platform, release } from 'node:os';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,7 @@ import {
   validateCandidateArtifact,
   validateAcceptanceMap,
   validateAcceptanceRun,
+  validateExternalEvidenceInput,
   writeJsonAtomic,
   writeJsonSetAtomic
 } from './lib/g11-acceptance.mjs';
@@ -70,6 +71,23 @@ function nextRunId(date, sourceCommit) {
 
 function normalizeTestFile(absoluteName) {
   return relative(desktopRoot, absoluteName).replaceAll('\\', '/');
+}
+
+function externalEvidenceArgument(argv) {
+  if (argv.length === 0) return null;
+  if (argv.length !== 2 || argv[0] !== '--external-evidence' || argv[1].length === 0) {
+    throw new Error('USAGE: npm run acceptance:run -- --external-evidence apps/desktop/release/acceptance/external-input.json');
+  }
+  const allowedRoot = resolve(root, 'apps', 'desktop', 'release', 'acceptance');
+  const requested = resolve(root, argv[1]);
+  if (!existsSync(requested)) throw new Error('EXTERNAL_EVIDENCE_FILE_MISSING');
+  const allowedReal = realpathSync(allowedRoot);
+  const requestedReal = realpathSync(requested);
+  const rel = relative(allowedReal, requestedReal);
+  if (rel === '..' || rel.startsWith('../') || rel.startsWith('..\\')) {
+    throw new Error('EXTERNAL_EVIDENCE_PATH_REJECTED');
+  }
+  return requestedReal;
 }
 
 function normalizeVitestReport(
@@ -131,13 +149,21 @@ function validateNormalizedVitest(value) {
 }
 
 const started = new Date();
-const startedAt = started.toISOString();
 const sourceCommit = git('rev-parse', 'HEAD');
 const repositoryDirty = git('status', '--porcelain').length > 0;
 const runId = nextRunId(started, sourceCommit);
+const externalEvidenceInputPath = externalEvidenceArgument(process.argv.slice(2));
+const externalReport = externalEvidenceInputPath === null
+  ? null
+  : JSON.parse(readFileSync(externalEvidenceInputPath, 'utf8'));
+const startedAt = externalReport && Date.parse(externalReport.startedAt) < started.getTime()
+  ? externalReport.startedAt
+  : started.toISOString();
 const rawPath = resolve(reportsRoot, `.${runId}.${process.pid}-${randomUUID()}.vitest.raw.partial`);
 const normalizedPath = resolve(reportsRoot, `vitest-${runId}.json`);
 const normalizedRelativePath = relative(root, normalizedPath).replaceAll('\\', '/');
+const externalPath = resolve(reportsRoot, `external-${runId}.json`);
+const externalRelativePath = relative(root, externalPath).replaceAll('\\', '/');
 const runPath = resolve(reportsRoot, `${runId}.json`);
 const runRelativePath = relative(root, runPath).replaceAll('\\', '/');
 
@@ -155,6 +181,14 @@ const mapValidation = validateAcceptanceMap({
   knownExternalInputIds: externalInputIds
 });
 if (!mapValidation.ok) throw new Error(`ACCEPTANCE_MAP_INVALID:${JSON.stringify(mapValidation.errors)}`);
+if (externalReport !== null) {
+  const externalValidation = validateExternalEvidenceInput({
+    root, map: acceptanceMap, externalInputs, sourceCommit, report: externalReport
+  });
+  if (!externalValidation.ok) {
+    throw new Error(`EXTERNAL_EVIDENCE_INVALID:${JSON.stringify(externalValidation.errors)}`);
+  }
+}
 
 const vitestPath = resolve(root, 'node_modules', 'vitest', 'vitest.mjs');
 const vitestRelative = relative(desktopRoot, vitestPath).replaceAll('\\', '/');
@@ -167,6 +201,7 @@ const selectedAssertionKeys = new Set(acceptanceMap.cases
 const vitestStartedAt = new Date().toISOString();
 let vitestOutcome;
 let normalizedPublished = false;
+let externalPublished = false;
 let runPublished = false;
 try {
   vitestOutcome = run(process.execPath, vitestArgs, {
@@ -184,6 +219,17 @@ try {
     targetPath: normalizedPath, value: normalizedReport, validate: validateNormalizedVitest, noClobber: true
   });
   normalizedPublished = true;
+  if (externalReport !== null) {
+    writeJsonAtomic({
+      targetPath: externalPath,
+      value: externalReport,
+      validate: (value) => validateExternalEvidenceInput({
+        root, map: acceptanceMap, externalInputs, sourceCommit, report: value
+      }),
+      noClobber: true
+    });
+    externalPublished = true;
+  }
 
   const acceptanceRun = buildAcceptanceRun({
     root,
@@ -203,7 +249,10 @@ try {
       node: process.version,
       npm: npmVersion()
     },
-    evidencePath: normalizedRelativePath
+    evidencePath: normalizedRelativePath,
+    externalReport,
+    externalEvidencePath: externalReport === null ? null : externalRelativePath,
+    externalInputs
   });
   const validateRun = (value) => validateAcceptanceRun({
     root,
@@ -251,6 +300,7 @@ try {
   }, null, 2));
 } catch (cause) {
   if (normalizedPublished) rmSync(normalizedPath, { force: true });
+  if (externalPublished) rmSync(externalPath, { force: true });
   if (runPublished) rmSync(runPath, { force: true });
   throw cause;
 } finally {

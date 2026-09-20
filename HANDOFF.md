@@ -34,6 +34,8 @@
 - **T03 真实边界与门禁**：本机 Node **24.15.0** / npm **11.12.1** 不等于 ENV_LOCK 的 Node **22.14.0** / npm **10.9.7**，因此 `formalEnvironmentMatch=false`；工程 SBOM 不冒充锁定环境证据。生成器和聚合器重新核对 live HEAD 与相关工作树，修改签名脚本、lockfile 或其他非生成输入会保持源码门阻断。固定候选安装器仍不存在，未拿历史包或任意 EXE 代替，Authenticode 为 `NOT_RUN / RELEASE_ARTIFACT_MISSING`；Windows 检查仅接受内核锚定 `GLOBALROOT\\SystemRoot` 的系统 PowerShell，不信任 `SystemRoot` 环境变量或 PATH，并从 `$PSHOME` 显式加载/限定签名与哈希 cmdlet；EXT07 签名身份仍未提供。T03 定向 **17/17**，T02+T03 **39/39**，T01–T03 **63/63**；全量 **613 passed / 1 skipped（614 total，66 files）**；typecheck、lint、合同、desktop build、`git diff --check` 均退出 0。独立最终复核 Critical 0 / Important 0、Ready。下一包必须先保持这些阻断，再生成最终状态。
 - **G11-T04 本地工程范围已完成，正式发行仍阻断**：中文教师指南已按真实 renderer 更正，明确备课启动按钮禁用、课堂展示入口和班级/教材/课时设置尚不存在；模型辅助归因仍受五项测量门、真实 API/预算、逐次隐私许可和教师专业复核约束。`release:verify` 固定回读并复算聚合、12 项清单、SBOM/环境/签名与三份公开文档；篡改退出 1，当前真实非就绪状态退出 2，只有 `RELEASE_READY` 可退出 0。SBOM/环境/签名/聚合/状态文档/清单改为八文件原子发布，规定的单轮命令链可收敛。当前仍是 `BLOCKED / RELEASE_ARTIFACT_MISSING`，15 个缺口，Node/npm 与 ENV_LOCK 不一致、签名 `NOT_RUN`。
 - **T04 验证**：G11 定向 **71/71**；全量 **621 passed / 1 skipped（622 total，67 files）**；typecheck、lint、合同、desktop build、diff 全部退出 0。冻结哈希未变，发行目录隐私扫描无命中；篡改/恢复演练为 1→2。完整证据见 `reports/G11_EVIDENCE.md`。G11 四个本地工程包已完成，但不可称为正式 G11 DONE 或可分发。
+- **G11-E01 追加验收入口已实现，实际运行待候选**：runner 可从被忽略的 `apps/desktop/release/acceptance/` 接收外部执行输入，只把绑定当前 commit、固定候选字节、有效执行时窗及已 `PROVIDED` 外部条件的映射案例提升为 `PASS/FAIL`；其余保持 `BLOCKED/NOT_RUN`。来源/候选漂移、机器绝对路径、路径逃逸、重复案例、未提供条件和 API key/Bearer 内容会整轮拒绝。DeepSeek 默认预算费率已改为官方 2026-09-10 峰值（输入 ¥2/百万、输出 ¥8/百万），用户硬上限 10 元。新增 4 项回归；全量 **625 passed / 1 skipped（626 total，67 files）**，typecheck/lint/contracts/build/diff 均通过。
+- **E01 证据边界**：冻结 `AI-001` 仍写 Grok，当前实现/授权是 DeepSeek，故 DeepSeek 实网结果只作真实工程证据，不能冒充该旧案例 PASS。GPT 合成材料/模型自审不能替代合法现用教材或真人教师专业复核；当前 Windows 11 主机也未证明为干净标准用户 VM。EXT07/EXT08 仍未提供。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -79,9 +81,9 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 
 ## 下一个有界工作包建议
 
-1. 在 `ENV_LOCK.json` 锁定的 Node/npm 与 Electron 环境从当前源码生成新候选；不得复用历史 EXE、哈希或本次 dirty 验收运行。
-2. 对同一固定候选补齐干净 Win11、Office/WPS、签名与可信时间戳、授权分发位置、真实 API/预算、学生资料处理与逐次外发许可、教师专业复核和 P0/P1 缺陷审计。
-3. 外部输入齐备后创建新的追加验收运行，再依次运行 `release:evidence`、`release:sbom` 和 `release:verify`；保留本次 6 PASS / 38 BLOCKED / 126 NOT_RUN 历史记录，不覆盖或删除。
+1. 提交 G11-E01 后从该干净 commit 构建固定的未签名工程候选；不得复用历史 EXE 或哈希。
+2. 对同一候选执行 DeepSeek 最小真实调用和 WPS 商业版打开/编辑/保存/分页/放映；密钥只进受保护应用输入，证据不得含密钥。
+3. 生成新的追加验收运行；只提升实际满足原定义的案例。干净标准用户 VM、Grok 旧定义、合法现用教材、真人教师复核、签名与分发继续保持阻断，随后重新运行发行证据链。
 
 ## 重要纪律
 

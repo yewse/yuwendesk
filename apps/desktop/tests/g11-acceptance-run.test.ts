@@ -15,6 +15,7 @@ import {
   recoverJsonSetAtomic,
   validateAcceptanceMap,
   validateAcceptanceRun,
+  validateExternalEvidenceInput,
   writeJsonAtomic,
   writeJsonSetAtomic
 } from '../../../scripts/lib/g11-acceptance.mjs';
@@ -59,6 +60,18 @@ function result(overrides: Record<string, unknown>) {
     observedResult: 'not run',
     ...overrides
   };
+}
+
+function seedFrozenDefinitions(fixtureRoot: string) {
+  mkdirSync(join(fixtureRoot, 'acceptance', 'addenda'), { recursive: true });
+  writeFileSync(
+    join(fixtureRoot, 'acceptance', 'cases.json'),
+    readFileSync(join(root, 'acceptance', 'cases.json'))
+  );
+  writeFileSync(
+    join(fixtureRoot, 'acceptance', 'addenda', 'classroom-delivery.cases.json'),
+    readFileSync(join(root, 'acceptance', 'addenda', 'classroom-delivery.cases.json'))
+  );
 }
 
 afterEach(() => {
@@ -352,6 +365,143 @@ describe('G11-T01 acceptance run invariants', () => {
     });
     expect(validation.errors.map((error: { code: string }) => error.code))
       .toContain('ACCEPTANCE_AUTOMATION_EVIDENCE_INVALID');
+  });
+
+  it('promotes only external evidence bound to the current source and fixed candidate bytes', () => {
+    const fixtureRoot = makeFixtureRoot();
+    seedFrozenDefinitions(fixtureRoot);
+    mkdirSync(join(fixtureRoot, 'apps', 'desktop', 'release'), { recursive: true });
+    mkdirSync(join(fixtureRoot, 'reports', 'acceptance-runs'), { recursive: true });
+    const candidatePath = join(fixtureRoot, 'apps', 'desktop', 'release', 'YuwenDesk-Setup-0.1.0-x64.exe');
+    writeFileSync(candidatePath, 'candidate-bytes', 'utf8');
+    const candidateBytes = readFileSync(candidatePath);
+    const candidate = {
+      path: 'apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe',
+      sha256: createHash('sha256').update(candidateBytes).digest('hex'),
+      sizeBytes: candidateBytes.byteLength
+    };
+    const externalReport = {
+      schemaVersion: 1,
+      sourceCommit: 'abcdef0123456789',
+      startedAt: '2026-09-20T00:00:05.000Z',
+      completedAt: '2026-09-20T00:00:20.000Z',
+      candidate,
+      externalInputs: [{ id: 'EXT11', status: 'PROVIDED' }],
+      cases: [{
+        caseId: 'CASE-A', status: 'PASS', evidenceLevel: 'office_wps',
+        command: 'WPS Office 12.1.0.28022 UI: open-edit-save', exitCode: 0,
+        executedAt: '2026-09-20T00:00:15.000Z', environment: 'Windows 11 / WPS Office 12.1.0.28022',
+        artifactHashes: [], observedResult: 'Opened, edited, saved, and reopened the generated PPTX.'
+      }]
+    };
+    const runId = 'run-20260920-abcdef0-98';
+    const externalEvidencePath = `reports/acceptance-runs/external-${runId}.json`;
+    writeFileSync(join(fixtureRoot, ...externalEvidencePath.split('/')), `${JSON.stringify(externalReport)}\n`, 'utf8');
+    const automationEvidencePath = 'reports/acceptance-runs/vitest-placeholder.json';
+    writeFileSync(join(fixtureRoot, ...automationEvidencePath.split('/')), '{"success":true}\n', 'utf8');
+    const map = { schemaVersion: 1, cases: [{
+      caseId: 'CASE-A', mode: 'external', requiredEvidenceLevel: 'office_wps',
+      blockerCode: 'BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY', externalInputIds: ['EXT11']
+    }] };
+    const externalInputs = { items: [{ id: 'EXT11', status: 'PROVIDED' }] };
+    const loaded = loadAcceptanceDefinitions(fixtureRoot);
+    const run = buildAcceptanceRun({
+      root: fixtureRoot,
+      definitions: [{ id: 'CASE-A' }],
+      definitionSources: loaded.definitionSources,
+      map,
+      automationReport: { success: true, exitCode: 0, command: 'node vitest run', assertions: [] },
+      sourceCommit: 'abcdef0123456789', repositoryDirty: false, runId,
+      startedAt: '2026-09-20T00:00:00.000Z', completedAt: '2026-09-20T00:01:00.000Z',
+      environment: { os: 'win32', release: 'test', arch: 'x64', node: 'v24.15.0', npm: '11.12.1' },
+      evidencePath: automationEvidencePath,
+      externalReport,
+      externalEvidencePath,
+      externalInputs
+    });
+    expect(run.results[0]).toMatchObject({
+      caseId: 'CASE-A', status: 'PASS', evidenceLevel: 'office_wps',
+      artifactHashes: [candidate], blockerCode: null, externalInputIds: []
+    });
+    expect(validateAcceptanceRun({ root: fixtureRoot, definitionIds: ['CASE-A'], map, run })).toEqual({ ok: true, errors: [] });
+
+    const borrowed = { ...externalReport, sourceCommit: 'deadbeefdeadbeef' };
+    const rejected = validateExternalEvidenceInput({
+      root: fixtureRoot, map, externalInputs, sourceCommit: 'abcdef0123456789', report: borrowed
+    });
+    expect(rejected.errors.map((error: { code: string }) => error.code)).toContain('EXTERNAL_EVIDENCE_SOURCE_MISMATCH');
+  });
+
+  it('rejects external evidence containing an API key instead of publishing it into the ledger', () => {
+    const fixtureRoot = makeFixtureRoot();
+    mkdirSync(join(fixtureRoot, 'apps', 'desktop', 'release'), { recursive: true });
+    const candidatePath = join(fixtureRoot, 'apps', 'desktop', 'release', 'YuwenDesk-Setup-0.1.0-x64.exe');
+    writeFileSync(candidatePath, 'candidate-bytes', 'utf8');
+    const candidateBytes = readFileSync(candidatePath);
+    const report = {
+      schemaVersion: 1,
+      sourceCommit: 'abcdef0123456789',
+      startedAt: '2026-09-20T00:00:05.000Z',
+      completedAt: '2026-09-20T00:00:20.000Z',
+      candidate: {
+        path: 'apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe',
+        sha256: createHash('sha256').update(candidateBytes).digest('hex'),
+        sizeBytes: candidateBytes.byteLength
+      },
+      externalInputs: [{ id: 'EXT03', status: 'PROVIDED' }],
+      cases: [{
+        caseId: 'CASE-A', status: 'PASS', evidenceLevel: 'live_api_authorized', command: 'live probe', exitCode: 0,
+        executedAt: '2026-09-20T00:00:15.000Z', environment: 'Windows 11 / DeepSeek', artifactHashes: [],
+        observedResult: 'Authorization: Bearer sk-this-must-never-be-published'
+      }]
+    };
+    const validation = validateExternalEvidenceInput({
+      root: fixtureRoot,
+      sourceCommit: 'abcdef0123456789',
+      report,
+      externalInputs: { items: [{ id: 'EXT03', status: 'PROVIDED' }] },
+      map: { schemaVersion: 1, cases: [{
+        caseId: 'CASE-A', mode: 'external', requiredEvidenceLevel: 'live_api_authorized',
+        blockerCode: 'BLOCKED_EXTERNAL_LIVE_API_AND_BUDGET', externalInputIds: ['EXT03']
+      }] }
+    });
+    expect(validation.errors.map((error: { code: string }) => error.code)).toContain('EXTERNAL_EVIDENCE_SECRET_REJECTED');
+  });
+
+  it('rejects a machine-local absolute path embedded in external observations', () => {
+    const fixtureRoot = makeFixtureRoot();
+    mkdirSync(join(fixtureRoot, 'apps', 'desktop', 'release'), { recursive: true });
+    const candidatePath = join(fixtureRoot, 'apps', 'desktop', 'release', 'YuwenDesk-Setup-0.1.0-x64.exe');
+    writeFileSync(candidatePath, 'candidate-bytes', 'utf8');
+    const candidateBytes = readFileSync(candidatePath);
+    const report = {
+      schemaVersion: 1,
+      sourceCommit: 'abcdef0123456789',
+      startedAt: '2026-09-20T00:00:05.000Z',
+      completedAt: '2026-09-20T00:00:20.000Z',
+      candidate: {
+        path: 'apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe',
+        sha256: createHash('sha256').update(candidateBytes).digest('hex'),
+        sizeBytes: candidateBytes.byteLength
+      },
+      externalInputs: [{ id: 'EXT11', status: 'PROVIDED' }],
+      cases: [{
+        caseId: 'CASE-A', status: 'PASS', evidenceLevel: 'office_wps', command: 'WPS UI', exitCode: 0,
+        executedAt: '2026-09-20T00:00:15.000Z', environment: 'Windows 11 / WPS', artifactHashes: [],
+        observedResult: 'Opened C:\\Users\\teacher\\private\\lesson.pptx successfully.'
+      }]
+    };
+    const validation = validateExternalEvidenceInput({
+      root: fixtureRoot,
+      sourceCommit: 'abcdef0123456789',
+      report,
+      externalInputs: { items: [{ id: 'EXT11', status: 'PROVIDED' }] },
+      map: { schemaVersion: 1, cases: [{
+        caseId: 'CASE-A', mode: 'external', requiredEvidenceLevel: 'office_wps',
+        blockerCode: 'BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY', externalInputIds: ['EXT11']
+      }] }
+    });
+    expect(validation.errors.map((error: { code: string }) => error.code)).toContain('EXTERNAL_EVIDENCE_LOCAL_PATH_REJECTED');
   });
 
   it('rejects PASS without zero exit and evidence, BLOCKED without external IDs, and NOT_RUN with a command', () => {

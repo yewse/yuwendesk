@@ -28,6 +28,22 @@
 
 这份全量账本只证明记录结构完整和已列工程案例的实际自动化结果，**不表示 170 项全部通过，也不表示 G11 正式发行通过**。后续运行继续使用新序号追加，不覆盖本次记录。
 
+## 追加外部证据
+
+外部环境实际执行后，可把临时输入放在被 Git 忽略的固定目录
+`apps/desktop/release/acceptance/`，再运行：
+
+```powershell
+npm run acceptance:run -- --external-evidence apps/desktop/release/acceptance/external-input.json
+```
+
+输入必须绑定当前 `sourceCommit` 和固定候选
+`apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe` 的实际 SHA-256/字节数，并逐案例记录
+`PASS/FAIL`、证据层级、执行时间、环境、操作和观察结果。只有映射为 `external`、所需
+`EXTxx` 在 `planning/EXTERNAL_INPUTS.json` 中全部为 `PROVIDED`、证据时间有效且候选字节回读一致的案例才会执行态提升；其余继续保持 `BLOCKED`。正式未执行案例继续为 `NOT_RUN`。
+
+runner 会把已校验输入规范发布为本轮 `external-run-*.json`，每个外部结果回指该文件并附候选哈希；源码不匹配、候选漂移、路径逃逸、证据借用、重复案例、未提供条件或疑似 API 密钥/Authorization 内容都会拒绝整轮发布。API 密钥只进入应用的受保护凭据入口，不得写入外部证据 JSON。
+
 ## 记录格式
 
 闭集合同见 `contracts/AcceptanceRun.schema.json`，显式映射见 `planning/g11-acceptance-map.json`，模板 `run-template.json` 仍仅作历史说明。软件、资源覆盖和教学效果须分别报告；工程验收通过不代表教学有效。

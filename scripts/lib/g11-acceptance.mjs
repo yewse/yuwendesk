@@ -60,6 +60,12 @@ const CASE_STATUS_SET = new Set(CASE_STATUSES);
 const BLOCKER_CODE_SET = new Set(BLOCKER_CODES);
 const ALLOWED_PREFIXES = ['reports/', 'docs/', 'acceptance/', 'planning/', 'apps/desktop/release/'];
 const ALLOWED_FILES = new Set(['ENV_LOCK.json', 'package-lock.json']);
+const FIXED_CANDIDATE_PATH = 'apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe';
+const SECRET_PATTERNS = [
+  /\bsk-[A-Za-z0-9_-]{12,}\b/i,
+  /authorization\s*:\s*bearer/i,
+  /\b(api[_ -]?key|secret[_ -]?key)\s*[:=]\s*[^,}\s]+/i
+];
 
 function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
@@ -130,6 +136,109 @@ function validateEvidenceFile(root, entry, label) {
   if (data.byteLength !== entry.sizeBytes) errors.push(error('EVIDENCE_SIZE_MISMATCH', `${label}:${entry.path}`));
   if (sha256(data) !== entry.sha256.toLowerCase()) errors.push(error('EVIDENCE_HASH_MISMATCH', `${label}:${entry.path}`));
   return errors;
+}
+
+function reportContainsSecret(value) {
+  const serialized = JSON.stringify(value);
+  return SECRET_PATTERNS.some((pattern) => pattern.test(serialized));
+}
+
+function reportContainsLocalPath(value) {
+  const pending = [value];
+  const localPath = /(?:^|[\s"'(])(?:[A-Za-z]:[\\/]|\\\\[^\\/\s]+[\\/]|\/(?:home|Users|opt|var|tmp)\/)/;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (typeof current === 'string' && localPath.test(current)) return true;
+    if (Array.isArray(current)) pending.push(...current);
+    else if (isPlainObject(current)) pending.push(...Object.values(current));
+  }
+  return false;
+}
+
+export function validateExternalEvidenceInput({ root, map, externalInputs, sourceCommit, report }) {
+  const errors = [];
+  const reportKeys = new Set([
+    'schemaVersion', 'sourceCommit', 'startedAt', 'completedAt', 'candidate', 'externalInputs', 'cases'
+  ]);
+  const inputKeys = new Set(['id', 'status']);
+  const caseKeys = new Set([
+    'caseId', 'status', 'evidenceLevel', 'command', 'exitCode', 'executedAt', 'environment',
+    'artifactHashes', 'observedResult'
+  ]);
+  if (!hasOnlyKeys(report, reportKeys) || report?.schemaVersion !== 1 || report?.sourceCommit !== sourceCommit ||
+      !isIsoDate(report?.startedAt) || !isIsoDate(report?.completedAt) ||
+      !Array.isArray(report?.externalInputs) || !Array.isArray(report?.cases)) {
+    errors.push(error(report?.sourceCommit !== sourceCommit
+      ? 'EXTERNAL_EVIDENCE_SOURCE_MISMATCH' : 'EXTERNAL_EVIDENCE_INVALID'));
+    return { ok: false, errors };
+  }
+  if (Date.parse(report.startedAt) > Date.parse(report.completedAt)) {
+    errors.push(error('EXTERNAL_EVIDENCE_TIME_INVALID'));
+  }
+  if (reportContainsSecret(report)) errors.push(error('EXTERNAL_EVIDENCE_SECRET_REJECTED'));
+  if (reportContainsLocalPath(report)) errors.push(error('EXTERNAL_EVIDENCE_LOCAL_PATH_REJECTED'));
+
+  if (report.candidate?.path !== FIXED_CANDIDATE_PATH) {
+    errors.push(error('EXTERNAL_EVIDENCE_CANDIDATE_INVALID'));
+  } else {
+    errors.push(...validateEvidenceFile(root, report.candidate, 'external:candidate'));
+  }
+
+  const catalogById = new Map((externalInputs?.items ?? []).map((item) => [item.id, item]));
+  const snapshotIds = new Set();
+  for (const item of report.externalInputs) {
+    if (!hasOnlyKeys(item, inputKeys) || !/^EXT\d{2}$/.test(item?.id ?? '') || item?.status !== 'PROVIDED') {
+      errors.push(error('EXTERNAL_EVIDENCE_INPUT_INVALID', item?.id ?? ''));
+      continue;
+    }
+    if (snapshotIds.has(item.id)) errors.push(error('EXTERNAL_EVIDENCE_INPUT_DUPLICATE', item.id));
+    snapshotIds.add(item.id);
+    if (catalogById.get(item.id)?.status !== 'PROVIDED') {
+      errors.push(error('EXTERNAL_EVIDENCE_INPUT_NOT_PROVIDED', item.id));
+    }
+  }
+
+  const mapById = new Map((map?.cases ?? []).map((entry) => [entry.caseId, entry]));
+  const caseIds = new Set();
+  const requiredInputIds = new Set();
+  if (report.cases.length === 0) errors.push(error('EXTERNAL_EVIDENCE_CASES_EMPTY'));
+  for (const item of report.cases) {
+    if (!hasOnlyKeys(item, caseKeys) || !isNonEmptyString(item?.caseId) || !['PASS', 'FAIL'].includes(item?.status) ||
+        !EVIDENCE_LEVEL_SET.has(item?.evidenceLevel) || !isNonEmptyString(item?.command) ||
+        !Number.isInteger(item?.exitCode) || !isIsoDate(item?.executedAt) || !isNonEmptyString(item?.environment) ||
+        !Array.isArray(item?.artifactHashes) || !isNonEmptyString(item?.observedResult)) {
+      errors.push(error('EXTERNAL_EVIDENCE_CASE_INVALID', item?.caseId ?? ''));
+      continue;
+    }
+    if ((item.status === 'PASS' && item.exitCode !== 0) || (item.status === 'FAIL' && item.exitCode === 0)) {
+      errors.push(error('EXTERNAL_EVIDENCE_CASE_STATUS_INVALID', item.caseId));
+    }
+    if (caseIds.has(item.caseId)) errors.push(error('EXTERNAL_EVIDENCE_CASE_DUPLICATE', item.caseId));
+    caseIds.add(item.caseId);
+    const mapEntry = mapById.get(item.caseId);
+    if (mapEntry?.mode !== 'external' || item.evidenceLevel !== mapEntry.requiredEvidenceLevel) {
+      errors.push(error('EXTERNAL_EVIDENCE_MAP_MISMATCH', item.caseId));
+    } else {
+      for (const id of mapEntry.externalInputIds) requiredInputIds.add(id);
+    }
+    if (Date.parse(item.executedAt) < Date.parse(report.startedAt) ||
+        Date.parse(item.executedAt) > Date.parse(report.completedAt)) {
+      errors.push(error('EXTERNAL_EVIDENCE_CASE_TIME_INVALID', item.caseId));
+    }
+    for (const [index, descriptor] of item.artifactHashes.entries()) {
+      errors.push(...validateEvidenceFile(root, descriptor, `${item.caseId}:external-artifact:${index}`));
+      if (descriptor.path === FIXED_CANDIDATE_PATH) {
+        errors.push(error('EXTERNAL_EVIDENCE_CANDIDATE_DUPLICATE', item.caseId));
+      }
+    }
+  }
+  for (const id of requiredInputIds) {
+    if (!snapshotIds.has(id)) errors.push(error('EXTERNAL_EVIDENCE_INPUT_MISSING', id));
+  }
+  for (const id of snapshotIds) {
+    if (!requiredInputIds.has(id)) errors.push(error('EXTERNAL_EVIDENCE_INPUT_UNUSED', id));
+  }
+  return { ok: errors.length === 0, errors };
 }
 
 export function loadAcceptanceDefinitions(root) {
@@ -269,6 +378,33 @@ function validateAutomationEvidence(root, result, mapEntry, run) {
   }
 }
 
+function validateExternalEvidence(root, result, map, run) {
+  if (result.evidence.length !== 1) return false;
+  try {
+    const expectedPath = `reports/acceptance-runs/external-${run.runId}.json`;
+    if (result.evidence[0].path !== expectedPath) return false;
+    const report = JSON.parse(readFileSync(resolve(root, expectedPath), 'utf8'));
+    const validation = validateExternalEvidenceInput({
+      root,
+      map,
+      externalInputs: { items: report.externalInputs },
+      sourceCommit: run.sourceCommit,
+      report
+    });
+    if (!validation.ok || Date.parse(report.startedAt) < Date.parse(run.startedAt) ||
+        Date.parse(report.completedAt) > Date.parse(run.completedAt)) return false;
+    const matches = report.cases.filter((item) => item.caseId === result.caseId);
+    if (matches.length !== 1) return false;
+    const item = matches[0];
+    return result.status === item.status && result.evidenceLevel === item.evidenceLevel &&
+      result.command === item.command && result.exitCode === item.exitCode && result.executedAt === item.executedAt &&
+      result.environment === item.environment && result.observedResult === item.observedResult &&
+      JSON.stringify(result.artifactHashes) === JSON.stringify([report.candidate, ...item.artifactHashes]);
+  } catch {
+    return false;
+  }
+}
+
 export function validateAcceptanceRun({ root, definitionIds, map, run }) {
   const errors = [];
   const runKeys = new Set([
@@ -313,8 +449,11 @@ export function validateAcceptanceRun({ root, definitionIds, map, run }) {
     const statusMatchesMap = mapEntry && (
       (mapEntry.mode === 'automation' && ['PASS', 'FAIL'].includes(result.status) &&
         result.evidenceLevel === mapEntry.requiredEvidenceLevel && isNonEmptyString(result.command)) ||
-      (mapEntry.mode === 'external' && result.status === 'BLOCKED' && result.blockerCode === mapEntry.blockerCode &&
-        JSON.stringify(result.externalInputIds) === JSON.stringify(mapEntry.externalInputIds)) ||
+      (mapEntry.mode === 'external' && (
+        (result.status === 'BLOCKED' && result.blockerCode === mapEntry.blockerCode &&
+          JSON.stringify(result.externalInputIds) === JSON.stringify(mapEntry.externalInputIds)) ||
+        (['PASS', 'FAIL'].includes(result.status) && result.evidenceLevel === mapEntry.requiredEvidenceLevel &&
+          isNonEmptyString(result.command)))) ||
       (mapEntry.mode === 'not_run' && result.status === 'NOT_RUN')
     );
     if (!statusMatchesMap) errors.push(error('ACCEPTANCE_RESULT_MAP_MISMATCH', result.caseId));
@@ -334,6 +473,10 @@ export function validateAcceptanceRun({ root, definitionIds, map, run }) {
     if (mapEntry?.mode === 'automation' && evidenceFilesValid && !validateAutomationEvidence(root, result, mapEntry, run)) {
       errors.push(error('ACCEPTANCE_AUTOMATION_EVIDENCE_INVALID', result.caseId));
     }
+    if (mapEntry?.mode === 'external' && ['PASS', 'FAIL'].includes(result.status) && evidenceFilesValid &&
+        !validateExternalEvidence(root, result, map, run)) {
+      errors.push(error('ACCEPTANCE_EXTERNAL_EVIDENCE_INVALID', result.caseId));
+    }
   }
   for (const [id, count] of counts) if (count > 1) errors.push(error('ACCEPTANCE_RUN_DUPLICATE', id));
   for (const id of expected) if (!counts.has(id)) errors.push(error('ACCEPTANCE_RUN_MISSING', id));
@@ -347,15 +490,35 @@ function evidenceDescriptor(root, path) {
 
 export function buildAcceptanceRun({
   root, definitions, definitionSources, map, automationReport, sourceCommit, repositoryDirty,
-  runId, startedAt, completedAt, environment, evidencePath
+  runId, startedAt, completedAt, environment, evidencePath,
+  externalReport = null, externalEvidencePath = null, externalInputs = null
 }) {
   const assertions = new Map();
   for (const item of automationReport?.assertions ?? []) assertions.set(`${item.testFile}\0${item.fullName}`, item);
   const evidence = evidenceDescriptor(root, evidencePath);
+  let externalEvidence = null;
+  const externalCases = new Map();
+  if (externalReport !== null) {
+    const validation = validateExternalEvidenceInput({ root, map, externalInputs, sourceCommit, report: externalReport });
+    if (!validation.ok) throw new Error(`EXTERNAL_EVIDENCE_INVALID:${JSON.stringify(validation.errors)}`);
+    if (!isNonEmptyString(externalEvidencePath)) throw new Error('EXTERNAL_EVIDENCE_PATH_REQUIRED');
+    externalEvidence = evidenceDescriptor(root, externalEvidencePath);
+    for (const item of externalReport.cases) externalCases.set(item.caseId, item);
+  }
   const mapById = new Map(map.cases.map((entry) => [entry.caseId, entry]));
   const results = definitions.map((definition) => {
     const entry = mapById.get(definition.id);
     if (entry.mode === 'external') {
+      const executed = externalCases.get(definition.id);
+      if (executed) {
+        return {
+          caseId: definition.id, status: executed.status, evidenceLevel: executed.evidenceLevel,
+          command: executed.command, exitCode: executed.exitCode, executedAt: executed.executedAt,
+          environment: executed.environment, evidence: [externalEvidence],
+          artifactHashes: [externalReport.candidate, ...executed.artifactHashes],
+          blockerCode: null, externalInputIds: [], observedResult: executed.observedResult
+        };
+      }
       return {
         caseId: definition.id, status: 'BLOCKED', evidenceLevel: null, command: null, exitCode: null,
         executedAt: null, environment: entry.requiredEvidenceLevel, evidence: [], artifactHashes: [],
