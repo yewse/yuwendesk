@@ -13,7 +13,13 @@ import { evaluatePlatform } from './platform';
 import { createWorkerParser } from './sources/parseHost';
 import { ModelService } from './model/service';
 import { FeedbackService } from './feedback/service';
-import { attachCsp, isAllowedExternalUrl, isTrustedRendererUrl, lockdownSession } from './security';
+import {
+  attachCsp,
+  isAllowedExternalUrl,
+  isAllowedInWindowNavigation,
+  isTrustedIpcSender,
+  lockdownSession
+} from './security';
 import { SqliteStore, SQLITE_SCHEMA_TARGET } from './db/sqliteStore';
 import { BackupCoordinator, BackupService } from './protection/backup';
 import { ProtectionService } from './protection/service';
@@ -61,13 +67,17 @@ function detectWindowsProductType(): number | undefined {
 }
 
 function isTrustedSender(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
-  if (!mainWindow || event.sender.id !== mainWindow.webContents.id) return false;
-  // 缺少 frame 身份依据时拒绝；仅接受主窗口顶层 frame（拒绝任何子 frame/注入 iframe）。
-  const frame = event.senderFrame;
-  if (!frame || frame !== event.sender.mainFrame) return false;
+  if (!mainWindow) return false;
   const expected = pathToFileURL(rendererIndexPath()).toString();
-  // 以实际发送 frame 的 URL 为准做精确来源校验。
-  return isTrustedRendererUrl(frame.url, expected, DEV_SERVER_URL, isDev);
+  return isTrustedIpcSender({
+    senderId: event.sender.id,
+    mainWindowId: mainWindow.webContents.id,
+    senderFrame: event.senderFrame,
+    mainFrame: event.sender.mainFrame,
+    expectedFileUrl: expected,
+    devServerUrl: DEV_SERVER_URL,
+    allowDev: isDev
+  });
 }
 
 function createWindow(): void {
@@ -102,7 +112,7 @@ function createWindow(): void {
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const current = mainWindow?.webContents.getURL() ?? '';
-    if (url !== current) event.preventDefault();
+    if (!isAllowedInWindowNavigation(url, current)) event.preventDefault();
   });
 
   if (isDev && DEV_SERVER_URL) {

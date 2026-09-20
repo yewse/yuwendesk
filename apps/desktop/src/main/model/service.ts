@@ -18,6 +18,12 @@ const KEY_NAME = 'model_api_key';
 const MAX_RETRIES = 2;
 const TRANSIENT = new Set(['NETWORK_UNAVAILABLE', 'RATE_LIMITED']);
 const MAX_FRAGMENT_CHARS = 4000; // 单片段进入模型上下文的字符上限；超出需缩小/分批授权，不静默截断。
+const MODEL_FAILURE_CODES = new Set(['AUTH_FAILED', 'RATE_LIMITED', 'KEY_UNAVAILABLE', 'NETWORK_UNAVAILABLE', 'MODEL_NOT_AVAILABLE', 'INCOMPLETE']);
+
+function closedModelFailureCode(value: unknown): string {
+  const message = value instanceof Error ? value.message : '';
+  return MODEL_FAILURE_CODES.has(message) ? message : 'MODEL_NOT_AVAILABLE';
+}
 
 export type ConfigureResult =
   | { ok: true; config: ModelConfig; keyStored: boolean }
@@ -110,8 +116,14 @@ export class ModelService {
       if (!auth.ok) return { ok: false, note: auth.note, code: 'MODEL_NOT_AVAILABLE' };
       apiKey = auth.apiKey;
     }
-    const r = await provider.probe({ model: cfg.model, apiKey });
-    return r.ok ? { ok: true, note: r.note, provider: r.provider, model: r.model, isTestDouble: r.isTestDouble } : { ok: false, note: r.note, code: r.code };
+    try {
+      const r = await provider.probe({ model: cfg.model, apiKey });
+      return r.ok
+        ? { ok: true, note: r.isTestDouble ? '测试替身可用（非真实模型）。' : '服务商探测成功。', provider: r.provider, model: r.model, isTestDouble: r.isTestDouble }
+        : { ok: false, note: '服务商探测未成功。', code: r.code };
+    } catch {
+      return { ok: false, note: '服务商探测未成功。', code: 'MODEL_NOT_AVAILABLE' };
+    }
   }
 
   // 上下文边界：仅使用显式获准、非敏感、版本未停用片段；按授权区间“精确读取”（不复用带未授权前后文的预览）；
@@ -261,14 +273,14 @@ export class ModelService {
           if (result.finishReason && result.finishReason !== 'stop') {
             this.store.updateModelJob(jobId, { status: 'failed', costCents: result.usageKnown ? result.costCents : estCost, errorCode: 'EXPORT_INVALID' });
             cleanup();
-            return { status: 'failed', jobId, code: 'EXPORT_INVALID', note: `响应未正常终止(finish_reason=${result.finishReason})，未纳入可用缓存。` };
+            return { status: 'failed', jobId, code: 'EXPORT_INVALID', note: '响应未正常终止，未纳入可用缓存。' };
           }
           // 真实 Schema/必填/数值/异常 + 引用区间校验（真实模型与测试替身同一合同）。
           const check = validateContract(prompt.outputContract, result.text, citations.length, allowedObservationIds);
           if (!check.ok) {
             this.store.updateModelJob(jobId, { status: 'failed', costCents: result.usageKnown ? result.costCents : estCost, errorCode: 'EXPORT_INVALID' });
             cleanup();
-            return { status: 'failed', jobId, code: 'EXPORT_INVALID', note: `模型输出不合格(${check.reason})，未纳入可用缓存。` };
+            return { status: 'failed', jobId, code: 'EXPORT_INVALID', note: '模型输出不合格，未纳入可用缓存。' };
           }
           // 内容来源身份随结果/缓存/下游成品传递。
           const resultJson = JSON.stringify({ text: result.text, parsed: check.parsed, provider: result.provider, model: result.model, isTestDouble: result.isTestDouble, contentOrigin: result.contentOrigin, finishReason: result.finishReason, promptVersion: PROMPT_VERSION, params, usage: result.usage, usageKnown: result.usageKnown, pricing: result.pricing, citations, materialVersions });
@@ -285,7 +297,7 @@ export class ModelService {
       }
       throw lastErr ?? new Error('unknown');
     } catch (e) {
-      const msg = (e as Error).message;
+      const msg = e instanceof Error ? e.message : '';
       const reserved = this.store.getModelJob(jobId)?.costCents ?? estCost;
       if (msg === 'cancelled') {
         // 取消与费用分离：已派发 → 费用不确定（保留预留额）；未派发 → 未计费(0)。
@@ -306,12 +318,13 @@ export class ModelService {
       if (dispatchedUnknown) {
         this.store.updateModelJob(jobId, { status: 'uncertain', costCents: reserved, errorCode: 'REQUEST_UNCERTAIN' });
         cleanup();
-        return { status: 'uncertain', jobId, code: 'REQUEST_UNCERTAIN', note: `已派发后异常(${msg})：用量/费用不确定，保留预留额。` };
+        return { status: 'uncertain', jobId, code: 'REQUEST_UNCERTAIN', note: '已派发后发生异常：用量/费用不确定，保留预留额。' };
       }
-      this.store.updateModelJob(jobId, { status: 'failed', costCents: rejectedNoCharge ? 0 : reserved, errorCode: msg });
-      const code = msg === 'AUTH_FAILED' ? 'AUTH_FAILED' : msg === 'RATE_LIMITED' ? 'RATE_LIMITED' : msg === 'NETWORK_UNAVAILABLE' ? 'NETWORK_UNAVAILABLE' : 'MODEL_NOT_AVAILABLE';
+      const safeFailureCode = closedModelFailureCode(e);
+      this.store.updateModelJob(jobId, { status: 'failed', costCents: rejectedNoCharge ? 0 : reserved, errorCode: safeFailureCode });
+      const code = safeFailureCode === 'AUTH_FAILED' ? 'AUTH_FAILED' : safeFailureCode === 'RATE_LIMITED' ? 'RATE_LIMITED' : safeFailureCode === 'NETWORK_UNAVAILABLE' ? 'NETWORK_UNAVAILABLE' : 'MODEL_NOT_AVAILABLE';
       cleanup();
-      return { status: 'failed', jobId, code, note: `调用未成功：${msg}` };
+      return { status: 'failed', jobId, code, note: '模型调用未成功，未返回可用结果。' };
     }
   }
 

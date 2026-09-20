@@ -6,7 +6,7 @@
 import type { OperationName } from '../shared/ipc';
 
 export type FieldSchema =
-  | { type: 'string'; maxLength?: number; minLength?: number }
+  | { type: 'string'; maxLength?: number; minLength?: number; encoding?: 'base64' }
   | { type: 'integer'; min?: number; nonNegative?: boolean }
   | { type: 'boolean' }
   | { type: 'object' }
@@ -56,7 +56,7 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     properties: {
       title: { type: 'string', minLength: 1, maxLength: 500 },
       format: { type: 'string', maxLength: 16 },
-      base64: { type: 'string', maxLength: 60_000_000 },
+      base64: { type: 'string', minLength: 1, maxLength: 60_000_000, encoding: 'base64' },
       classification: { type: 'string', maxLength: 32 },
       relation: { type: 'string', maxLength: 16 },
       targetDocumentId: { type: 'string', maxLength: 64 },
@@ -387,6 +387,10 @@ function validateField(name: string, schema: FieldSchema, value: unknown, errors
     }
     if (schema.minLength !== undefined && value.length < schema.minLength) errors.push(`字段 ${name} 过短`);
     if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push(`字段 ${name} 过长`);
+    if (schema.encoding === 'base64' &&
+        (value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(value))) {
+      errors.push(`字段 ${name} 编码无效`);
+    }
   } else if (schema.type === 'integer') {
     if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
       errors.push(`字段 ${name} 应为整数`);
@@ -410,8 +414,14 @@ function validateField(name: string, schema: FieldSchema, value: unknown, errors
     }
     if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`字段 ${name} 条目过多`);
   } else if (schema.type === 'object') {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) errors.push(`字段 ${name} 应为对象`);
+    if (!isPlainRecord(value)) errors.push(`字段 ${name} 应为普通对象`);
   }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 export interface SchemaCheckResult {
@@ -426,13 +436,13 @@ export function checkPayload(op: OperationName, payload: unknown): SchemaCheckRe
   if (schema === null) {
     // 无 payload 操作：允许缺省/undefined；携带非空对象视为非法（避免夹带未预期字段）。
     if (payload !== undefined && payload !== null) {
-      if (typeof payload !== 'object' || Object.keys(payload as object).length > 0) {
+      if (!isPlainRecord(payload) || Object.keys(payload).length > 0) {
         errors.push(`操作 ${op} 不接受载荷`);
       }
     }
     return { ok: errors.length === 0, errors };
   }
-  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+  if (!isPlainRecord(payload)) {
     errors.push(`操作 ${op} 需要对象载荷`);
     return { ok: false, errors };
   }

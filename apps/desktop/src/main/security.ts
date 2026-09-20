@@ -34,6 +34,33 @@ export function isTrustedRendererUrl(
   return false;
 }
 
+export interface TrustedIpcSenderInput {
+  senderId: number;
+  mainWindowId: number | null;
+  senderFrame: { url: string } | null;
+  mainFrame: { url: string } | null;
+  expectedFileUrl: string;
+  devServerUrl: string | undefined;
+  allowDev: boolean;
+}
+
+// IPC authority is bound to the one main-window webContents and its exact top-frame object.
+// A matching URL alone is insufficient because a child/foreign frame can navigate to the same URL.
+export function isTrustedIpcSender(input: TrustedIpcSenderInput): boolean {
+  if (input.mainWindowId === null || input.senderId !== input.mainWindowId) return false;
+  if (!input.senderFrame || !input.mainFrame || input.senderFrame !== input.mainFrame) return false;
+  return isTrustedRendererUrl(
+    input.senderFrame.url,
+    input.expectedFileUrl,
+    input.devServerUrl,
+    input.allowDev
+  );
+}
+
+export function isAllowedInWindowNavigation(targetUrl: string, currentUrl: string): boolean {
+  return currentUrl.length > 0 && targetUrl === currentUrl;
+}
+
 // 外链策略：仅接受可规范化的 https 地址、含主机名、且不含内嵌凭据；其余拒绝。
 // 由明确用户动作（window.open）触发时才交给系统浏览器。
 export function isAllowedExternalUrl(url: string): boolean {

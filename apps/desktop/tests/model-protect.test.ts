@@ -140,6 +140,21 @@ describe('G04 在途去重 / 取消后提交保护', () => {
 });
 
 describe('G04 超时不确定 / 预算预留与结算 / 探测遵守授权与预算', () => {
+  it('provider 自由异常不会进入返回值或持久错误码', async () => {
+    const s = await makeStore(tmp());
+    const canary = 'C:\\PRIVATE\\student.db API_KEY=sk-secret upstream-body-canary';
+    const { provider } = controllable();
+    provider.complete = async () => { throw new Error(canary); };
+    const svc = new ModelService(s, { providers: { ctrl: provider } });
+    svc.configure({ provider: 'ctrl' });
+    const { versionId } = seed(s);
+    const result = await svc.run({ task: 'analyze_text', fragments: [{ versionId, charStart: 0, charEnd: 8, approved: true }] });
+    expect(result.status).toBe('failed');
+    expect(JSON.stringify(result)).not.toContain(canary);
+    expect(JSON.stringify(s.listModelJobs(10))).not.toContain(canary);
+    expect(s.listModelJobs(10)[0].errorCode).toBe('MODEL_NOT_AVAILABLE');
+  });
+
   it('超时 → uncertain，保留预留成本（不认定未计费）', async () => {
     const s = await makeStore(tmp());
     const { provider } = controllable(1, 200); // 成本>0，且 complete 延迟 200ms

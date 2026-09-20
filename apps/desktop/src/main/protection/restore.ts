@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import Database from 'better-sqlite3';
 import type { SafeStorageLike } from '../crypto/secrets';
 import { SqliteStore, SQLITE_SCHEMA_TARGET } from '../db/sqliteStore';
-import { inspectArchive } from './archive';
+import { inspectArchive, type ArchiveLimits } from './archive';
 import { openPortableArchive } from './envelope';
 import { validateBackupManifest, verifyBackupDirectory } from './manifest';
 import type { BackupManifest, ProtectionFaultHooks } from './types';
@@ -53,10 +53,11 @@ export async function preparePortableRestore(input: {
   safeStorage: SafeStorageLike;
   jobId: string;
   now: Date;
+  archiveLimits?: ArchiveLimits;
 }): Promise<PreparedRestore> {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(input.jobId)) throw new Error('restore_job_id_invalid');
   const payload = await openPortableArchive(input.container, input.passphrase);
-  const inspected = await inspectArchive(payload);
+  const inspected = await inspectArchive(payload, input.archiveLimits);
   const space = await fs.statfs(input.userDataDir);
   const expandedBytes = inspected.entries.reduce((sum, entry) => sum + entry.bytes.length, 0);
   if (!hasRestoreCapacity(space, expandedBytes)) throw new Error('backup_disk_space_insufficient');
@@ -71,6 +72,11 @@ export async function preparePortableRestore(input: {
   const errors = validateBackupManifest(manifest);
   if (errors.length || manifest.kind !== 'portable') throw new Error(`backup_manifest_invalid:${errors[0] ?? 'kind'}`);
   if (manifest.schemaVersion > SQLITE_SCHEMA_TARGET) throw new Error('backup_schema_too_new');
+  const archivePaths = inspected.entries.filter((entry) => entry.path !== 'manifest.json').map((entry) => entry.path).sort();
+  const manifestPaths = manifest.files.map((entry) => entry.path).sort();
+  if (archivePaths.length !== manifestPaths.length || archivePaths.some((path, index) => path !== manifestPaths[index])) {
+    throw new Error('backup_manifest_entry_mismatch');
+  }
   const stageRoot = join(input.userDataDir, 'restore-staging', input.jobId);
   const payloadRoot = join(stageRoot, 'payload');
   const stagedUserDataDir = join(stageRoot, 'userData');

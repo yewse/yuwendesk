@@ -21,11 +21,23 @@ export interface BuildBackupManifestInput {
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const HASH = /^[a-f0-9]{64}$/u;
+const WINDOWS_RESERVED = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/iu;
+
+// Backup payloads are restored on Windows. Reject names that Windows aliases
+// case-insensitively or normalizes by removing a trailing dot/space.
+export function windowsArchivePathKey(value: string): string | null {
+  if (!value || value.includes('\\') || value.includes('\0') || value.startsWith('/') || /^[A-Za-z]:/u.test(value)) return null;
+  const path = value.endsWith('/') ? value.slice(0, -1) : value;
+  const parts = path.split('/');
+  if (parts.some((part) => !part || part === '.' || part === '..' || part.endsWith('.') || part.endsWith(' ') || WINDOWS_RESERVED.test(part))) {
+    return null;
+  }
+  return parts.map((part) => part.toLowerCase()).join('/');
+}
 
 export function isSafeArchivePath(value: string): boolean {
-  if (!value || value.includes('\\') || value.includes('\0') || value.startsWith('/') || /^[A-Za-z]:/u.test(value)) return false;
+  if (windowsArchivePathKey(value) === null || value.endsWith('/')) return false;
   const parts = value.split('/');
-  if (parts.some((part) => !part || part === '.' || part === '..')) return false;
   if (value === 'data/yuwendesk.db' || value === 'keys/workspace-key.json') return true;
   return parts.length >= 3 && parts[0] === 'materials' && parts.slice(1).every((part) => SAFE_ID.test(part));
 }
@@ -59,8 +71,9 @@ export function validateBackupManifest(value: BackupManifest): string[] {
   const seen = new Set<string>();
   for (const entry of value.files) {
     if (!isSafeArchivePath(entry.path)) errors.push(`unsafe_path:${entry.path}`);
-    if (seen.has(entry.path)) errors.push(`duplicate_path:${entry.path}`);
-    seen.add(entry.path);
+    const pathKey = windowsArchivePathKey(entry.path);
+    if (pathKey !== null && seen.has(pathKey)) errors.push(`duplicate_path:${entry.path}`);
+    if (pathKey !== null) seen.add(pathKey);
     if (!HASH.test(entry.sha256)) errors.push(`bad_hash:${entry.path}`);
     if (!Number.isSafeInteger(entry.byteSize) || entry.byteSize < 0) errors.push(`bad_size:${entry.path}`);
     if (!['database', 'material', 'workspace-key'].includes(entry.role)) errors.push(`bad_role:${entry.path}`);
@@ -96,4 +109,3 @@ export async function verifyBackupDirectory(
   }
   return { ok: true };
 }
-

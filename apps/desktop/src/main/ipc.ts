@@ -181,8 +181,16 @@ export function validateEnvelope(op: string, req: unknown): IpcResponse<never> |
       '请更新到实现该功能的版本，或联系支持。'
     );
   }
-  if (typeof req !== 'object' || req === null) {
+  if (typeof req !== 'object' || req === null || Array.isArray(req) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(req))) {
     return errorResponse('INPUT_INVALID', '请求格式无效。', '请重试当前操作。');
+  }
+  const allowed = new Set([
+    'schema_version', 'request_id', 'operation', 'workspace_id',
+    'expected_revision', 'idempotency_key', 'payload'
+  ]);
+  if (Object.keys(req).some((key) => !allowed.has(key))) {
+    return errorResponse('INPUT_INVALID', '请求格式包含未开放字段。', '请通过应用界面重新操作。');
   }
   const r = req as Partial<IpcRequest>;
   if (r.schema_version !== IPC_SCHEMA_VERSION) {
@@ -192,11 +200,23 @@ export function validateEnvelope(op: string, req: unknown): IpcResponse<never> |
       '请重启应用后重试。'
     );
   }
-  if (typeof r.request_id !== 'string' || r.request_id.length === 0) {
+  if (typeof r.request_id !== 'string' || r.request_id.length === 0 || r.request_id.length > 128) {
     return errorResponse('INPUT_INVALID', '请求缺少有效的请求标识。', '请重试当前操作。');
   }
   if (r.operation !== op) {
     return errorResponse('INPUT_INVALID', '请求内容与调用通道不一致。', '请重试当前操作。');
+  }
+  if (r.workspace_id !== null && r.workspace_id !== undefined &&
+      (typeof r.workspace_id !== 'string' || r.workspace_id.length === 0 || r.workspace_id.length > 128)) {
+    return errorResponse('INPUT_INVALID', '请求的工作区标识无效。', '请刷新应用后重试。');
+  }
+  if (r.expected_revision !== undefined &&
+      (typeof r.expected_revision !== 'number' || !Number.isSafeInteger(r.expected_revision) || r.expected_revision < 0)) {
+    return errorResponse('INPUT_INVALID', '请求的版本标识无效。', '请刷新后重试。');
+  }
+  if (r.idempotency_key !== undefined &&
+      (typeof r.idempotency_key !== 'string' || r.idempotency_key.length === 0 || r.idempotency_key.length > 256)) {
+    return errorResponse('INPUT_INVALID', '请求的幂等标识无效。', '请重新操作。');
   }
   return null;
 }
@@ -232,7 +252,7 @@ export class IpcService {
     // G02-T01 Schema 门：分发前统一校验载荷结构（类型/必填/多余字段），结构不合直接拒绝。
     const gate = checkPayload(request.operation, request.payload);
     if (!gate.ok) {
-      return errorResponse('INPUT_INVALID', `请求载荷结构无效：${gate.errors.join('；')}`, '请检查后重试。');
+      return errorResponse('INPUT_INVALID', '请求载荷结构无效。', '请通过应用界面检查后重试。');
     }
 
     switch (request.operation) {
@@ -647,7 +667,7 @@ export class IpcService {
     });
     if (!r.ok) {
       const code = r.code === 'KEY_UNAVAILABLE' ? 'KEY_UNAVAILABLE' : 'INPUT_INVALID';
-      return errorResponse(code, r.note ?? '配置失败。', '请检查服务商与密钥后重试。');
+      return errorResponse(code, '模型配置未通过校验。', '请检查服务商与密钥后重试。');
     }
     return { ok: true, data: { config: r.config, keyStored: r.keyStored } };
   }
@@ -659,7 +679,7 @@ export class IpcService {
     if (!r.ok) {
       const code = (r.code as ErrorCode) ?? 'MODEL_NOT_AVAILABLE';
       const known = ['MODEL_NOT_AVAILABLE', 'AUTH_FAILED', 'NETWORK_UNAVAILABLE', 'KEY_UNAVAILABLE'].includes(code) ? code : 'MODEL_NOT_AVAILABLE';
-      return errorResponse(known as ErrorCode, r.note, '真实调用需授权账户与联网；当前保持未验证。');
+      return errorResponse(known as ErrorCode, '模型服务探测未成功。', '真实调用需授权账户与联网；当前保持未验证。');
     }
     return { ok: true, data: r };
   }
@@ -680,7 +700,7 @@ export class IpcService {
     )
       ? (code as ErrorCode)
       : 'MODEL_NOT_AVAILABLE';
-    return errorResponse(known, r.note ?? '调用未成功。', '请检查片段授权、预算与服务商状态。');
+    return errorResponse(known, '模型调用未成功。', '请检查片段授权、预算与服务商状态。');
   }
 
   // G05：组建自拟示例完整课时计划并持久化（内容来源 authored，明确标注自拟）。

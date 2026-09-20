@@ -185,7 +185,7 @@
 - **状态边界**：机器测试只证明事件、事务、IPC、隐私守卫、离线协议与渲染代码边界，不证明一般匿名化能力、真实云模型解释质量、教师实际实施质量或教学有效性；冻结验收未改为 PASS。真实学生材料隐私授权与逐次外发许可、开发态 Electron UI 走查、干净 Windows 安装、真实 API 归因质量、教学专业复核、Office/WPS 保真与正式签名仍为 `BLOCKED_EXTERNAL`。
 - 设计规格：`docs/superpowers/specs/2026-09-20-g08-feedback-attribution-design.md`；实施计划：`docs/superpowers/plans/2026-09-20-g08-feedback-attribution.md`。首版仍不保存学生原始作业正文；Observation 保持 `cloud_allowed=false`。
 
-## G09 保护与恢复 — IN_PROGRESS（T01–T03 本地工程范围完成）
+## G09 保护与恢复 — DONE（四包本地工程范围；外部门仍 BLOCKED_EXTERNAL）
 
 - [x] **G09-T01 WAL 一致快照与原子发布**：新增 `protection` 领域；使用 better-sqlite3 Online Backup API，而非复制主 `.db`。快照经独立 `integrity_check`，删除全部 `credential` 行，再与应用登记的成果文件逐项重算 SHA-256；任何缺失/不符均不发布。备份先写 `.partial`，完整校验后原子改名 `.ready`，列表忽略半成品。
 - [x] **日/周保留与自动触发**：成功业务写入后通知 `BackupCoordinator`，按本地日历日合并为每日最多一次；备份记录日/周标签，轮换保留最近 7 个日点和 4 个周点，并不删除唯一有效恢复点。自动备份失败不回滚已提交业务写入，维护错误保持独立。
@@ -212,10 +212,16 @@
 - **T03 实测（Windows 11 开发主机，Node 24.15.0；全为虚构状态、canary 与伪 safeStorage）**：计划定向 **93/93**；全量 Vitest **441 passed / 1 skipped（442 total，52 files）**。主/渲染 typecheck、ESLint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0；独立复审 Critical 0 / Important 0，结论 Ready。覆盖八类敏感 canary 搜索、真实 SQLite 全大写自由错误码闭集映射、ZIP 解包复核、零网络调用、保存对话框内状态漂移且零 running 预留、路径拒绝、跨实例幂等、数据库已移动而 materials 未移动的恢复故障、九类其余故障/重启恢复和三次自动重试截止。既有跳过项未改为通过；pdfjs 可选 canvas/standardFontDataUrl 警告仍如实保留。
 - **T03 外部门/未覆盖**：诊断样包没有真实用户内容；真实学生资料隐私授权、逐次外发许可、真实 API 归因质量、教学专业复核、干净 Windows/DPAPI 跨机恢复、真实 Office/WPS、正式签名和开发态 Electron 真实窗口走查仍为 `BLOCKED_EXTERNAL`。不以 canary、Node 测试或构建产物替代这些验收。
 
+- [x] **G09-T04 威胁边界验证**：IPC 信任判断绑定实际 BrowserWindow、sender id、精确 top-frame 对象和固定本地 URL，窗口导航只接受当前精确 URL；信封和嵌套对象必须是无继承字段的普通对象，字段闭集、长度和 Base64 语法在分发前校验，错误响应不回显攻击字段。模型 provider 的任意异常、路径、密钥样式文本和响应正文统一映射为闭集代码/固定中文说明，既不返回 renderer 也不进入持久错误码。提示注入仅作为资料字节处理，不能取得联网、备份或 IPC 权限；DOCM 宏、OOXML 外部关系、HTML/script 与 PDF URI 保持被动，测试期间无网络派发。
+- [x] **归档攻击前置拒绝与恢复闭集**：公开 `preparePortableRestore` 路径在解压前解析 EOCD/中央目录，所有目录和文件都计入条目上限；拒绝多盘/ZIP64、原始及 Windows 大小写别名重复、尾点/设备名、符号链接、危险路径、local/central 名称/flags/method/CRC/size 不一致和数据范围重叠。解压采用流式单项/总量硬截止并复核实际展开量，不能靠低报中央目录大小绕过；恢复要求非 manifest 条目集合与 manifest 完全相等。hash/size/schema/SQLite 完整性在生成的隔离 staging 内校验，失败后清理；写入审计证明所有瞬时文件写目标也位于该 staging 根内，目标区和 staging 外无写入。
+- [x] **证据与状态边界**：`reports/G09_THREAT_CHECKLIST.md` 保留逐项状态；SEC-006 因产品没有 URL 下载能力且尚无重定向逐跳集成面，诚实标 `NOT_RUN`，INS-008 与 DAT-002 所需生产监听/真实 Windows-DPAPI 跨机证据标 `BLOCKED_EXTERNAL`。冻结 acceptance 文件未修改，SHA-256 与基线一致；详见 `reports/G09_EVIDENCE.md`。
+- **T04 实测（Windows 11 开发主机，Node 24.15.0 / npm 11.12.1；全为合成攻击样例与伪 safeStorage）**：最终重点定向 **111/111**；全量 Vitest **458 passed / 1 skipped（459 total，54 files）**。主/渲染 typecheck、ESLint、`verify:contracts`、renderer/main build、`git diff --check` 均退出 0；首轮独立复审的 4 项 Important 全部先以新增失败测试复现再修复，第二轮复审 Critical 0 / Important 0、Ready。覆盖认证信封篡改、路径穿越/绝对路径/UNC、原始及 Windows 别名重复、尾点/设备名、symlink、local/central 元数据不一致、目录/压缩/低报大小炸弹、额外条目、manifest/hash/size/path/missing、损坏 SQLite、未来 schema、瞬时写入路径审计、越权 sender/导航、原型继承载荷、模型异常去自由文本、token 过期/重放/跨对象、提示/宏/脚本/PDF URI 被动化与敏感文件名跨存储不可搜索。既有跳过项未改为通过。
+- **T04 外部门/未覆盖**：真实学生材料隐私授权与逐次外发许可、真实 API 模型辅助归因质量、教学专业复核、生产进程监听动态证据、真实两机 Windows/DPAPI 恢复、开发态 Electron 窗口、干净 Win11 安装、Office/WPS 保真、正式签名及公开上传授权仍为 `BLOCKED_EXTERNAL`；本地威胁测试不替代这些门。
+
 ## G10–G11 — NOT_STARTED
 
 升级与性能（G10）、完整发行验收（G11）尚未开始。
 
 ## 下一步
 
-见 `HANDOFF.md`。下一步执行 G09-T04 注入、越权、归档与资源攻击验证，不重做 G00–G09-T03。扫描件 OCR 未接入则继续阻塞。外部门保留：真实学生材料隐私授权与逐次外发许可、真实跨机 Windows/DPAPI 恢复、开发态 Electron 真实窗口走查、G01 目标环境安装验收、正式签名、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权。
+见 `HANDOFF.md`。下一步执行 G10-T01 签名更新清单和离线更新；在没有发布身份、签名服务、可信更新公钥和授权分发地址时，只完成可独立验证的清单/离线更新工程范围，并将正式签名与在线发布保持 `BLOCKED_EXTERNAL`。不重做 G00–G09。扫描件 OCR 未接入则继续阻塞；真实学生材料隐私授权与逐次外发许可、真实跨机 Windows/DPAPI 恢复、开发态 Electron 真实窗口走查、G01 目标环境安装验收、真实 API 备课/归因质量、教学专业复核、Office/WPS 保真与公开上传授权等外部门继续保留。
