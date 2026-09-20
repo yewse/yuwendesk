@@ -88,7 +88,7 @@ function assertSafeReleaseOutput(value) {
   if (containsSensitiveOutput(value)) fail('RELEASE_PRIVACY_VIOLATION');
 }
 
-function firstDifferencePath(left, right, path = '$') {
+export function firstDifferencePath(left, right, path = '$') {
   if (JSON.stringify(left) === JSON.stringify(right)) return null;
   if (left !== null && right !== null && typeof left === 'object' && typeof right === 'object') {
     const keys = new Set([...Object.keys(left), ...Object.keys(right)]);

@@ -53,6 +53,9 @@
 - **G11-E07 历史失败已保全**：`b3d384f` 候选 131,024,555 bytes / SHA-256 `29d19d1a4fd412a24159d6f81a29360759e77de90a29f10fcffd32e3009d7584`；`run-20260920-b3d384f-01` 的完整 Vitest 命令实际有 1 项失败，因此按既有命令组规则记录 0/6/38/126。随后独立全量复跑为 630 passed / 1 skipped，不能倒改历史 FAIL。
 - **E07 诊断修复**：归一化 Vitest 证据新增 `failedAssertions`，只含失败测试的仓库相对文件、名称、状态和计数；不含 failure message、堆栈、绝对路径或环境值。未来偶发失败可定位，验收判定规则未放宽。DeepSeek 密钥仍未进入工具命令/仓库；当前没有安全秘密注入通道。CUA 无原生应用入口，WPS 实际操作仍未执行。
 - **E07 当前验证**：新增回归后全量 631 passed / 1 skipped（632 total，68 files），typecheck/lint/contracts/diff 均通过。发行链忠实保留 `RELEASE_REQUIRED_CASE_FAILED`，签名 `UNSIGNED`、13 个缺口，最终验证退出 2。
+- **G11-E08 精确定位成功**：`5c0de04` 的 131,024,559-byte 候选（SHA-256 `f63d5809d8c47513c206907e680147e7c6330bbf31db18e2c5e943ad0edb86e5`）对应 `run-20260920-5c0de04-01` 再次记录 0/6/38/126。新字段定位到 `g11-release-evidence.test.ts` 的静态覆盖测试；历史失败未覆盖。
+- **E08 根因修复**：测试为检查首个 JSON 差异路径却读取 live 候选快照，在新 EXE 与旧 `candidate-artifact.json` 的短暂窗口先命中 provenance 漂移。现用导出的纯 `firstDifferencePath` 断言精确路径，另保留 live 校验只验证篡改拒绝；提交后须重建候选并创建第三轮追加运行验证。
+- **E08 当前验证**：全量 631 passed / 1 skipped（632 total，68 files），typecheck/lint/build/contracts/diff 均通过；发行仍为 `BLOCKED / RELEASE_REQUIRED_CASE_FAILED`，签名 `UNSIGNED`，最终验证退出 2。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -100,8 +103,8 @@ npm run build:candidate
 
 ## 下一个有界工作包建议
 
-1. 提交 E07 后运行 `npm run build:candidate`，从该 clean commit 重建带来源记录的未签名工程候选；不得复用历史 EXE 或哈希。
-2. 创建新的追加验收运行；若再失败，使用新 `failedAssertions` 精确定位，不删除或覆盖任一历史运行。
+1. 提交 E08 后运行 `npm run build:candidate`，从该 clean commit 重建带来源记录的未签名工程候选；不得复用历史 EXE 或哈希。
+2. 创建第三个追加验收运行；若再失败，继续使用 `failedAssertions` 精确定位，不删除或覆盖任一历史运行。
 3. 在 clean source 上运行完整发行证据链，使用 E06 诊断修复事务期间的精确 dirty path。真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。其余外部门继续阻断。
 
 ## 重要纪律

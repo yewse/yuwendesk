@@ -18,6 +18,7 @@ import {
   buildRequirementCoverage,
   collectAcceptanceEvidencePaths,
   decideReleaseDisposition,
+  firstDifferencePath,
   G11_GENERATED_OUTPUT_PATHS,
   inspectRepositoryProvenance,
   validateReleaseEvidence,
@@ -545,9 +546,7 @@ describe('G11-T02 release aggregation boundary', () => {
     changedMapping.requirements.base[0].caseIds = [evidence.cases[1].caseId];
     expect(validateReleaseEvidence({ root, evidence: changedMapping }).errors
       .map((error: { code: string }) => error.code)).toContain('RELEASE_AGGREGATE_DERIVATION_MISMATCH');
-    expect(validateReleaseEvidence({ root, evidence: changedMapping }).errors
-      .find((error: { code: string; detail: string }) => error.code === 'RELEASE_AGGREGATE_DERIVATION_MISMATCH')
-      ?.detail).toMatch(/^\$/u);
+    expect(firstDifferencePath(changedMapping, evidence)).toBe('$.requirements.base.0.caseIds.0');
 
     const forgedReady = structuredClone(evidence);
     forgedReady.requirements.base.pop();
