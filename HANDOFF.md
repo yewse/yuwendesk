@@ -59,6 +59,8 @@
 - **G11-E09 第三轮追加验收通过**：`5d5fe78` 候选 131,024,555 bytes / SHA-256 `6d04a8a1871d2bb4ad45ab8b43464d3a9b5f0dd138e11ac60ed8cdb0c84d0b75`；`run-20260920-5d5fe78-01` 为 clean run，6/0/38/126。前两轮失败未删除或改写。
 - **E09 事务根因与修复**：clean `release:sbom` 的精确差异为 `$.supplyChain.sbomStatus`。供应链脚本的第二份 dirty-path allowlist遗漏 AcceptanceRun 引用的 Vitest 文件，使环境记录与权威聚合输入对 source clean 的判断相反。现先调用 `loadReleaseAggregationInputs` 并复用其 `repositoryProvenance`，删除复制的 allowlist；dirty 源码下八文件事务已成功，提交后须在 clean source 上最终复验。
 - **E09 当前验证**：全量 632 passed / 1 skipped（633 total，68 files），typecheck/lint/build/contracts/diff 均通过；dirty-source 发行验证退出 2。
+- **G11-E10 clean-source 闭环已通过**：`189fd2a` 候选 131,024,559 bytes / SHA-256 `1859f83748555b9222b8233d7f5171977f263e6b125b7a3af83735e200c29d68`；`run-20260920-189fd2a-01` 为 clean run，6/0/38/126。随后 `release:evidence` 与八文件 `release:sbom` 均成功，`sourceTreeClean=true`，证明 E09 事务修复在 clean source 有效。
+- **E10 最终真实状态**：`SBOM=PASS / checksum=PASS / signature=UNSIGNED / formalEnvironmentMatch=false`，发行仍为 `BLOCKED / RELEASE_WINDOWS_EVIDENCE_REQUIRED`，11 个缺口，`release:verify` 退出 2。WPS 无原生控制入口，密钥无不暴露于工具参数的安全注入通道，故相关实际案例未执行；Grok、签名、分发、真人教师复核等继续阻断。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -106,9 +108,9 @@ npm run build:candidate
 
 ## 下一个有界工作包建议
 
-1. 提交 E09 后运行 `npm run build:candidate`，从该 clean commit 重建带来源记录的未签名工程候选；不得复用历史 EXE 或哈希。
-2. 创建第四个追加验收运行，并立即运行 `release:evidence → release:sbom → release:verify`，验证 clean source 八文件事务收敛；历史运行保持追加。
-3. 真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。Grok、签名、分发、真人教师复核等外部门继续阻断。
+1. 提交 E10，保留第四轮追加验收与 clean-source 发行证据；不要覆盖前两轮 FAIL 或其他历史记录。
+2. 真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。
+3. 补齐干净标准用户 VM、Grok、签名/时间戳、可信分发、锁定环境、缺陷审计和真人教师复核后，再创建新的追加运行；当前不得发布。
 
 ## 重要纪律
 

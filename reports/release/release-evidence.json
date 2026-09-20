@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T19:13:27.597Z",
-  "sourceCommit": "5d5fe7825355e2420ce1ed8284ee19616734d264",
+  "generatedAt": "2026-09-20T19:20:33.801Z",
+  "sourceCommit": "189fd2aef96919e500a22e27bcfb5dfd637b500f",
   "acceptanceRun": {
-    "runId": "run-20260920-5d5fe78-01",
-    "path": "reports/acceptance-runs/run-20260920-5d5fe78-01.json",
-    "sha256": "0e661508a742adafe99cfd413564c4d8cca633870903f756e0fe51938efd13f3",
-    "sizeBytes": 78289,
+    "runId": "run-20260920-189fd2a-01",
+    "path": "reports/acceptance-runs/run-20260920-189fd2a-01.json",
+    "sha256": "a34147e6e16c23300dd52ec5480a5d178571d98d345806c0669a240a818ffbbe",
+    "sizeBytes": 78283,
     "repositoryDirty": false
   },
   "candidate": {
     "inventoryPath": "reports/release/candidate-artifact.json",
-    "inventorySha256": "2fe5320daed774616170a475294dcbb21197e9aee204783476ce9324ecba5914",
+    "inventorySha256": "98913414699fc8837a0d540c74b67d330fb36ae62a9bef1089f28b6d9d7b2396",
     "inventorySizeBytes": 563,
     "expectedPath": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
     "artifactPresent": true,
     "artifactClass": "UNSIGNED_TEST_BUILD",
-    "sha256": "6d04a8a1871d2bb4ad45ab8b43464d3a9b5f0dd138e11ac60ed8cdb0c84d0b75",
-    "sizeBytes": 131024555
+    "sha256": "1859f83748555b9222b8233d7f5171977f263e6b125b7a3af83735e200c29d68",
+    "sizeBytes": 131024559
   },
   "statuses": {
     "softwareStatus": "BLOCKED",
@@ -1975,7 +1975,7 @@
   "deliverables": [
     {
       "id": "acceptance_run",
-      "path": "reports/acceptance-runs/run-20260920-5d5fe78-01.json",
+      "path": "reports/acceptance-runs/run-20260920-189fd2a-01.json",
       "status": "PRESENT"
     },
     {
@@ -2163,8 +2163,8 @@
     },
     {
       "path": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
-      "sha256": "6d04a8a1871d2bb4ad45ab8b43464d3a9b5f0dd138e11ac60ed8cdb0c84d0b75",
-      "sizeBytes": 131024555
+      "sha256": "1859f83748555b9222b8233d7f5171977f263e6b125b7a3af83735e200c29d68",
+      "sizeBytes": 131024559
     },
     {
       "path": "planning/changes/CR001/traceability.json",
@@ -2187,13 +2187,13 @@
       "sizeBytes": 27957
     },
     {
-      "path": "reports/acceptance-runs/run-20260920-5d5fe78-01.json",
-      "sha256": "0e661508a742adafe99cfd413564c4d8cca633870903f756e0fe51938efd13f3",
-      "sizeBytes": 78289
+      "path": "reports/acceptance-runs/run-20260920-189fd2a-01.json",
+      "sha256": "a34147e6e16c23300dd52ec5480a5d178571d98d345806c0669a240a818ffbbe",
+      "sizeBytes": 78283
     },
     {
       "path": "reports/release/candidate-artifact.json",
-      "sha256": "2fe5320daed774616170a475294dcbb21197e9aee204783476ce9324ecba5914",
+      "sha256": "98913414699fc8837a0d540c74b67d330fb36ae62a9bef1089f28b6d9d7b2396",
       "sizeBytes": 563
     },
     {

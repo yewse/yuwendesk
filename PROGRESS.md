@@ -312,6 +312,12 @@
 - [x] **单一来源修复**：供应链脚本不再复制 dirty-path 规则，改为在生成环境记录前调用经过完整 run/candidate/map 校验的 `loadReleaseAggregationInputs`，直接复用其 `repositoryProvenance`；后续 prospective 聚合也复用同一输入。新增源码级回归先 RED 后 GREEN，禁止重新引入第二份 allowlist。当前 dirty 源码下八文件事务已成功，真实状态为 `RELEASE_SOURCE_DIRTY`；提交后仍须用新候选验证 clean source 路径。
 - **E09 验证**：新增回归后全量 **632 passed / 1 skipped（633 total，68 files）**；typecheck、lint、build、合同和 diff 均通过。当前 dirty-source 发行验证按预期退出 2，没有把事务成功误写为正式发布通过。
 
+## G11-E10 clean-source 最终闭环 — 事务修复已证实，正式发行仍阻断
+
+- [x] **第四轮候选与追加验收**：clean commit `189fd2aef96919e500a22e27bcfb5dfd637b500f` 生成 **131,024,559 bytes** 未签名候选，SHA-256 `1859f83748555b9222b8233d7f5171977f263e6b125b7a3af83735e200c29d68`。`run-20260920-189fd2a-01` 为 `repositoryDirty=false`，结果 **6 PASS / 0 FAIL / 38 BLOCKED / 126 NOT_RUN**；所有历史运行继续存在。
+- [x] **clean-source 事务复验**：同一候选/commit 上依次执行 `release:evidence → release:sbom → release:verify`。前两项均完成，八文件事务没有再次出现派生不一致；最终证据 `sourceTreeClean=true`、`SBOM=PASS`、`checksum=PASS`、`signature=UNSIGNED`、`formalEnvironmentMatch=false`，发行判定为 `BLOCKED / RELEASE_WINDOWS_EVIDENCE_REQUIRED`，11 个缺口，最终验证按预期退出 2。
+- **仍不可提升**：本机 Windows 11 是开发环境，不是已证明的干净标准用户 VM；候选未签名，锁定 Node/npm 环境不匹配，没有分发身份或缺陷审计。WPS 原生 UI 当前不可控，DeepSeek 密钥也没有可避免出现在工具参数/日志中的受保护注入通道；故没有执行或伪造对应外部案例。冻结 `AI-001` 仍要求 Grok，GPT 合成材料/自审仍不替代合法教材或真人教师复核。
+
 ## 下一步
 
-见 `HANDOFF.md`。提交 E09 后从 clean commit 重建候选、创建第四个追加运行并立即执行完整发行证据链，验证八文件事务在 clean source 上收敛。能安全实际执行的案例才追加证据；干净标准用户 VM、Grok 定义、签名/时间戳、分发、真人教师复核及当前不可控的 WPS 操作继续 `BLOCKED_EXTERNAL/NOT_RUN`。
+见 `HANDOFF.md`。E10 已完成本机可安全执行的 clean-source 验收与发行事务闭环；下一步只处理真正补齐且可安全执行的外部门。干净标准用户 VM、Grok 定义、签名/时间戳、分发、真人教师复核、安全 API 密钥注入及当前不可控的 WPS 操作继续 `BLOCKED_EXTERNAL/NOT_RUN`，不得用当前 6 项工程 PASS 推导正式发布通过。

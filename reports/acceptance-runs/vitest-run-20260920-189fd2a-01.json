@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "runId": "run-20260920-189fd2a-01",
+  "sourceCommit": "189fd2aef96919e500a22e27bcfb5dfd637b500f",
+  "repositoryDirty": false,
+  "startedAt": "2026-09-20T19:16:59.142Z",
+  "completedAt": "2026-09-20T19:17:39.732Z",
+  "command": "node ../../node_modules/vitest/vitest.mjs run --reporter=json --outputFile ../../reports/acceptance-runs/.run-20260920-189fd2a-01.9256-8efd6e29-6eb6-4c6c-922c-16180af20682.vitest.raw.partial",
+  "exitCode": 0,
+  "success": true,
+  "counts": {
+    "testFiles": 68,
+    "tests": 633,
+    "passed": 632,
+    "failed": 0,
+    "pending": 1
+  },
+  "assertions": [
+    {
+      "testFile": "tests/g07-bundle-failure.test.ts",
+      "testName": "同一请求前三次失败被持久计数，第四次直接返回 failed_final 且不再生成或写文件",
+      "fullName": "G07-T04 persistent retry cutoff and legacy generation path 同一请求前三次失败被持久计数，第四次直接返回 failed_final 且不再生成或写文件",
+      "status": "passed",
+      "durationMs": 290.64789999999994,
+      "failureCount": 0
+    },
+    {
+      "testFile": "tests/g07-change-sqlite.test.ts",
+      "testName": "allows exactly one of two keys against the same base revision to commit",
+      "fullName": "G07-T02 real SQLite lesson change commit allows exactly one of two keys against the same base revision to commit",
+      "status": "passed",
+      "durationMs": 320.64200000000005,
+      "failureCount": 0
+    },
+    {
+      "testFile": "tests/g07-change-sqlite.test.ts",
+      "testName": "replays the original success after reopen and rejects same-key different payload",
+      "fullName": "G07-T02 real SQLite lesson change commit replays the original success after reopen and rejects same-key different payload",
+      "status": "passed",
+      "durationMs": 813.8087999999999,
+      "failureCount": 0
+    },
+    {
+      "testFile": "tests/g09-source-delete-flow.test.ts",
+      "testName": "removes every version/plaintext/ciphertext/cache and leaves one content-free tombstone",
+      "fullName": "G09 permanent source deletion transaction removes every version/plaintext/ciphertext/cache and leaves one content-free tombstone",
+      "status": "passed",
+      "durationMs": 124.5507,
+      "failureCount": 0
+    },
+    {
+      "testFile": "tests/g09-threat-boundaries.test.ts",
+      "testName": "removes a fictitious student-name filename from DB bytes, diagnostics, manifests, and archive paths after promotion",
+      "fullName": "G09-T04 content and privacy attack fixtures stay passive removes a fictitious student-name filename from DB bytes, diagnostics, manifests, and archive paths after promotion",
+      "status": "passed",
+      "durationMs": 794.0456999999999,
+      "failureCount": 0
+    },
+    {
+      "testFile": "tests/update-manifest.test.ts",
+      "testName": "rejects a hash-correct package signed by an untrusted private key",
+      "fullName": "signed update manifest and fixed container rejects a hash-correct package signed by an untrusted private key",
+      "status": "passed",
+      "durationMs": 0.4408999999999992,
+      "failureCount": 0
+    }
+  ],
+  "failedAssertions": []
+}
