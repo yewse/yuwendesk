@@ -33,9 +33,9 @@
     {
       "id": "EXT04",
       "description": "开发、真实测试与运行费用上限",
-      "status": "NOT_PROVIDED",
+      "status": "PROVIDED",
       "secret_value": null,
-      "owner_action": "确认明确金额与币种",
+      "owner_action": "用户于 2026-09-21 授权本次 DeepSeek 实测人民币 10 元硬上限；应用继续按 1000 分 fail-closed",
       "blocks": [
         "付费网络调用"
       ]
@@ -93,9 +93,9 @@
     {
       "id": "EXT10",
       "description": "真实学生资料处理授权与每次必要字段外发许可",
-      "status": "NOT_PROVIDED",
+      "status": "PROVIDED",
       "secret_value": null,
-      "owner_action": "由资料责任方明确本地处理范围；每次云端外发前确认必要字段，禁止把真实正文贴入仓库或提示词",
+      "owner_action": "用户于 2026-09-21 明确授权本次合成/最小必要字段外发；不等于已提供真实学生材料，也不替代逐项证据与教学复核",
       "blocks": [
         "G08真实模型辅助归因",
         "G11隐私验收"
@@ -104,9 +104,9 @@
     {
       "id": "EXT11",
       "description": "实际支持版本的 Microsoft Office 与 WPS 兼容性环境",
-      "status": "NOT_PROVIDED",
+      "status": "PROVIDED",
       "secret_value": null,
-      "owner_action": "提供受控测试环境，分别执行打开、编辑、保存、分页和放映验证",
+      "owner_action": "Windows 11 Pro 主机已核实 WPS Office Commercial 12.1.0.28022；Microsoft Office 未提供，案例仅按实际 WPS 执行结果判定",
       "blocks": [
         "G06真实成品保真",
         "G10正式导出性能",

@@ -14,14 +14,6 @@
 - 外部输入：EXT06
 - 安全下一步：一次确认或从现有材料核对
 
-## EXTERNAL_EXT04
-
-- 阻断码：`BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED`
-- 范围：付费网络调用
-- 状态：BLOCKED
-- 外部输入：EXT04
-- 安全下一步：确认明确金额与币种
-
 ## EXTERNAL_EXT09
 
 - 阻断码：`BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED`
@@ -69,22 +61,6 @@
 - 状态：BLOCKED
 - 外部输入：EXT03
 - 安全下一步：通过秘密管理/图形设置配置，禁止贴进仓库
-
-## EXTERNAL_EXT11
-
-- 阻断码：`BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED`
-- 范围：G06真实成品保真；G10正式导出性能；G11兼容性验收
-- 状态：BLOCKED
-- 外部输入：EXT11
-- 安全下一步：提供受控测试环境，分别执行打开、编辑、保存、分页和放映验证
-
-## EXTERNAL_EXT10
-
-- 阻断码：`BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED`
-- 范围：G08真实模型辅助归因；G11隐私验收
-- 状态：BLOCKED
-- 外部输入：EXT10
-- 安全下一步：由资料责任方明确本地处理范围；每次云端外发前确认必要字段，禁止把真实正文贴入仓库或提示词
 
 ## CURRENT_CANDIDATE_MISSING
 

@@ -41,6 +41,10 @@
 - **E02 日志安全**：原生构建失败输出可能展开子进程环境；后续构建先在子进程移除凭据型变量并关闭 debug。不得把任何密钥写入命令、仓库、验收输入或证据。
 - **G11-E03 候选来源闭环已实现，待 clean commit 实跑**：新增 `npm run build:candidate`，强制 Windows + clean tree，清理凭据型子进程环境，成功后原子写 ignored 来源记录，绑定 commit、固定 EXE hash/size、构建时间/命令及 OS/Node/npm。runner 会复算并拒绝缺失、路径逃逸、commit/字节漂移；修复了“候选存在但 runner 无来源输入通道”的死锁。新增 2 项回归先 RED 后 GREEN，G11/打包定向 53/53；全量 **629 passed / 1 skipped（630 total，68 files）**，typecheck/lint/contracts/build/Node 语法/diff 均通过。须提交 E03 后才运行该命令生成最终固定候选。
 - **E03 测试隔离**：缺失候选及 60+24+170 静态覆盖测试已脱离 live ignored 候选/历史报告，保留候选漂移、派生篡改和伪造 RELEASE_READY 拒绝门，不再因真实候选刚生成而自相矛盾。
+- **G11-E04 外部条件已登记**：EXT04=PROVIDED（本次 DeepSeek 真实测试人民币 10 元硬上限）、EXT10=PROVIDED（本次合成/最小必要字段外发许可，不代表真实学生材料已提供）、EXT11=PROVIDED（Windows 11 Pro 上 WPS Office Commercial 12.1.0.28022；Microsoft Office 未提供）。只有实际执行并绑定新候选的对应案例可 PASS/FAIL。
+- **E04 仍阻断**：EXT02/03/05/06/07/08/09 继续 NOT_PROVIDED；DeepSeek 不满足冻结 AI-001 的 Grok 定义，GPT 合成材料/自审不满足合法现用教材/真人教师专业复核，当前主机不冒充干净标准用户 VM。
+- **E04 发行链已刷新**：隔离候选后 `release:evidence`/`release:sbom` 退出 0，`release:verify` 按预期退出 2；状态仍为 `BLOCKED / RELEASE_ARTIFACT_MISSING`，缺口 12。EXT04/10/11 的登记只减少外部输入缺口，没有把任何未执行案例改成 PASS。
+- **E04 验证**：全量 **629 passed / 1 skipped（630 total，68 files）**，合同与 diff 通过；既有告警/跳过项未改写。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。

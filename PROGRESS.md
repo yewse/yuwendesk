@@ -268,6 +268,15 @@
 - [x] **测试隔离**：G11 的缺失候选测试改用独立 fixture；60+24+170 静态覆盖测试不再读取可变的 ignored 候选或历史生成报告，避免实际候选出现时测试自相矛盾，同时保留派生篡改/伪造 RELEASE_READY 拒绝断言。
 - **验证状态**：新增 2 项来源绑定/漂移回归已先 RED 后 GREEN；G11/打包定向 **53/53**，全量 Vitest **629 passed / 1 skipped（630 total，68 files）**；typecheck、lint、合同、desktop build、Node 语法检查与 `git diff --check` 均退出 0。本包提交前不会生成正式固定候选；提交后必须用 `npm run build:candidate` 重新生成并再跑完整回归/追加验收。
 
+## G11-E04 已提供外部条件登记 — 已登记，实际案例待新候选执行
+
+- [x] **预算（EXT04）**：登记用户授权本次 DeepSeek 真实测试人民币 **10 元硬上限**；密钥仍不进入目录。此项只解除费用输入缺口，不把 DeepSeek 冒充冻结 `AI-001` 所要求的 Grok。
+- [x] **隐私授权（EXT10）**：登记本次合成/最小必要字段外发许可。未提供真实学生材料，故只对实际执行且证明必要字段边界的案例有意义；不得推导教学有效或真实学生资料覆盖。
+- [x] **WPS 环境（EXT11）**：Windows 11 Pro 已核实安装 **WPS Office Commercial 12.1.0.28022**。Microsoft Office 未提供；只有在该 WPS 中对新候选生成文件实际打开/编辑/保存/分页/放映并绑定证据的案例才可 PASS/FAIL，其余继续 NOT_RUN/BLOCKED。
+- **仍未提供**：EXT02 干净标准用户 VM、EXT03 Grok 账户、EXT05 合法现用教材、EXT06 真实班级/课长/设备/进度、EXT07 签名身份、EXT08 分发地址、EXT09 真人教师专业复核。GPT 合成/自审不替代 EXT05/EXT09。
+- **发行证据刷新**：候选保持隔离时按规定执行 `release:evidence → release:sbom → release:verify`，前两项退出 0，最终验证按预期退出 2；仍为 `BLOCKED / RELEASE_ARTIFACT_MISSING`，正式环境、签名、干净 Windows、分发与缺陷审计门未关闭。外部缺口因真实登记由 15 降至 12，不等于案例已通过。
+- **E04 验证**：全量 Vitest **629 passed / 1 skipped（630 total，68 files）**，合同与 `git diff --check` 退出 0；既有 pdfjs/canvas/字体告警和环境跳过项保持原样。
+
 ## 下一步
 
 见 `HANDOFF.md`。G10 与 G11 四个本地工程包均已完成，不重做 G00–G11 或篡改冻结定义。下一步是外部门闭环：在锁定环境生成新候选，并补齐干净 Win11 8GB/SSD、正式签名/时间戳、可信分发身份、Office/WPS、真实 API/预算、学生资料隐私授权/逐次外发许可、缺陷审计和教学专业复核。缺输入继续标 `BLOCKED_EXTERNAL`；完成后创建绑定同一候选 commit 的追加验收运行，不覆盖本次 BLOCKED/NOT_RUN 记录。

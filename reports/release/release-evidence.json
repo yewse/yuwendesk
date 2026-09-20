@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T17:30:54.664Z",
+  "generatedAt": "2026-09-20T18:36:02.503Z",
   "sourceCommit": "b5dba42579cbb325e1b3cbeadc582865256f88e4",
   "acceptanceRun": {
     "runId": "run-20260920-b5dba42-01",
@@ -33,8 +33,8 @@
     "artifactSigned": false,
     "distributionAuthorized": false,
     "controlledTrialAuthorized": false,
-    "dataBoundaryApproved": false,
-    "costBoundaryApproved": false,
+    "dataBoundaryApproved": true,
+    "costBoundaryApproved": true,
     "defectAuditStatus": "NOT_RUN"
   },
   "caseSummary": {
@@ -2058,9 +2058,9 @@
     },
     {
       "id": "EXT04",
-      "status": "NOT_PROVIDED",
+      "status": "PROVIDED",
       "description": "开发、真实测试与运行费用上限",
-      "ownerAction": "确认明确金额与币种",
+      "ownerAction": "用户于 2026-09-21 授权本次 DeepSeek 实测人民币 10 元硬上限；应用继续按 1000 分 fail-closed",
       "blocks": [
         "付费网络调用"
       ]
@@ -2112,9 +2112,9 @@
     },
     {
       "id": "EXT10",
-      "status": "NOT_PROVIDED",
+      "status": "PROVIDED",
       "description": "真实学生资料处理授权与每次必要字段外发许可",
-      "ownerAction": "由资料责任方明确本地处理范围；每次云端外发前确认必要字段，禁止把真实正文贴入仓库或提示词",
+      "ownerAction": "用户于 2026-09-21 明确授权本次合成/最小必要字段外发；不等于已提供真实学生材料，也不替代逐项证据与教学复核",
       "blocks": [
         "G08真实模型辅助归因",
         "G11隐私验收"
@@ -2122,9 +2122,9 @@
     },
     {
       "id": "EXT11",
-      "status": "NOT_PROVIDED",
+      "status": "PROVIDED",
       "description": "实际支持版本的 Microsoft Office 与 WPS 兼容性环境",
-      "ownerAction": "提供受控测试环境，分别执行打开、编辑、保存、分页和放映验证",
+      "ownerAction": "Windows 11 Pro 主机已核实 WPS Office Commercial 12.1.0.28022；Microsoft Office 未提供，案例仅按实际 WPS 执行结果判定",
       "blocks": [
         "G06真实成品保真",
         "G10正式导出性能",
@@ -2168,8 +2168,8 @@
     },
     {
       "path": "planning/EXTERNAL_INPUTS.json",
-      "sha256": "b21cb1eea71a068b113aadc155e33cffb08ad6f1cced25568caea71fa7381fd3",
-      "sizeBytes": 3581
+      "sha256": "cf3c30e232aa3739332947ac89780b5b77609add27d2f1b7ca864c077b51f582",
+      "sizeBytes": 3719
     },
     {
       "path": "planning/g11-acceptance-map.json",
@@ -2235,16 +2235,6 @@
       "safeAction": "通过秘密管理/图形设置配置，禁止贴进仓库"
     },
     {
-      "gapId": "EXTERNAL_EXT04",
-      "scope": "付费网络调用",
-      "status": "BLOCKED",
-      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
-      "externalInputIds": [
-        "EXT04"
-      ],
-      "safeAction": "确认明确金额与币种"
-    },
-    {
       "gapId": "EXTERNAL_EXT05",
       "scope": "真实内容覆盖",
       "status": "BLOCKED",
@@ -2293,26 +2283,6 @@
         "EXT09"
       ],
       "safeAction": "正常教学中的必要判断，不要求日常填表"
-    },
-    {
-      "gapId": "EXTERNAL_EXT10",
-      "scope": "G08真实模型辅助归因；G11隐私验收",
-      "status": "BLOCKED",
-      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
-      "externalInputIds": [
-        "EXT10"
-      ],
-      "safeAction": "由资料责任方明确本地处理范围；每次云端外发前确认必要字段，禁止把真实正文贴入仓库或提示词"
-    },
-    {
-      "gapId": "EXTERNAL_EXT11",
-      "scope": "G06真实成品保真；G10正式导出性能；G11兼容性验收",
-      "status": "BLOCKED",
-      "blockerCode": "BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED",
-      "externalInputIds": [
-        "EXT11"
-      ],
-      "safeAction": "提供受控测试环境，分别执行打开、编辑、保存、分页和放映验证"
     },
     {
       "gapId": "FORMAL_CASES_NOT_RUN",
