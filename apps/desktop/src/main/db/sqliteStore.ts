@@ -274,6 +274,32 @@ const MIGRATIONS: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_job_cache ON model_job(cache_key);
       `);
     }
+  },
+  {
+    version: 7,
+    up: (db) => {
+      // G05 完整课时计划持久化（含修订链与内容来源身份）。
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS lesson_plan (
+          plan_id            TEXT PRIMARY KEY,
+          current_revision_id TEXT,
+          title              TEXT NOT NULL,
+          created_at         TEXT NOT NULL,
+          updated_at         TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS lesson_revision (
+          revision_id          TEXT PRIMARY KEY,
+          plan_id              TEXT NOT NULL,
+          previous_revision_id TEXT,
+          title                TEXT NOT NULL,
+          content_json         TEXT NOT NULL,
+          content_origin       TEXT NOT NULL,
+          valid                INTEGER NOT NULL,
+          created_at           TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_revision_plan ON lesson_revision(plan_id);
+      `);
+    }
   }
 ];
 
@@ -1089,6 +1115,39 @@ export class SqliteStore {
         )
         .all(documentId) as (Omit<SourceVersionItem, 'isCurrent' | 'scanned' | 'reliableText'> & { scanned: number; reliableText: number })[]
     ).map((v) => ({ ...v, scanned: v.scanned === 1, reliableText: v.reliableText === 1, isCurrent: v.versionId === cur }));
+  }
+
+  // ===== G05 课时计划持久化 =====
+  saveLessonRevision(rec: import('../store').LessonRevisionRecord, makeCurrent: boolean): void {
+    this.assertWritable();
+    const db = this.requireDb();
+    const now = new Date().toISOString();
+    const tx = db.transaction(() => {
+      db.prepare(
+        'INSERT INTO lesson_revision(revision_id,plan_id,previous_revision_id,title,content_json,content_origin,valid,created_at) VALUES(?,?,?,?,?,?,?,?)'
+      ).run(rec.revisionId, rec.planId, rec.previousRevisionId, rec.title, rec.contentJson, rec.contentOrigin, rec.valid ? 1 : 0, rec.createdAt || now);
+      const exists = db.prepare('SELECT 1 FROM lesson_plan WHERE plan_id=?').get(rec.planId);
+      if (exists) {
+        if (makeCurrent) db.prepare('UPDATE lesson_plan SET current_revision_id=?, title=?, updated_at=? WHERE plan_id=?').run(rec.revisionId, rec.title, now, rec.planId);
+        else db.prepare('UPDATE lesson_plan SET updated_at=? WHERE plan_id=?').run(now, rec.planId);
+      } else {
+        db.prepare('INSERT INTO lesson_plan(plan_id,current_revision_id,title,created_at,updated_at) VALUES(?,?,?,?,?)').run(rec.planId, makeCurrent ? rec.revisionId : null, rec.title, now, now);
+      }
+    });
+    tx.immediate();
+  }
+  getLessonRevision(planId: string, revisionId?: string): import('../store').LessonRevisionRecord | null {
+    if (!this.db) return null;
+    const rid = revisionId ?? (this.db.prepare('SELECT current_revision_id r FROM lesson_plan WHERE plan_id=?').get(planId) as { r: string | null } | undefined)?.r;
+    if (!rid) return null;
+    const row = this.db
+      .prepare('SELECT revision_id revisionId, plan_id planId, previous_revision_id previousRevisionId, title, content_json contentJson, content_origin contentOrigin, valid, created_at createdAt FROM lesson_revision WHERE revision_id=?')
+      .get(rid) as (Omit<import('../store').LessonRevisionRecord, 'valid'> & { valid: number }) | undefined;
+    return row ? { ...row, valid: row.valid === 1 } : null;
+  }
+  listLessonPlans(): import('../store').LessonPlanListItem[] {
+    if (!this.db) return [];
+    return this.db.prepare('SELECT plan_id planId, title, current_revision_id currentRevisionId, updated_at updatedAt FROM lesson_plan ORDER BY updated_at DESC').all() as import('../store').LessonPlanListItem[];
   }
 
   // ===== G04 模型配置/作业持久化 =====

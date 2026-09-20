@@ -204,6 +204,29 @@ export interface ModelJobRecord {
   createdAt: string;
   updatedAt: string;
 }
+// ===== G05 课时计划持久化 =====
+export interface LessonRevisionRecord {
+  revisionId: string;
+  planId: string;
+  previousRevisionId: string | null;
+  title: string;
+  contentJson: string;
+  contentOrigin: string;
+  valid: boolean;
+  createdAt: string;
+}
+export interface LessonPlanListItem {
+  planId: string;
+  title: string;
+  currentRevisionId: string | null;
+  updatedAt: string;
+}
+export interface LessonStore {
+  saveLessonRevision(rec: LessonRevisionRecord, makeCurrent: boolean): void;
+  getLessonRevision(planId: string, revisionId?: string): LessonRevisionRecord | null;
+  listLessonPlans(): LessonPlanListItem[];
+}
+
 export interface ModelStore {
   getModelConfig(): ModelConfig | null;
   setModelConfig(cfg: ModelConfig): void;
