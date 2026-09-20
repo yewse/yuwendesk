@@ -12,11 +12,13 @@ import {
   inspectCandidateArtifact,
   loadCandidateBuildProvenance,
   loadAcceptanceDefinitions,
+  normalizeVitestReport,
   npmCliPathForNodeExecutable,
   recoverJsonSetAtomic,
   validateAcceptanceMap,
   validateAcceptanceRun,
   validateExternalEvidenceInput,
+  validateNormalizedVitest,
   writeJsonAtomic,
   writeJsonSetAtomic
 } from '../../../scripts/lib/g11-acceptance.mjs';
@@ -80,6 +82,57 @@ afterEach(() => {
 });
 
 describe('G11-T01 acceptance definition and map boundary', () => {
+  it('retains every failed test identity without persisting failure messages or stacks', () => {
+    const selected = new Set(['tests/selected.test.ts\0selected case']);
+    const report = normalizeVitestReport({
+      raw: {
+        success: false,
+        numTotalTests: 2,
+        numPassedTests: 1,
+        numFailedTests: 1,
+        numPendingTests: 0,
+        testResults: [
+          {
+            name: join(root, 'apps', 'desktop', 'tests', 'selected.test.ts'),
+            assertionResults: [{
+              title: 'selected case', fullName: 'selected case', status: 'passed', duration: 4, failureMessages: []
+            }]
+          },
+          {
+            name: join(root, 'apps', 'desktop', 'tests', 'unmapped.test.ts'),
+            assertionResults: [{
+              title: 'unmapped failure', fullName: 'suite unmapped failure', status: 'failed', duration: 9,
+              failureMessages: ['api_key=do-not-persist\n    at C:\\Users\\teacher\\private.ts:1:1']
+            }]
+          }
+        ]
+      },
+      exitCode: 1,
+      startedAt: '2026-09-20T00:00:00.000Z',
+      completedAt: '2026-09-20T00:00:10.000Z',
+      command: 'node vitest run',
+      selectedKeys: selected,
+      runId: 'run-20260920-abcdef0-01',
+      sourceCommit: 'abcdef0123456789',
+      repositoryDirty: false,
+      desktopRoot: join(root, 'apps', 'desktop')
+    });
+
+    expect(report.assertions).toEqual([expect.objectContaining({
+      testFile: 'tests/selected.test.ts', fullName: 'selected case', status: 'passed'
+    })]);
+    expect(report.failedAssertions).toEqual([{
+      testFile: 'tests/unmapped.test.ts',
+      testName: 'unmapped failure',
+      fullName: 'suite unmapped failure',
+      status: 'failed',
+      failureCount: 1
+    }]);
+    expect(JSON.stringify(report)).not.toContain('do-not-persist');
+    expect(JSON.stringify(report)).not.toContain('Users');
+    expect(validateNormalizedVitest(report)).toBe(true);
+  });
+
   it('invokes npm through its JavaScript CLI without a Windows command shell', () => {
     const outcome = spawnSync(process.execPath, [npmCliPathForNodeExecutable(process.execPath), '--version'], {
       encoding: 'utf8',

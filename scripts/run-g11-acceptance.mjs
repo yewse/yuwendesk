@@ -11,12 +11,14 @@ import {
   inspectCandidateArtifact,
   loadCandidateBuildProvenance,
   loadAcceptanceDefinitions,
+  normalizeVitestReport,
   npmCliPathForNodeExecutable,
   recoverJsonSetAtomic,
   validateCandidateArtifact,
   validateAcceptanceMap,
   validateAcceptanceRun,
   validateExternalEvidenceInput,
+  validateNormalizedVitest,
   writeJsonAtomic,
   writeJsonSetAtomic
 } from './lib/g11-acceptance.mjs';
@@ -70,10 +72,6 @@ function nextRunId(date, sourceCommit) {
   throw new Error('ACCEPTANCE_RUN_SEQUENCE_EXHAUSTED');
 }
 
-function normalizeTestFile(absoluteName) {
-  return relative(desktopRoot, absoluteName).replaceAll('\\', '/');
-}
-
 function externalEvidenceArgument(argv) {
   if (argv.length === 0) return null;
   if (argv.length !== 2 || argv[0] !== '--external-evidence' || argv[1].length === 0) {
@@ -89,64 +87,6 @@ function externalEvidenceArgument(argv) {
     throw new Error('EXTERNAL_EVIDENCE_PATH_REJECTED');
   }
   return requestedReal;
-}
-
-function normalizeVitestReport(
-  raw, exitCode, startedAt, completedAt, command, selectedKeys, runId, sourceCommit, repositoryDirty
-) {
-  const assertions = [];
-  for (const fileResult of raw.testResults ?? []) {
-    const testFile = normalizeTestFile(fileResult.name);
-    for (const assertion of fileResult.assertionResults ?? []) {
-      if (!selectedKeys.has(`${testFile}\0${assertion.fullName}`)) continue;
-      assertions.push({
-        testFile,
-        testName: assertion.title,
-        fullName: assertion.fullName,
-        status: assertion.status,
-        durationMs: typeof assertion.duration === 'number' ? assertion.duration : null,
-        failureCount: Array.isArray(assertion.failureMessages) ? assertion.failureMessages.length : 0
-      });
-    }
-  }
-  assertions.sort((left, right) =>
-    left.testFile.localeCompare(right.testFile, 'en') || left.testName.localeCompare(right.testName, 'en'));
-  return {
-    schemaVersion: 1,
-    runId,
-    sourceCommit,
-    repositoryDirty,
-    startedAt,
-    completedAt,
-    command,
-    exitCode,
-    success: raw.success === true && exitCode === 0,
-    counts: {
-      testFiles: Array.isArray(raw.testResults) ? raw.testResults.length : 0,
-      tests: raw.numTotalTests ?? assertions.length,
-      passed: raw.numPassedTests ?? assertions.filter((item) => item.status === 'passed').length,
-      failed: raw.numFailedTests ?? assertions.filter((item) => item.status === 'failed').length,
-      pending: raw.numPendingTests ?? assertions.filter((item) => item.status === 'pending').length
-    },
-    assertions
-  };
-}
-
-function validateNormalizedVitest(value) {
-  if (value?.schemaVersion !== 1 || !/^run-\d{8}-[a-f0-9]{7}-\d{2}$/.test(value?.runId ?? '') ||
-      !/^[a-f0-9]{7,64}$/.test(value?.sourceCommit ?? '') || typeof value?.repositoryDirty !== 'boolean' ||
-      typeof value?.command !== 'string' || value.command.length === 0 ||
-      !Array.isArray(value?.assertions)) return false;
-  const keys = new Set();
-  for (const item of value.assertions) {
-    if (!/^tests\/[A-Za-z0-9._/-]+\.test\.ts$/.test(item.testFile ?? '') || item.testFile.includes('..') ||
-        typeof item.testName !== 'string' || typeof item.fullName !== 'string' ||
-        !['passed', 'failed', 'pending', 'skipped', 'todo'].includes(item.status)) return false;
-    const key = `${item.testFile}\0${item.fullName}`;
-    if (keys.has(key)) return false;
-    keys.add(key);
-  }
-  return true;
 }
 
 const started = new Date();
@@ -212,10 +152,18 @@ try {
   if (!existsSync(rawPath)) throw new Error(`VITEST_JSON_MISSING:${vitestOutcome.stderr.trim()}`);
   const rawReport = JSON.parse(readFileSync(rawPath, 'utf8'));
   const completedAt = new Date().toISOString();
-  const normalizedReport = normalizeVitestReport(
-    rawReport, vitestOutcome.status ?? 1, vitestStartedAt, completedAt, recordedCommand, selectedAssertionKeys,
-    runId, sourceCommit, repositoryDirty
-  );
+  const normalizedReport = normalizeVitestReport({
+    raw: rawReport,
+    exitCode: vitestOutcome.status ?? 1,
+    startedAt: vitestStartedAt,
+    completedAt,
+    command: recordedCommand,
+    selectedKeys: selectedAssertionKeys,
+    runId,
+    sourceCommit,
+    repositoryDirty,
+    desktopRoot
+  });
   writeJsonAtomic({
     targetPath: normalizedPath, value: normalizedReport, validate: validateNormalizedVitest, noClobber: true
   });

@@ -54,6 +54,102 @@ export function npmCliPathForNodeExecutable(nodeExecutable) {
   return resolve(dirname(nodeExecutable), 'node_modules', 'npm', 'bin', 'npm-cli.js');
 }
 
+export function normalizeVitestReport({
+  raw,
+  exitCode,
+  startedAt,
+  completedAt,
+  command,
+  selectedKeys,
+  runId,
+  sourceCommit,
+  repositoryDirty,
+  desktopRoot
+}) {
+  const assertions = [];
+  const failedAssertions = [];
+  for (const fileResult of raw.testResults ?? []) {
+    const testFile = relative(desktopRoot, fileResult.name).replaceAll('\\', '/');
+    for (const assertion of fileResult.assertionResults ?? []) {
+      const normalized = {
+        testFile,
+        testName: assertion.title,
+        fullName: assertion.fullName,
+        status: assertion.status,
+        durationMs: typeof assertion.duration === 'number' ? assertion.duration : null,
+        failureCount: Array.isArray(assertion.failureMessages) ? assertion.failureMessages.length : 0
+      };
+      if (selectedKeys.has(`${testFile}\0${assertion.fullName}`)) assertions.push(normalized);
+      if (assertion.status === 'failed') {
+        failedAssertions.push({
+          testFile,
+          testName: assertion.title,
+          fullName: assertion.fullName,
+          status: assertion.status,
+          failureCount: normalized.failureCount
+        });
+      }
+    }
+  }
+  const compareAssertions = (left, right) =>
+    left.testFile.localeCompare(right.testFile, 'en') || left.fullName.localeCompare(right.fullName, 'en');
+  assertions.sort(compareAssertions);
+  failedAssertions.sort(compareAssertions);
+  return {
+    schemaVersion: 1,
+    runId,
+    sourceCommit,
+    repositoryDirty,
+    startedAt,
+    completedAt,
+    command,
+    exitCode,
+    success: raw.success === true && exitCode === 0,
+    counts: {
+      testFiles: Array.isArray(raw.testResults) ? raw.testResults.length : 0,
+      tests: raw.numTotalTests ?? assertions.length,
+      passed: raw.numPassedTests ?? assertions.filter((item) => item.status === 'passed').length,
+      failed: raw.numFailedTests ?? failedAssertions.length,
+      pending: raw.numPendingTests ?? assertions.filter((item) => item.status === 'pending').length
+    },
+    assertions,
+    failedAssertions
+  };
+}
+
+export function validateNormalizedVitest(value) {
+  if (value?.schemaVersion !== 1 || !/^run-\d{8}-[a-f0-9]{7}-\d{2}$/.test(value?.runId ?? '') ||
+      !/^[a-f0-9]{7,64}$/.test(value?.sourceCommit ?? '') || typeof value?.repositoryDirty !== 'boolean' ||
+      typeof value?.command !== 'string' || value.command.length === 0 ||
+      !Array.isArray(value?.assertions) || !Array.isArray(value?.failedAssertions)) return false;
+  const validateAssertion = (item, failedOnly) => {
+    const expectedKeys = failedOnly
+      ? new Set(['testFile', 'testName', 'fullName', 'status', 'failureCount'])
+      : new Set(['testFile', 'testName', 'fullName', 'status', 'durationMs', 'failureCount']);
+    return hasOnlyKeys(item, expectedKeys) &&
+      /^tests\/[A-Za-z0-9._/-]+\.test\.ts$/.test(item.testFile ?? '') && !item.testFile.includes('..') &&
+      typeof item.testName === 'string' && typeof item.fullName === 'string' &&
+      (!failedOnly || item.status === 'failed') &&
+      ['passed', 'failed', 'pending', 'skipped', 'todo'].includes(item.status) &&
+      Number.isSafeInteger(item.failureCount) && item.failureCount >= 0;
+  };
+  const keys = new Set();
+  for (const item of value.assertions) {
+    if (!validateAssertion(item, false)) return false;
+    const key = `${item.testFile}\0${item.fullName}`;
+    if (keys.has(key)) return false;
+    keys.add(key);
+  }
+  const failedKeys = new Set();
+  for (const item of value.failedAssertions) {
+    if (!validateAssertion(item, true)) return false;
+    const key = `${item.testFile}\0${item.fullName}`;
+    if (failedKeys.has(key)) return false;
+    failedKeys.add(key);
+  }
+  return true;
+}
+
 const MAP_MODES = new Set(['automation', 'external', 'not_run']);
 const EVIDENCE_LEVEL_SET = new Set(EVIDENCE_LEVELS);
 const CASE_STATUS_SET = new Set(CASE_STATUSES);

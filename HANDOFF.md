@@ -50,6 +50,9 @@
 - **E05 验证**：白名单回归先 RED 后 GREEN；全量 **630 passed / 1 skipped（631 total，68 files）**，typecheck/lint/contracts/build/Node 语法/diff 全通过。
 - **G11-E06 clean-source 复验**：`10c4908` 候选 131,024,554 bytes / SHA-256 `7188f17a5e5f2e8fec41556b7c339e49a9a7841a5649d638ba0b51f126ac22fc`；`run-20260920-10c4908-01` 为 clean run，6/0/38/126。`release:evidence` 已从误报 SOURCE_DIRTY 修正为真实 `RELEASE_WINDOWS_EVIDENCE_REQUIRED`。
 - **E06 待定位**：随后 `release:sbom` 在八文件事务的提交前派生复核中报错并回滚；只有预先 dirty 时可完成，指向事务临时文件遗漏。已增加只返回仓库相对路径的诊断和首个 JSON 差异路径，不改变发行合同；提交后用 clean source 重现，按精确路径修复，不允许整个目录。
+- **G11-E07 历史失败已保全**：`b3d384f` 候选 131,024,555 bytes / SHA-256 `29d19d1a4fd412a24159d6f81a29360759e77de90a29f10fcffd32e3009d7584`；`run-20260920-b3d384f-01` 的完整 Vitest 命令实际有 1 项失败，因此按既有命令组规则记录 0/6/38/126。随后独立全量复跑为 630 passed / 1 skipped，不能倒改历史 FAIL。
+- **E07 诊断修复**：归一化 Vitest 证据新增 `failedAssertions`，只含失败测试的仓库相对文件、名称、状态和计数；不含 failure message、堆栈、绝对路径或环境值。未来偶发失败可定位，验收判定规则未放宽。DeepSeek 密钥仍未进入工具命令/仓库；当前没有安全秘密注入通道。CUA 无原生应用入口，WPS 实际操作仍未执行。
+- **E07 当前验证**：新增回归后全量 631 passed / 1 skipped（632 total，68 files），typecheck/lint/contracts/diff 均通过。发行链忠实保留 `RELEASE_REQUIRED_CASE_FAILED`，签名 `UNSIGNED`、13 个缺口，最终验证退出 2。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -97,9 +100,9 @@ npm run build:candidate
 
 ## 下一个有界工作包建议
 
-1. 提交 G11-E03 后运行 `npm run build:candidate`，从该 clean commit 重建带来源记录的未签名工程候选；不得复用任何 provisional/历史 EXE 或哈希。
-2. 对同一候选执行 DeepSeek 最小真实调用和 WPS 商业版打开/编辑/保存/分页/放映；密钥只进受保护应用输入，证据不得含密钥。
-3. 生成新的追加验收运行；只提升实际满足原定义的案例。干净标准用户 VM、Grok 旧定义、合法现用教材、真人教师复核、签名与分发继续保持阻断，随后重新运行发行证据链。
+1. 提交 E07 后运行 `npm run build:candidate`，从该 clean commit 重建带来源记录的未签名工程候选；不得复用历史 EXE 或哈希。
+2. 创建新的追加验收运行；若再失败，使用新 `failedAssertions` 精确定位，不删除或覆盖任一历史运行。
+3. 在 clean source 上运行完整发行证据链，使用 E06 诊断修复事务期间的精确 dirty path。真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。其余外部门继续阻断。
 
 ## 重要纪律
 

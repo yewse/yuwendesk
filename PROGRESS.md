@@ -290,6 +290,14 @@
 - [x] **E05 修复已证实**：`release:evidence` 首次在候选+新增 Vitest 证据存在时得到 `sourceTreeClean=true`，发行理由从错误的 `RELEASE_SOURCE_DIRTY` 变为真实的 `RELEASE_WINDOWS_EVIDENCE_REQUIRED`。
 - **新发现且未伪造通过**：紧接的 `release:sbom` 在八文件原子发布的 `beforeCommit` 自校验中报 `RELEASE_AGGREGATE_DERIVATION_MISMATCH` 并完整回滚；工作树预先 dirty 时该链可完成，表明差异来自事务期间的临时 Git 状态。新增非秘密诊断：`inspectRepositoryProvenance` 返回仓库相对 dirty paths，派生不一致报告首个 JSON 路径和精确 dirty path；不把诊断字段写入发行证据合同。提交后将以 clean source 重现并修复精确遗漏，不放宽目录级白名单。
 
+## G11-E07 失败验收保全与安全诊断 — 历史失败保留，诊断已补强
+
+- [x] **失败运行不覆盖**：`b3d384f03d07f5b44fd801197f2c02d70d12e54f` 的 clean 候选为 **131,024,555 bytes**、SHA-256 `29d19d1a4fd412a24159d6f81a29360759e77de90a29f10fcffd32e3009d7584`。`run-20260920-b3d384f-01` 实际执行时完整 Vitest 命令有 1 项失败，故命令组对应六项如实记录为 **FAIL**，总计 **0 PASS / 6 FAIL / 38 BLOCKED / 126 NOT_RUN**；该追加记录永久保留，不用随后复跑结果覆盖。
+- [x] **复跑事实**：相同源码和当前报告状态下，随后独立全量测试为 **630 passed / 1 skipped（631 total，68 files）**，未复现失败。这只能说明失败非持续性，不能倒改历史运行；原归一化报告只保存映射断言，导致首次失败的测试身份已经不可恢复。
+- [x] **最小安全诊断**：runner 今后在保留映射断言之外，额外保存所有失败断言的仓库相对测试文件、测试名、完整名、状态和失败计数；明确不保存 failure message、堆栈、绝对路径或环境值。判定规则未放宽：完整命令非零仍保持对应命令组 FAIL。新增回归先 RED 后 GREEN。
+- **E07 验证与发行实况**：新增测试后全量为 **631 passed / 1 skipped（632 total，68 files）**；typecheck、lint、合同和 diff 均通过。发行链如实聚合历史失败为 `BLOCKED / RELEASE_REQUIRED_CASE_FAILED`，签名实测 `UNSIGNED`，13 个缺口，`release:verify` 按预期退出 2；没有把独立复跑的绿色结果借给失败验收。
+- **外部边界**：DeepSeek 密钥没有写入命令、环境、仓库或证据；当前执行面没有安全秘密注入通道，真实 API 仍未执行。WPS 已安装但当前自动化控制面无原生应用入口，因此 Office/WPS 案例继续 NOT_RUN/BLOCKED，未伪造截图或操作证据。
+
 ## 下一步
 
-见 `HANDOFF.md`。G10 与 G11 四个本地工程包均已完成，不重做 G00–G11 或篡改冻结定义。下一步是外部门闭环：在锁定环境生成新候选，并补齐干净 Win11 8GB/SSD、正式签名/时间戳、可信分发身份、Office/WPS、真实 API/预算、学生资料隐私授权/逐次外发许可、缺陷审计和教学专业复核。缺输入继续标 `BLOCKED_EXTERNAL`；完成后创建绑定同一候选 commit 的追加验收运行，不覆盖本次 BLOCKED/NOT_RUN 记录。
+见 `HANDOFF.md`。提交 E07 后从 clean commit 重建候选并追加运行，以新诊断捕获任何再次发生的失败；随后复现并修复供应链事务的精确 dirty path。能安全实际执行的案例才追加证据；干净标准用户 VM、Grok 定义、签名/时间戳、分发、真人教师复核及当前不可控的 WPS 操作继续 `BLOCKED_EXTERNAL/NOT_RUN`。

@@ -1,10 +1,10 @@
 # 语文备课工作台最终发行状态
 
-- 生成时间：2026-09-20T18:48:12.999Z
-- 源码提交：`10c4908769e6c57f5b34888f48041119bc723b18`
+- 生成时间：2026-09-20T19:00:33.580Z
+- 源码提交：`b3d384f03d07f5b44fd801197f2c02d70d12e54f`
 - 最终判定：`BLOCKED`
-- 判定理由：`RELEASE_SOURCE_DIRTY`
-- 软件工程状态：`BLOCKED`
+- 判定理由：`RELEASE_REQUIRED_CASE_FAILED`
+- 软件工程状态：`FAIL`
 - 资源覆盖状态：`BLOCKED`
 - 教学专业复核：`NOT_REVIEWED`
 - 制品类别：`UNSIGNED_TEST_BUILD`
@@ -13,7 +13,7 @@
 
 - 固定候选路径：`apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe`
 - 候选存在：是
-- 候选 SHA-256：7188f17a5e5f2e8fec41556b7c339e49a9a7841a5649d638ba0b51f126ac22fc
+- 候选 SHA-256：29d19d1a4fd412a24159d6f81a29360759e77de90a29f10fcffd32e3009d7584
 - SBOM：`PASS`
 - 校验清单：`PASS`；路径 `reports/release/SHA256SUMS.txt`
 - 签名：`UNSIGNED`
@@ -32,6 +32,7 @@
 - `BLOCKED_EXTERNAL_INPUT_NOT_PROVIDED`｜G04真实联网｜BLOCKED｜通过秘密管理/图形设置配置，禁止贴进仓库
 - `RELEASE_DEFECT_AUDIT_REQUIRED`｜P0/P1 已知缺陷审计｜NOT_RUN｜在候选 commit 上完成缺陷审计；空 items 只有在 COMPLETE 时才表示未发现已知缺陷。
 - `RELEASE_FORMAL_ENVIRONMENT_MISMATCH`｜SBOM 生成工具链与 ENV_LOCK.json 锁定版本不一致｜BLOCKED｜在 ENV_LOCK.json 锁定的 Node/npm 环境重新生成供应链证据；当前 SBOM 仅作工程证据。
+- `RELEASE_REQUIRED_CASE_FAILED`｜DAT-005、JOB-003、JOB-006、JOB-007、SEC-009、UPD-001｜BLOCKED｜保留失败证据，修复根因后创建新的追加验收运行；不得把 FAIL 改写为 BLOCKED 或 PASS。
 - `RELEASE_REQUIRED_GATE_OPEN`｜尚未执行的正式验收案例｜NOT_RUN｜在对应证据层级创建新的追加验收运行；不得改写历史 NOT_RUN。
 - `RELEASE_SIGNATURE_MISSING`｜reports/release/signing-status.json｜BLOCKED｜由获授权的发布身份签名固定候选并加入可信时间戳，再重新检查。
 - `RELEASE_SOURCE_DIRTY`｜验收运行无法唯一绑定 sourceCommit｜BLOCKED｜在干净工作树对同一候选 commit 创建新的追加验收运行；不得改写本次 dirty 运行。

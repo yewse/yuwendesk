@@ -1,6 +1,6 @@
 # 已知限制与未关闭发行门
 
-当前发行判定：`BLOCKED`（`RELEASE_SOURCE_DIRTY`）。
+当前发行判定：`BLOCKED`（`RELEASE_REQUIRED_CASE_FAILED`）。
 
 校验清单：`reports/release/SHA256SUMS.txt`。本文件不嵌入该清单自身的哈希。
 
@@ -77,6 +77,14 @@
 - 状态：BLOCKED
 - 外部输入：无
 - 安全下一步：在 ENV_LOCK.json 锁定的 Node/npm 环境重新生成供应链证据；当前 SBOM 仅作工程证据。
+
+## REQUIRED_CASE_FAILURES
+
+- 阻断码：`RELEASE_REQUIRED_CASE_FAILED`
+- 范围：DAT-005、JOB-003、JOB-006、JOB-007、SEC-009、UPD-001
+- 状态：BLOCKED
+- 外部输入：无
+- 安全下一步：保留失败证据，修复根因后创建新的追加验收运行；不得把 FAIL 改写为 BLOCKED 或 PASS。
 
 ## FORMAL_CASES_NOT_RUN
 
