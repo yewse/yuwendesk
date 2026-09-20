@@ -88,6 +88,18 @@ function assertSafeReleaseOutput(value) {
   if (containsSensitiveOutput(value)) fail('RELEASE_PRIVACY_VIOLATION');
 }
 
+function firstDifferencePath(left, right, path = '$') {
+  if (JSON.stringify(left) === JSON.stringify(right)) return null;
+  if (left !== null && right !== null && typeof left === 'object' && typeof right === 'object') {
+    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+    for (const key of keys) {
+      const difference = firstDifferencePath(left[key], right[key], `${path}.${key}`);
+      if (difference !== null) return difference;
+    }
+  }
+  return path;
+}
+
 function isWithin(parent, child) {
   const path = relative(parent, child);
   return path === '' || (!path.startsWith(`..${sep}`) && path !== '..' && !isAbsolute(path));
@@ -113,10 +125,14 @@ export function inspectRepositoryProvenance({ root, sourceCommit, allowedDirtyPa
     ...normalizedAllowed.map((path) => `:(exclude)${path}`)
   ]);
   const head = headResult.status === 0 ? headResult.stdout.trim().toLowerCase() : null;
+  const dirtyPaths = statusResult.status === 0
+    ? statusResult.stdout.split(/\r?\n/u).filter(Boolean).map((line) => line.slice(3)).sort()
+    : ['<git-status-failed>'];
   return {
     head,
     headMatchesSource: typeof sourceCommit === 'string' && head === sourceCommit.toLowerCase(),
-    relevantTreeClean: statusResult.status === 0 && statusResult.stdout.length === 0
+    relevantTreeClean: dirtyPaths.length === 0,
+    dirtyPaths
   };
 }
 
@@ -783,10 +799,14 @@ export function validateReleaseEvidence({ root, evidence }) {
   if (existsSync(releaseInputPath)) {
     try {
       const releaseInput = JSON.parse(readFileSync(releaseInputPath, 'utf8'));
-      const expected = aggregateReleaseEvidence(loadReleaseAggregationInputs({
-        root, releaseInput, generatedAt: evidence.generatedAt
-      }));
-      if (JSON.stringify(expected) !== JSON.stringify(evidence)) add('RELEASE_AGGREGATE_DERIVATION_MISMATCH');
+      const expectedInput = loadReleaseAggregationInputs({ root, releaseInput, generatedAt: evidence.generatedAt });
+      const expected = aggregateReleaseEvidence(expectedInput);
+      if (JSON.stringify(expected) !== JSON.stringify(evidence)) {
+        const difference = firstDifferencePath(evidence, expected) ?? 'unknown';
+        const dirtyPaths = expectedInput.repositoryProvenance.dirtyPaths ?? [];
+        add('RELEASE_AGGREGATE_DERIVATION_MISMATCH',
+          dirtyPaths.length > 0 ? `${difference}:${dirtyPaths.join('|')}` : difference);
+      }
     } catch (cause) {
       add('RELEASE_AGGREGATE_DERIVATION_MISMATCH', cause.message);
     }

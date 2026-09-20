@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T18:40:39.654Z",
-  "sourceCommit": "e126a1a82c88420cfe26395c0ffd00496f5b8639",
+  "generatedAt": "2026-09-20T18:48:12.999Z",
+  "sourceCommit": "10c4908769e6c57f5b34888f48041119bc723b18",
   "command": "npm sbom --package-lock-only --sbom-format=cyclonedx --sbom-type=application",
   "validationStatus": "PASS",
   "sbomSpecVersion": "1.5",
@@ -17,7 +17,7 @@
     "node": "22.14.0",
     "npm": "10.9.7"
   },
-  "repositoryHead": "e126a1a82c88420cfe26395c0ffd00496f5b8639",
+  "repositoryHead": "10c4908769e6c57f5b34888f48041119bc723b18",
   "sourceCommitMatch": true,
   "sourceTreeClean": false,
   "formalEnvironmentMatch": false

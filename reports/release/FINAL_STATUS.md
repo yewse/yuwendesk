@@ -1,7 +1,7 @@
 # 语文备课工作台最终发行状态
 
-- 生成时间：2026-09-20T18:40:39.654Z
-- 源码提交：`e126a1a82c88420cfe26395c0ffd00496f5b8639`
+- 生成时间：2026-09-20T18:48:12.999Z
+- 源码提交：`10c4908769e6c57f5b34888f48041119bc723b18`
 - 最终判定：`BLOCKED`
 - 判定理由：`RELEASE_SOURCE_DIRTY`
 - 软件工程状态：`BLOCKED`
@@ -13,7 +13,7 @@
 
 - 固定候选路径：`apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe`
 - 候选存在：是
-- 候选 SHA-256：0f0b5ba1f980fa37791ca144b0e2b36bad611701fa2248c7fabf1be82136d6e9
+- 候选 SHA-256：7188f17a5e5f2e8fec41556b7c339e49a9a7841a5649d638ba0b51f126ac22fc
 - SBOM：`PASS`
 - 校验清单：`PASS`；路径 `reports/release/SHA256SUMS.txt`
 - 签名：`UNSIGNED`

@@ -247,11 +247,13 @@ describe('G11-T02 release aggregation boundary', () => {
     }).relevantTreeClean).toBe(false);
 
     writeFileSync(join(fixtureRoot, 'scripts', 'verify.mjs'), 'export const ok = false;\n', 'utf8');
-    expect(inspectRepositoryProvenance({
+    const dirty = inspectRepositoryProvenance({
       root: fixtureRoot,
       sourceCommit: head,
       allowedDirtyPaths: ['reports/release/release-evidence.json']
-    }).relevantTreeClean).toBe(false);
+    });
+    expect(dirty.relevantTreeClean).toBe(false);
+    expect(dirty.dirtyPaths).toContain('scripts/verify.mjs');
   });
 
   it('rejects unsafe paths while deduplicating exact acceptance evidence files', () => {
@@ -543,6 +545,9 @@ describe('G11-T02 release aggregation boundary', () => {
     changedMapping.requirements.base[0].caseIds = [evidence.cases[1].caseId];
     expect(validateReleaseEvidence({ root, evidence: changedMapping }).errors
       .map((error: { code: string }) => error.code)).toContain('RELEASE_AGGREGATE_DERIVATION_MISMATCH');
+    expect(validateReleaseEvidence({ root, evidence: changedMapping }).errors
+      .find((error: { code: string; detail: string }) => error.code === 'RELEASE_AGGREGATE_DERIVATION_MISMATCH')
+      ?.detail).toMatch(/^\$/u);
 
     const forgedReady = structuredClone(evidence);
     forgedReady.requirements.base.pop();

@@ -48,6 +48,8 @@
 - **G11-E05 已追加一轮候选绑定验收**：`run-20260920-e126a1a-01` 绑定 clean commit `e126a1a82c88420cfe26395c0ffd00496f5b8639` 和 131,024,555-byte 未签名候选（SHA-256 `0f0b5ba1f980fa37791ca144b0e2b36bad611701fa2248c7fabf1be82136d6e9`），结果 6 PASS / 0 FAIL / 38 BLOCKED / 126 NOT_RUN。EXT04/10/11 已提供但外部案例未执行，未自动提升。
 - **E05 精确白名单修复待提交**：发行聚合遗漏本轮 `vitest-run-*.json`，导致误报 SOURCE_DIRTY；现只允许已验证 AcceptanceRun 精确引用的 `reports/acceptance-runs/` 证据路径，仍拒绝未声明邻接文件/绝对/穿越路径。提交后需重建候选并追加下一轮，以验证 clean source 聚合。
 - **E05 验证**：白名单回归先 RED 后 GREEN；全量 **630 passed / 1 skipped（631 total，68 files）**，typecheck/lint/contracts/build/Node 语法/diff 全通过。
+- **G11-E06 clean-source 复验**：`10c4908` 候选 131,024,554 bytes / SHA-256 `7188f17a5e5f2e8fec41556b7c339e49a9a7841a5649d638ba0b51f126ac22fc`；`run-20260920-10c4908-01` 为 clean run，6/0/38/126。`release:evidence` 已从误报 SOURCE_DIRTY 修正为真实 `RELEASE_WINDOWS_EVIDENCE_REQUIRED`。
+- **E06 待定位**：随后 `release:sbom` 在八文件事务的提交前派生复核中报错并回滚；只有预先 dirty 时可完成，指向事务临时文件遗漏。已增加只返回仓库相对路径的诊断和首个 JSON 差异路径，不改变发行合同；提交后用 clean source 重现，按精确路径修复，不允许整个目录。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。

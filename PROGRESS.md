@@ -284,6 +284,12 @@
 - **当前发行状态**：基于 e126a1a 运行生成的供应链记录确认候选 `UNSIGNED`，正式环境不匹配，签名、干净 Windows、分发和缺陷审计仍阻断。E05 源码修复本身使当前工作树真实为 dirty；提交后必须重建候选并创建下一轮追加运行，才能验证 `RELEASE_SOURCE_DIRTY` 已由白名单修复而消失。
 - **E05 验证**：白名单回归先 2 项失败后 GREEN；全量 Vitest **630 passed / 1 skipped（631 total，68 files）**，typecheck、lint、合同、desktop build、Node 语法与 diff 均通过。
 
+## G11-E06 clean-source 聚合复验与事务诊断 — 复验完成，供应链事务待定位
+
+- [x] **clean-source 复验**：`10c4908769e6c57f5b34888f48041119bc723b18` 通过 `build:candidate` 生成 131,024,554-byte 未签名候选（SHA-256 `7188f17a5e5f2e8fec41556b7c339e49a9a7841a5649d638ba0b51f126ac22fc`）；追加运行 `run-20260920-10c4908-01` 为 `repositoryDirty=false`，结果仍是 **6 PASS / 0 FAIL / 38 BLOCKED / 126 NOT_RUN**。
+- [x] **E05 修复已证实**：`release:evidence` 首次在候选+新增 Vitest 证据存在时得到 `sourceTreeClean=true`，发行理由从错误的 `RELEASE_SOURCE_DIRTY` 变为真实的 `RELEASE_WINDOWS_EVIDENCE_REQUIRED`。
+- **新发现且未伪造通过**：紧接的 `release:sbom` 在八文件原子发布的 `beforeCommit` 自校验中报 `RELEASE_AGGREGATE_DERIVATION_MISMATCH` 并完整回滚；工作树预先 dirty 时该链可完成，表明差异来自事务期间的临时 Git 状态。新增非秘密诊断：`inspectRepositoryProvenance` 返回仓库相对 dirty paths，派生不一致报告首个 JSON 路径和精确 dirty path；不把诊断字段写入发行证据合同。提交后将以 clean source 重现并修复精确遗漏，不放宽目录级白名单。
+
 ## 下一步
 
 见 `HANDOFF.md`。G10 与 G11 四个本地工程包均已完成，不重做 G00–G11 或篡改冻结定义。下一步是外部门闭环：在锁定环境生成新候选，并补齐干净 Win11 8GB/SSD、正式签名/时间戳、可信分发身份、Office/WPS、真实 API/预算、学生资料隐私授权/逐次外发许可、缺陷审计和教学专业复核。缺输入继续标 `BLOCKED_EXTERNAL`；完成后创建绑定同一候选 commit 的追加验收运行，不覆盖本次 BLOCKED/NOT_RUN 记录。
