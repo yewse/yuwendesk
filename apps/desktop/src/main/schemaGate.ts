@@ -172,6 +172,17 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     required: ['planId'],
     additionalProperties: false
   },
+  'feedback.analyze': {
+    type: 'object',
+    properties: {
+      planId: { type: 'string', minLength: 1, maxLength: 128 },
+      teachingEventId: { type: 'string', minLength: 1, maxLength: 128 },
+      observationIds: { type: 'array', maxItems: 100 },
+      dispatchConsent: { type: 'boolean' }
+    },
+    required: ['planId', 'teachingEventId', 'observationIds', 'dispatchConsent'],
+    additionalProperties: false
+  },
   'observations.add': {
     type: 'object',
     properties: {

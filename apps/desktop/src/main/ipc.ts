@@ -46,6 +46,7 @@ import {
   FeedbackSourceMissingError,
   FeedbackVersionConflictError,
   type ImplementationState,
+  type FeedbackAnalysisResult,
   type ObservationMaterialRelation,
   type ObservationOutcomeValue,
   type ObservationSelection,
@@ -53,6 +54,7 @@ import {
   type ObservationSupportLevel
 } from './feedback/types';
 import { createObservationRecord, ObservationPrivacyError } from './feedback/observation';
+import type { FeedbackAnalyzeInput } from './feedback/service';
 
 function errorResponse(
   code: ErrorCode,
@@ -85,6 +87,8 @@ export interface IpcServiceContext {
   lessonStore?: LessonStore;
   // G08 采用/授课/观察反馈流（由 SqliteStore 提供）。
   feedbackStore?: FeedbackStore;
+  // G08 测量门与模型辅助归因；仅接受稳定 ID 和逐次许可，不接受自由提示词或 Observation JSON。
+  feedbackService?: { analyze(input: FeedbackAnalyzeInput): Promise<FeedbackAnalysisResult> };
   // G08 删除观察前的原生确认；仅主进程注入，渲染层不能签发 token。
   confirmObservationDelete?: (input: {
     workspaceId: string;
@@ -224,6 +228,8 @@ export class IpcService {
         return this.plansRecordTeaching(request);
       case 'feedback.history':
         return this.feedbackHistory(request);
+      case 'feedback.analyze':
+        return this.feedbackAnalyze(request);
       case 'observations.add':
         return this.observationsAdd(request);
       case 'observations.list':
@@ -497,15 +503,52 @@ export class IpcService {
     const feedback = this.ctx.feedbackStore;
     if (!feedback) return errorResponse('SOURCE_MISSING', '授课记录功能不可用。', '请重启应用。');
     try {
+      const planId = (req.payload as { planId: string }).planId;
+      const base = feedback.getFeedbackHistory(planId);
+      const analysis = feedback.getFeedbackAnalysisHistory(planId);
       return {
         ok: true,
-        data: feedback.getFeedbackHistory((req.payload as { planId: string }).planId)
+        data: analysis.measurementReviews.length || analysis.attributionRuns.length
+          ? { ...base, ...analysis }
+          : base
       };
     } catch (error) {
       if (error instanceof StoreProtectedError) {
         return errorResponse('DATABASE_LOCKED', '授课历史校验失败，已拒绝隐藏或覆盖损坏数据。', '请先备份并恢复本地数据库。');
       }
       throw error;
+    }
+  }
+
+  private async feedbackAnalyze(req: IpcRequest): Promise<IpcResponse> {
+    const service = this.ctx.feedbackService;
+    if (!service) return errorResponse('MODEL_NOT_AVAILABLE', '反馈分析功能不可用。', '请重启应用。');
+    if (!Number.isSafeInteger(req.expected_revision) || (req.expected_revision as number) < 0) {
+      return errorResponse('INPUT_INVALID', '反馈分析缺少有效的反馈版本。', '请刷新课程后重试。');
+    }
+    if (typeof req.idempotency_key !== 'string' || !req.idempotency_key.trim()) {
+      return errorResponse('INPUT_INVALID', '反馈分析缺少幂等键。', '请重试当前操作。');
+    }
+    const payload = req.payload as { planId: string; teachingEventId: string; observationIds: unknown[]; dispatchConsent: boolean };
+    if (payload.observationIds.some((id) => typeof id !== 'string' || id.length < 1 || id.length > 128)) {
+      return errorResponse('INPUT_INVALID', '课堂观察 ID 列表无效。', '请刷新课程后重试。');
+    }
+    const workspaceId = typeof req.workspace_id === 'string' && req.workspace_id.trim() ? req.workspace_id.trim() : 'workspace_default';
+    try {
+      return {
+        ok: true,
+        data: await service.analyze({
+          workspaceId,
+          planId: payload.planId,
+          teachingEventId: payload.teachingEventId,
+          observationIds: payload.observationIds as string[],
+          dispatchConsent: payload.dispatchConsent,
+          expectedRevision: req.expected_revision as number,
+          idempotencyKey: req.idempotency_key
+        })
+      };
+    } catch (error) {
+      return this.feedbackMutationError(error, '反馈分析');
     }
   }
 

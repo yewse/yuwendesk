@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { BootstrapData, HealthData, SourceHitDTO, SourceListItemDTO, SourceReadDTO, SourceVersionDTO } from '../shared/ipc';
 import type { ChangePreview, LessonChange } from '../main/change/types';
 import type {
+  FeedbackAnalysisResult,
   ImplementationState,
   ObservationMaterialRelation,
   ObservationOutcomeValue,
@@ -17,6 +18,7 @@ import type { LessonChangeApplyResult } from '../main/store';
 import { DraftController, DraftSnapshot, getDraftController } from './draftController';
 import {
   OBSERVATION_OUTCOME_OPTIONS,
+  buildAnalysisView,
   buildObservationPrompt,
   buildTeachingStatus,
   teachingSubmissionKey
@@ -331,6 +333,10 @@ function CoursesPage(): JSX.Element {
   const [observationCaveat, setObservationCaveat] = useState('尚未确认样本覆盖，不能推算全班比例');
   const [observationMessage, setObservationMessage] = useState<string | null>(null);
   const [savingObservation, setSavingObservation] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<FeedbackAnalysisResult | null>(null);
+  const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [dispatchConsent, setDispatchConsent] = useState(false);
   const applyKeyRef = useRef<string | null>(null);
   const applyingRef = useRef(false);
   const teachingRequestRef = useRef<{ signature: string; key: string } | null>(null);
@@ -338,6 +344,8 @@ function CoursesPage(): JSX.Element {
   const observationRequestRef = useRef<{ signature: string; key: string } | null>(null);
   const savingObservationRef = useRef(false);
   const observationDeleteKeysRef = useRef(new Map<string, string>());
+  const analysisRequestRef = useRef<{ signature: string; key: string } | null>(null);
+  const analyzingRef = useRef(false);
 
   async function reload(): Promise<void> {
     const r = await window.yuwen.lessonList();
@@ -378,6 +386,39 @@ function CoursesPage(): JSX.Element {
     }
     setTeachingEvents(response.data.teachingEvents);
     setFeedbackRevision(response.data.streamRevision);
+    const latestMeasurement = response.data.measurementReviews?.at(-1);
+    const latestRun = response.data.attributionRuns?.at(-1);
+    if (latestMeasurement && latestRun?.status === 'succeeded' && latestRun.result) {
+      setAnalysisResult({
+        status: 'attributed',
+        streamRevision: response.data.streamRevision,
+        measurement: latestMeasurement,
+        attribution: latestRun.result
+      });
+    } else if (latestMeasurement && latestRun?.status === 'uncertain' && latestRun.modelJobId) {
+      setAnalysisResult({
+        status: 'uncertain',
+        streamRevision: response.data.streamRevision,
+        measurement: latestMeasurement,
+        jobId: latestRun.modelJobId,
+        code: 'REQUEST_UNCERTAIN',
+        note: '历史模型请求的执行或费用状态不确定，未自动重试。'
+      });
+    } else if (latestMeasurement && latestRun && ['blocked', 'failed', 'stale'].includes(latestRun.status)) {
+      setAnalysisResult({
+        status: 'blocked',
+        streamRevision: response.data.streamRevision,
+        measurement: latestMeasurement,
+        code: 'MODEL_NOT_AVAILABLE',
+        note: latestRun.status === 'stale' ? '归因返回时反馈流已经变化，结果仅保留为历史，未用于当前纠正。' : '历史归因未形成可用结果。'
+      });
+    } else if (latestMeasurement && !latestRun) {
+      setAnalysisResult({
+        status: 'needs_measurement_review',
+        streamRevision: response.data.streamRevision,
+        measurement: latestMeasurement
+      });
+    }
   }
 
   async function loadObservations(planId: string): Promise<void> {
@@ -418,6 +459,10 @@ function CoursesPage(): JSX.Element {
     setObservationSelection('unknown');
     setObservationCaveat('尚未确认样本覆盖，不能推算全班比例');
     setObservationMessage(null);
+    setAnalysisResult(null);
+    setAnalysisMessage(null);
+    setDispatchConsent(false);
+    analysisRequestRef.current = null;
     observationRequestRef.current = null;
     observationDeleteKeysRef.current.clear();
     const studentActivity = plan.activities.find((activity) => activity.actor === 'student');
@@ -584,6 +629,57 @@ function CoursesPage(): JSX.Element {
     } finally {
       savingObservationRef.current = false;
       setSavingObservation(false);
+    }
+  }
+
+  async function analyzeFeedback(): Promise<void> {
+    if (!selectedPlan || analyzingRef.current) return;
+    const teachingEvent = teachingEvents.at(-1);
+    if (!teachingEvent) {
+      setAnalysisMessage('请先明确记录实际授课。');
+      return;
+    }
+    const observationIds = observations
+      .filter((record) => record.teachingEventId === teachingEvent.event_id)
+      .map((record) => record.observation.observation_id);
+    const signature = JSON.stringify([
+      selectedPlan.plan_id, teachingEvent.event_id, observationIds, dispatchConsent, feedbackRevision
+    ]);
+    if (analysisRequestRef.current?.signature !== signature) {
+      analysisRequestRef.current = { signature, key: `feedback-analysis-${crypto.randomUUID()}` };
+    }
+    analyzingRef.current = true;
+    setAnalyzing(true);
+    setAnalysisMessage(null);
+    try {
+      const response = await window.yuwen.analyzeFeedback(
+        selectedPlan.plan_id,
+        teachingEvent.event_id,
+        observationIds,
+        dispatchConsent,
+        feedbackRevision,
+        analysisRequestRef.current.key
+      );
+      if (!response.ok) {
+        setAnalysisMessage(`反馈分析未完成：${response.error.message_zh}；${response.error.next_action}`);
+        if (response.error.code === 'VERSION_CONFLICT') await loadFeedbackHistory(selectedPlan.plan_id);
+        return;
+      }
+      setAnalysisResult(response.data);
+      setFeedbackRevision(response.data.streamRevision);
+      setAnalysisMessage(
+        response.data.status === 'attributed'
+          ? '已生成待验证假设；尚未完成真实 API 质量验证和教学专业复核。'
+          : response.data.status === 'needs_measurement_review'
+            ? '测量条件不足，未调用模型。'
+            : response.data.status === 'uncertain'
+              ? '模型请求的执行或费用状态不确定，未自动重试。'
+              : `模型辅助归因被阻断：${response.data.note}`
+      );
+      analysisRequestRef.current = null;
+    } finally {
+      analyzingRef.current = false;
+      setAnalyzing(false);
     }
   }
 
@@ -908,6 +1004,65 @@ function CoursesPage(): JSX.Element {
         </div>
       )}
       {selectedPlan && observationMessage && <p className={`notice small ${observationMessage.includes('未') ? 'warn' : ''}`}>{observationMessage}</p>}
+
+      {selectedPlan && teachingEvents.length > 0 && (
+        <div className="card attribution-panel">
+          <div className="card-title">测量检查与模型辅助归因</div>
+          <p className="muted small">
+            先检查题目、评分、可比条件、样本覆盖和实际实施；任一关键条件不足都不会调用模型。模型只接收结构化白名单字段，不接收本机观察摘要、原始作品、身份信息或文件路径。
+          </p>
+          <label className="dispatch-consent">
+            <input
+              type="checkbox"
+              checked={dispatchConsent}
+              onChange={(event) => {
+                setDispatchConsent(event.target.checked);
+                analysisRequestRef.current = null;
+              }}
+            />
+            若当前配置为真实服务商，仅同意本次去身份化结构字段派发（不会改变观察的本地状态）
+          </label>
+          <button className="btn" disabled={analyzing} onClick={() => void analyzeFeedback()}>
+            {analyzing ? '正在检查并分析…' : '先检查测量条件，再辅助归因'}
+          </button>
+          {analysisMessage && <p className={`notice small ${analysisMessage.includes('阻断') || analysisMessage.includes('不足') || analysisMessage.includes('不确定') ? 'warn' : ''}`}>{analysisMessage}</p>}
+          {analysisResult && (() => {
+            const view = buildAnalysisView(analysisResult);
+            return (
+              <div className="analysis-result">
+                <div className="analysis-head">
+                  <b>{view.statusLabel}</b>
+                  {view.originLabel && <span className="tag">内容来源：{view.originLabel}</span>}
+                </div>
+                <ol className="measurement-list" aria-label="测量检查（先于归因假设）">
+                  {view.measurementChecks.map((check) => (
+                    <li key={check.id}>
+                      <span className={`check-state ${check.status}`}>{check.status}</span>
+                      <code>{check.id}</code>
+                      <span>{check.evidence}</span>
+                      {check.status !== 'pass' && <span>退回 {check.returnModule}</span>}
+                    </li>
+                  ))}
+                </ol>
+                {view.hypotheses.length > 0 && (
+                  <div className="hypothesis-list">
+                    {view.hypotheses.map((hypothesis, index) => (
+                      <article key={`${hypothesis.kind}-${index}`}>
+                        <b>{hypothesis.summary}</b>
+                        <p>限制：{hypothesis.limitations.join('；')}</p>
+                        <p>反证/撤回条件：{hypothesis.disconfirmingEvidence.join('；')}</p>
+                        <p>退回模块：{hypothesis.returnModules.join('、')}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+                {view.notExecutedLabels.length > 0 && <p className="blocked-checks">未执行：{view.notExecutedLabels.join('；')}</p>}
+                <p className="proof-disclaimer">{view.proofDisclaimer}</p>
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {selectedPlan && (
         <div className="card change-panel">

@@ -6,10 +6,14 @@ import type { ReviewReport } from './review/types';
 import type { ChangeProposal, LessonChange } from './change/types';
 import type {
   AddObservationInput,
+  BeginFeedbackAnalysisInput,
+  BeginFeedbackAnalysisResult,
   DeleteObservationInput,
+  FeedbackAnalysisHistory,
   FeedbackHistory,
   FeedbackKnowledgeState,
   FeedbackWriteResult,
+  FinishFeedbackAnalysisInput,
   ObservationDeleteResult,
   ObservationRecord,
   RecordTeachingInput,
@@ -377,6 +381,9 @@ export interface FeedbackStore {
   listObservations(planId: string): ObservationRecord[];
   deleteObservation(input: DeleteObservationInput): FeedbackWriteResult<ObservationDeleteResult>;
   feedbackKnowledgeState(planId: string): FeedbackKnowledgeState;
+  beginFeedbackAnalysis(input: BeginFeedbackAnalysisInput): BeginFeedbackAnalysisResult;
+  finishFeedbackAnalysis(input: FinishFeedbackAnalysisInput): { committed: boolean; streamRevision: number };
+  getFeedbackAnalysisHistory(planId: string): FeedbackAnalysisHistory;
 }
 
 export interface ModelStore {

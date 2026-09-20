@@ -202,6 +202,7 @@ describe('白名单与目录一致性', () => {
       'lesson.list',
       'lesson.get',
       'plans.recordTeaching',
+      'feedback.analyze',
       'feedback.history',
       'observations.add',
       'observations.list',

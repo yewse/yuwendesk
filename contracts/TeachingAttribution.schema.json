@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TeachingAttribution",
+  "$ref": "#/$defs/AttributionResult",
+  "$defs": {
+    "Hypothesis": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "prerequisite_gap",
+            "support_mismatch",
+            "activity_mismatch",
+            "retention_gap",
+            "expression_gap",
+            "time_constraint"
+          ]
+        },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "observation_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "evidence_basis": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        },
+        "limitations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        },
+        "disconfirming_evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        },
+        "return_modules": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "type": "string", "enum": ["M07", "M08", "M11", "M12"] }
+        }
+      },
+      "required": [
+        "kind",
+        "summary",
+        "observation_ids",
+        "evidence_basis",
+        "limitations",
+        "disconfirming_evidence",
+        "return_modules"
+      ],
+      "additionalProperties": false
+    },
+    "ModelOutput": {
+      "type": "object",
+      "properties": {
+        "hypotheses": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": { "$ref": "#/$defs/Hypothesis" }
+        },
+        "is_effectiveness_proof": { "const": false }
+      },
+      "required": ["hypotheses", "is_effectiveness_proof"],
+      "additionalProperties": false
+    },
+    "AttributionResult": {
+      "type": "object",
+      "properties": {
+        "attribution_run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "plan_revision_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "teaching_event_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "measurement_review_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "model_job_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "content_origin": { "type": "string", "enum": ["real", "offline-injected", "simulated"] },
+        "hypotheses": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": { "$ref": "#/$defs/Hypothesis" }
+        },
+        "not_executed_checks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["real_api_validation", "professional_teaching_review"]
+          }
+        },
+        "is_effectiveness_proof": { "const": false }
+      },
+      "required": [
+        "attribution_run_id",
+        "plan_revision_id",
+        "teaching_event_id",
+        "measurement_review_id",
+        "model_job_id",
+        "content_origin",
+        "hypotheses",
+        "not_executed_checks",
+        "is_effectiveness_proof"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

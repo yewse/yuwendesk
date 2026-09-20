@@ -19,6 +19,8 @@ import type { ChangePreview, LessonChange } from '../main/change/types';
 import type { LessonChangeApplyOutcome } from '../main/store';
 import type {
   FeedbackHistory,
+  FeedbackAnalysisHistory,
+  FeedbackAnalysisResult,
   FeedbackKnowledgeState,
   FeedbackWriteResult,
   ImplementationState,
@@ -145,9 +147,23 @@ const api = {
       payload
     }),
   feedbackHistory: (planId: string) =>
-    call<FeedbackHistory>('feedback.history', {
+    call<FeedbackHistory & Partial<FeedbackAnalysisHistory>>('feedback.history', {
       workspace_id: 'workspace_default',
       payload: { planId }
+    }),
+  analyzeFeedback: (
+    planId: string,
+    teachingEventId: string,
+    observationIds: string[],
+    dispatchConsent: boolean,
+    expectedRevision: number,
+    idempotencyKey: string
+  ) =>
+    call<FeedbackAnalysisResult>('feedback.analyze', {
+      workspace_id: 'workspace_default',
+      expected_revision: expectedRevision,
+      idempotency_key: idempotencyKey,
+      payload: { planId, teachingEventId, observationIds, dispatchConsent }
     }),
   addObservation: (
     payload: {

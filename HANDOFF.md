@@ -18,8 +18,8 @@
 - **G05 完整 LessonPlan 已交付**：按 `contracts/LessonPlan.schema.json` 组建并校验；`lesson_outline` 仅为中间产物。
 - **G06 三类五文件已交付**：课堂 PPTX + 学生 DOCX/PDF + 教师 DOCX/PDF；角色隔离、版本水印、内容来源身份。真实 Office/LibreOffice 保真未验证。
 - **G07 四包本地工程范围已完成**：T01 确定性审查/严格 `ReviewReport`/持久化；T02 受控变更/依赖失效/严格 `ChangeProposal`/五文件暂存哈希复核/SQLite 原子接纳/持久幂等；T03 单方案最少选择 UI/差异/历史/纸本提醒；T04 整包内容审查、17 个文件系统/SQLite 故障边界、三次持久失败截止，以及旧 `materials.generate` fail-closed 替换均已落地。旧修订与旧包保留，纯呈现变化不创建语义修订。证据见 `reports/G07_EVIDENCE.md`。
-- **G08-T01–T02 已完成本地工程范围，T03–T04 待做**：严格 `TeachingEvent` 与 `ObservationOutcome`、SQLite v10 反馈流、事务性 expected revision/持久幂等、授课/观察命名 IPC、采用/授课分离及可选反馈 UI 已落地。Observation 保持 LOCAL_ONLY，强制不带原始作品/路径和云许可；跳过保持 unknown，删除需主进程原生确认 token 并保留无正文墓碑。规格见 `docs/superpowers/specs/2026-09-20-g08-feedback-attribution-design.md`，计划见 `docs/superpowers/plans/2026-09-20-g08-feedback-attribution.md`；冻结验收仍为 NOT_RUN，真实学生材料隐私授权、真实 API 与教学专业复核为 BLOCKED_EXTERNAL。
-- 仓库单测 **311 passed / 1 skipped（312 total，34 files）**（Windows 开发主机，Node 24.15.0 / npm 11.12.1；G08-T02 测试均为虚构数据；以 `PROGRESS.md` 最近实测为准）；主/渲染 typecheck、lint、`verify:contracts`、renderer/main build、`git diff --check` 通过。既有跳过项未改为通过。pdfjs 的可选 canvas/standardFontDataUrl 警告有如实记录，不等同于 Office/WPS 保真失败或通过。未签名 Windows EXE 见 `reports/WINDOWS_BUILD.md`。
+- **G08-T01–T03 已完成本地工程范围，T04 待做**：采用/授课/观察分离与本地删除边界已落地；新增固定五项测量门、去身份化字段白名单、严格 `TeachingAttribution`、复用 G04 保护的结构化归因入口、分阶段 SQLite 审计/幂等/stale 保护、严格 `feedback.analyze` 和“先测量、后假设”的 UI。Observation 仍为 LOCAL_ONLY；测试替身明确 `simulated`，DeepSeek 仅离线注入并保持 `offline-injected`。规格见 `docs/superpowers/specs/2026-09-20-g08-feedback-attribution-design.md`，计划见 `docs/superpowers/plans/2026-09-20-g08-feedback-attribution.md`；冻结验收仍为 NOT_RUN，真实学生材料隐私授权与逐次外发许可、真实 API 归因质量、教学专业复核均为 BLOCKED_EXTERNAL。
+- 仓库单测 **331 passed / 1 skipped（332 total，37 files）**（Windows 开发主机，Node 24.15.0 / npm 11.12.1；G08-T03 测试均为虚构数据，真实协议只用离线注入；以 `PROGRESS.md` 最近实测为准）；主/渲染 typecheck、lint、`verify:contracts`、renderer/main build、`git diff --check` 通过。既有跳过项未改为通过。pdfjs 的可选 canvas/standardFontDataUrl 警告有如实记录，不等同于 Office/WPS 保真失败或通过。未签名 Windows EXE 见 `reports/WINDOWS_BUILD.md`。
 - 本机开发态 Electron 走查 **BLOCKED_EXTERNAL**：锁定包的二进制因 `--ignore-scripts` 未下载，补下载无进度且仓库无可复用 `.exe`；未伪造 UI 截图或 Win11 证据。
 - 自动公开上传**已暂停**（工作流仅手动 `workflow_dispatch`）；公开工件可见范围待持有人确认。
 - 生产数据：`app.getPath('userData')` 下 `yuwendesk.db`；旧 JSON 首次运行安全迁入。
@@ -63,7 +63,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npm run -w @yuwendesk/desktop build:win
 
 ## 下一个有界工作包建议
 
-1. **G08-T03 测量门与模型辅助归因**：从已完成的本机 Observation 继续，先实现确定性测量检查，再构造去身份化白名单上下文和严格模型结果；真实 API、逐次隐私授权与教学解释质量保持 BLOCKED_EXTERNAL，不得用测试替身冒充。
+1. **G08-T04 最小纠正与双轨证据**：从已验证的待验归因继续，生成只替换/减少后再加负担的最小纠正；实现偏好与效果证据分轨、接受/拒绝/撤回追加事件和后续正常任务复核。真实 API、真实学生材料隐私授权与教学专业解释继续保持 BLOCKED_EXTERNAL。
 2. 获得授权云 API 后关闭 G04/G07 真实语义复核门（当前仅测试替身 + 离线协议；不伪造实网成功）。
 3. 补齐锁定 Electron 二进制后执行开发态窗口走查；获得干净 Windows VM 后再关闭 G01-T04 与目标安装验收（安装→启动→保存→重启→保留数据 + SQLite/凭据/导出），两者不互相替代。
 

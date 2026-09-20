@@ -11,6 +11,7 @@ import { CloseController } from './lifecycle';
 import { evaluatePlatform } from './platform';
 import { createWorkerParser } from './sources/parseHost';
 import { ModelService } from './model/service';
+import { FeedbackService } from './feedback/service';
 import { attachCsp, isAllowedExternalUrl, isTrustedRendererUrl, lockdownSession } from './security';
 import { SqliteStore } from './db/sqliteStore';
 
@@ -211,12 +212,14 @@ async function bootstrap(): Promise<void> {
   await store.load();
 
   const modelService = new ModelService(store);
+  const feedbackService = new FeedbackService(store, store, modelService);
   ipcService = new IpcService({
     store,
     sourceStore: store,
     modelService,
     lessonStore: store,
     feedbackStore: store,
+    feedbackService,
     confirmObservationDelete: async ({ observationId }) => {
       if (!mainWindow || mainWindow.isDestroyed()) return null;
       const { response } = await dialog.showMessageBox(mainWindow, {

@@ -6,6 +6,8 @@ import type { ModelConfig, ModelJobRecord, ModelStore, SourceStore } from '../st
 import { assemblePrompt, isKnownTask, PROMPT_VERSION, validateContract } from './prompt';
 import { defaultProviders } from './providers';
 import { DEFAULT_PARAMS, type ApprovedFragment, type CancelSignalLike, type Citation, type ModelParams, type ModelProvider } from './types';
+import type { AttributionContext } from '../feedback/types';
+import { validateAttributionContext } from '../feedback/attribution';
 
 export interface CredentialLike {
   credentialEncryptionAvailable(): boolean;
@@ -141,6 +143,7 @@ export class ModelService {
     const cfg = this.store.getModelConfig();
     if (!cfg) return { status: 'blocked', code: 'INPUT_INVALID', note: '未配置服务商。' };
     if (!isKnownTask(input.task)) return { status: 'blocked', code: 'INPUT_INVALID', note: `未知任务：${input.task}` };
+    if (input.task === 'teaching_attribution') return { status: 'blocked', code: 'INPUT_INVALID', note: '教学归因仅允许使用结构化专用入口。' };
     const provider = this.getProvider(cfg.provider);
     if (!provider) return { status: 'blocked', code: 'INPUT_INVALID', note: '未知服务商。' };
     const boundary = this.buildCitations(input.fragments ?? []);
@@ -148,7 +151,7 @@ export class ModelService {
 
     const params: ModelParams = { temperature: cfg.temperature, maxTokens: cfg.maxTokens };
     const cacheKey = createHash('sha256')
-      .update(JSON.stringify({ task: input.task, provider: cfg.provider, model: cfg.model, params, promptVersion: PROMPT_VERSION, instructionExtra: input.instructionExtra ?? '', materialVersions: boundary.materialVersions, fragments: input.fragments ?? [] }))
+      .update(JSON.stringify({ task: input.task, provider: cfg.provider, providerContentOrigin: provider.contentOrigin, model: cfg.model, params, promptVersion: PROMPT_VERSION, instructionExtra: input.instructionExtra ?? '', materialVersions: boundary.materialVersions, fragments: input.fragments ?? [] }))
       .digest('hex');
 
     // 缓存：相同任务/模型/提示/参数/材料版本 → 复用已确认结果（仅合格成功才会入缓存）。
@@ -168,6 +171,37 @@ export class ModelService {
     }
   }
 
+  async runStructuredAttribution(input: { context: AttributionContext; dispatchConsent: boolean }): Promise<RunResult> {
+    const contextErrors = validateAttributionContext(input.context);
+    if (contextErrors.length) return { status: 'blocked', code: 'PRIVACY_BLOCKED', note: `归因上下文不在白名单内(${contextErrors.join('|')})。` };
+    const cfg = this.store.getModelConfig();
+    if (!cfg) return { status: 'blocked', code: 'INPUT_INVALID', note: '未配置服务商。' };
+    const provider = this.getProvider(cfg.provider);
+    if (!provider) return { status: 'blocked', code: 'INPUT_INVALID', note: '未知服务商。' };
+    if (provider.requiresKey && input.dispatchConsent !== true) {
+      return { status: 'blocked', code: 'PRIVACY_BLOCKED', note: '本次真实模型派发未获得逐次许可。' };
+    }
+
+    const task = 'teaching_attribution';
+    const instructionExtra = JSON.stringify(input.context);
+    const params: ModelParams = { temperature: cfg.temperature, maxTokens: cfg.maxTokens };
+    const cacheKey = createHash('sha256')
+      .update(JSON.stringify({ task, provider: cfg.provider, providerContentOrigin: provider.contentOrigin, model: cfg.model, params, promptVersion: PROMPT_VERSION, context: input.context }))
+      .digest('hex');
+    const cached = this.store.findCachedJob(cacheKey);
+    if (cached) return { status: 'cached', jobId: cached.id, result: cached.resultJson ? JSON.parse(cached.resultJson) : null, costCents: cached.costCents, fromCache: true };
+    const running = this.inflight.get(cacheKey);
+    if (running) return running;
+    const allowedObservationIds = input.context.observations.map((observation) => observation.observationId);
+    const exec = this.execute(cfg, provider, task, instructionExtra, params, cacheKey, [], [], allowedObservationIds);
+    this.inflight.set(cacheKey, exec);
+    try {
+      return await exec;
+    } finally {
+      this.inflight.delete(cacheKey);
+    }
+  }
+
   private async execute(
     cfg: ModelConfig,
     provider: ModelProvider,
@@ -176,7 +210,8 @@ export class ModelService {
     params: ModelParams,
     cacheKey: string,
     citations: Citation[],
-    materialVersions: { versionId: string; textHash: string }[]
+    materialVersions: { versionId: string; textHash: string }[],
+    allowedObservationIds: string[] = []
   ): Promise<RunResult> {
     // 派发前联网授权。
     const auth = this.authorize(cfg, provider);
@@ -229,7 +264,7 @@ export class ModelService {
             return { status: 'failed', jobId, code: 'EXPORT_INVALID', note: `响应未正常终止(finish_reason=${result.finishReason})，未纳入可用缓存。` };
           }
           // 真实 Schema/必填/数值/异常 + 引用区间校验（真实模型与测试替身同一合同）。
-          const check = validateContract(prompt.outputContract, result.text, citations.length);
+          const check = validateContract(prompt.outputContract, result.text, citations.length, allowedObservationIds);
           if (!check.ok) {
             this.store.updateModelJob(jobId, { status: 'failed', costCents: result.usageKnown ? result.costCents : estCost, errorCode: 'EXPORT_INVALID' });
             cleanup();

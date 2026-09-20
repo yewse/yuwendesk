@@ -223,6 +223,17 @@
       "arbitrary_path_allowed": false
     },
     {
+      "operation": "feedback.analyze",
+      "kind": "write",
+      "scope": "workspace",
+      "requires_expected_revision": true,
+      "requires_idempotency_key": true,
+      "output_contract": "测量复核或模型辅助归因结果",
+      "semantic_guard": "先运行确定性测量门；只传稳定ID和逐次派发许可，不接受自由提示词或Observation JSON",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
       "operation": "jobs.get",
       "kind": "read",
       "scope": "workspace",

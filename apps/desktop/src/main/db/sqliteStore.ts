@@ -38,10 +38,18 @@ import {
   FeedbackSourceMissingError,
   FeedbackVersionConflictError,
   type AddObservationInput,
+  type AttributionContentOrigin,
+  type AttributionResult,
+  type AttributionRunStatus,
+  type BeginFeedbackAnalysisInput,
+  type BeginFeedbackAnalysisResult,
   type DeleteObservationInput,
+  type FeedbackAnalysisHistory,
   type FeedbackHistory,
   type FeedbackKnowledgeState,
   type FeedbackWriteResult,
+  type FinishFeedbackAnalysisInput,
+  type MeasurementReview,
   type ObservationDeleteResult,
   type ObservationRecord,
   type RecordTeachingInput,
@@ -49,6 +57,8 @@ import {
 } from '../feedback/types';
 import { validateTeachingEvent } from '../feedback/teaching';
 import { validateObservation, validateObservationOutcome } from '../feedback/observation';
+import { validateMeasurementReview } from '../feedback/measurement';
+import { validateAttributionResult, validateFeedbackAnalysisResult } from '../feedback/attribution';
 import { isBoundedString, isIsoDateTime, isRecord } from '../feedback/validation';
 import { extractBuffer, ExtractError, extractText, type CancelSignal, type ExtractOpts, type ExtractResult } from '../sources/extract';
 import {
@@ -2099,6 +2109,167 @@ export class SqliteStore {
       return { ...result, replayed: false };
     });
     return tx.immediate();
+  }
+
+  beginFeedbackAnalysis(input: BeginFeedbackAnalysisInput): BeginFeedbackAnalysisResult {
+    this.assertWritable();
+    const measurementErrors = validateMeasurementReview(input.measurement);
+    if (measurementErrors.length) throw new Error(`invalid_measurement_review:${measurementErrors.join('|')}`);
+    if (
+      input.measurement.workspace_id !== input.workspaceId ||
+      input.measurement.plan_id !== input.planId ||
+      input.measurement.teaching_event_id !== input.teachingEventId
+    ) throw new Error('measurement_identity_mismatch');
+    if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) throw new Error('invalid_feedback_revision');
+    if (!input.idempotencyKey.trim() || !input.fingerprint.trim() || !input.inputHash.trim() || !input.runId.trim()) throw new Error('invalid_feedback_analysis_identity');
+    if (!isIsoDateTime(input.createdAt)) throw new Error('invalid_feedback_analysis_created_at');
+
+    const db = this.requireDb();
+    const tx = db.transaction((): BeginFeedbackAnalysisResult => {
+      const existing = db
+        .prepare('SELECT fingerprint,operation,status,result_json resultJson FROM feedback_idempotency WHERE key=?')
+        .get(input.idempotencyKey) as { fingerprint: string; operation: string; status: string; resultJson: string | null } | undefined;
+      if (existing) {
+        if (existing.fingerprint !== input.fingerprint || existing.operation !== 'feedback.analyze') throw new FeedbackKeyReuseError();
+        if (!existing.resultJson) throw new StoreProtectedError('feedback_analysis_idempotency_missing_result');
+        let parsed: unknown;
+        try { parsed = JSON.parse(existing.resultJson) as unknown; } catch { throw new StoreProtectedError('feedback_analysis_idempotency_invalid_json'); }
+        if (existing.status === 'succeeded') return { kind: 'replayed', result: parsed };
+        if (existing.status === 'running' && isRecord(parsed) && Number.isSafeInteger(parsed.streamRevision)) {
+          return { kind: 'in_progress', streamRevision: parsed.streamRevision as number };
+        }
+        throw new StoreProtectedError('feedback_analysis_idempotency_invalid_state');
+      }
+
+      const lesson = db
+        .prepare('SELECT 1 FROM lesson_revision WHERE plan_id=? AND revision_id=?')
+        .get(input.planId, input.measurement.plan_revision_id);
+      if (!lesson) throw new FeedbackSourceMissingError();
+      const teaching = db
+        .prepare('SELECT 1 FROM teaching_event WHERE event_id=? AND workspace_id=? AND plan_id=? AND plan_revision_id=?')
+        .get(input.teachingEventId, input.workspaceId, input.planId, input.measurement.plan_revision_id);
+      if (!teaching) throw new FeedbackSourceMissingError();
+      const stream = db
+        .prepare('SELECT workspace_id workspaceId,revision FROM feedback_stream WHERE plan_id=?')
+        .get(input.planId) as { workspaceId: string; revision: number } | undefined;
+      if (!stream || stream.workspaceId !== input.workspaceId) throw new FeedbackSourceMissingError();
+      if (stream.revision !== input.expectedRevision) throw new FeedbackVersionConflictError();
+
+      db.prepare(
+        `INSERT INTO measurement_review(review_id,workspace_id,plan_id,teaching_event_id,review_json,created_at)
+         VALUES(?,?,?,?,?,?)`
+      ).run(input.measurement.review_id, input.workspaceId, input.planId, input.teachingEventId, JSON.stringify(input.measurement), input.createdAt);
+      if (input.measurement.disposition === 'ready_for_attribution') {
+        db.prepare(
+          `INSERT INTO attribution_run(run_id,workspace_id,plan_id,teaching_event_id,input_hash,status,result_json,model_job_id,content_origin,created_at,updated_at)
+           VALUES(?,?,?,?,?,'running',NULL,NULL,NULL,?,?)`
+        ).run(input.runId, input.workspaceId, input.planId, input.teachingEventId, input.inputHash, input.createdAt, input.createdAt);
+      }
+      const nextRevision = stream.revision + 1;
+      db.prepare('UPDATE feedback_stream SET revision=?,updated_at=? WHERE plan_id=?').run(nextRevision, input.createdAt, input.planId);
+      db.prepare(
+        `INSERT INTO feedback_idempotency(key,fingerprint,operation,status,result_json,updated_at)
+         VALUES(?,?,'feedback.analyze','running',?,?)`
+      ).run(input.idempotencyKey, input.fingerprint, JSON.stringify({ streamRevision: nextRevision }), input.createdAt);
+      return { kind: 'started', streamRevision: nextRevision };
+    });
+    return tx.immediate();
+  }
+
+  finishFeedbackAnalysis(input: FinishFeedbackAnalysisInput): { committed: boolean; streamRevision: number } {
+    this.assertWritable();
+    const resultErrors = validateFeedbackAnalysisResult(input.result);
+    if (resultErrors.length) throw new Error(`invalid_feedback_analysis_result:${resultErrors.join('|')}`);
+    if (input.attribution) {
+      const attributionErrors = validateAttributionResult(input.attribution);
+      if (attributionErrors.length) throw new Error(`invalid_attribution_result:${attributionErrors.join('|')}`);
+    }
+    if (!isIsoDateTime(input.updatedAt)) throw new Error('invalid_feedback_analysis_updated_at');
+    if (!input.inputHash.trim()) throw new Error('invalid_feedback_analysis_input_hash');
+    const db = this.requireDb();
+    const tx = db.transaction((): { committed: boolean; streamRevision: number } => {
+      const existing = db
+        .prepare('SELECT fingerprint,operation,status FROM feedback_idempotency WHERE key=?')
+        .get(input.idempotencyKey) as { fingerprint: string; operation: string; status: string } | undefined;
+      if (!existing || existing.fingerprint !== input.fingerprint || existing.operation !== 'feedback.analyze') throw new FeedbackKeyReuseError();
+      const stream = db
+        .prepare('SELECT workspace_id workspaceId,revision FROM feedback_stream WHERE plan_id=?')
+        .get(input.planId) as { workspaceId: string; revision: number } | undefined;
+      if (!stream || stream.workspaceId !== input.workspaceId) throw new FeedbackSourceMissingError();
+      if (stream.revision !== input.expectedRevision) {
+        if (input.runId) {
+          const updated = db.prepare(
+            `UPDATE attribution_run SET status='stale',result_json=?,model_job_id=?,content_origin=?,updated_at=?
+             WHERE run_id=? AND plan_id=? AND input_hash=?`
+          ).run(input.attribution ? JSON.stringify(input.attribution) : null, input.modelJobId, input.contentOrigin, input.updatedAt, input.runId, input.planId, input.inputHash);
+          if (updated.changes !== 1) throw new StoreProtectedError('attribution_run_input_hash_mismatch');
+        }
+        db.prepare("UPDATE feedback_idempotency SET status='failed',result_json=NULL,updated_at=? WHERE key=?").run(input.updatedAt, input.idempotencyKey);
+        return { committed: false, streamRevision: stream.revision };
+      }
+
+      const finalRevision = input.advanceRevision ? stream.revision + 1 : stream.revision;
+      if (input.result.streamRevision !== finalRevision) throw new Error('feedback_analysis_result_revision_mismatch');
+      if (input.runId) {
+        const updated = db.prepare(
+          `UPDATE attribution_run SET status=?,result_json=?,model_job_id=?,content_origin=?,updated_at=?
+           WHERE run_id=? AND plan_id=? AND input_hash=?`
+        ).run(input.runStatus, input.attribution ? JSON.stringify(input.attribution) : null, input.modelJobId, input.contentOrigin, input.updatedAt, input.runId, input.planId, input.inputHash);
+        if (updated.changes !== 1) throw new StoreProtectedError('attribution_run_input_hash_mismatch');
+      }
+      if (input.advanceRevision) db.prepare('UPDATE feedback_stream SET revision=?,updated_at=? WHERE plan_id=?').run(finalRevision, input.updatedAt, input.planId);
+      db.prepare("UPDATE feedback_idempotency SET status='succeeded',result_json=?,updated_at=? WHERE key=?").run(JSON.stringify(input.result), input.updatedAt, input.idempotencyKey);
+      return { committed: true, streamRevision: finalRevision };
+    });
+    return tx.immediate();
+  }
+
+  getFeedbackAnalysisHistory(planId: string): FeedbackAnalysisHistory {
+    const db = this.requireDb();
+    const measurementRows = db
+      .prepare('SELECT review_json reviewJson FROM measurement_review WHERE plan_id=? ORDER BY created_at,review_id')
+      .all(planId) as Array<{ reviewJson: string }>;
+    const measurementReviews = measurementRows.map((row) => {
+      let value: unknown;
+      try { value = JSON.parse(row.reviewJson) as unknown; } catch { throw new StoreProtectedError('invalid_stored_measurement_review:json'); }
+      const errors = validateMeasurementReview(value);
+      if (errors.length) throw new StoreProtectedError(`invalid_stored_measurement_review:${errors.join('|')}`);
+      return value as MeasurementReview;
+    });
+    const runRows = db
+      .prepare(
+        `SELECT run_id runId,workspace_id workspaceId,plan_id planId,teaching_event_id teachingEventId,
+                input_hash inputHash,status,result_json resultJson,model_job_id modelJobId,
+                content_origin contentOrigin,created_at createdAt,updated_at updatedAt
+         FROM attribution_run WHERE plan_id=? ORDER BY created_at,run_id`
+      )
+      .all(planId) as Array<{
+        runId: string; workspaceId: string; planId: string; teachingEventId: string; inputHash: string;
+        status: string; resultJson: string | null; modelJobId: string | null; contentOrigin: string | null;
+        createdAt: string; updatedAt: string;
+      }>;
+    const statuses: AttributionRunStatus[] = ['running', 'succeeded', 'blocked', 'failed', 'uncertain', 'stale'];
+    const origins: AttributionContentOrigin[] = ['real', 'offline-injected', 'simulated'];
+    const attributionRuns = runRows.map((row) => {
+      if (!statuses.includes(row.status as AttributionRunStatus)) throw new StoreProtectedError('invalid_stored_attribution_run:status');
+      if (row.contentOrigin !== null && !origins.includes(row.contentOrigin as AttributionContentOrigin)) throw new StoreProtectedError('invalid_stored_attribution_run:origin');
+      let result: AttributionResult | null = null;
+      if (row.resultJson !== null) {
+        let parsed: unknown;
+        try { parsed = JSON.parse(row.resultJson) as unknown; } catch { throw new StoreProtectedError('invalid_stored_attribution_result:json'); }
+        const errors = validateAttributionResult(parsed);
+        if (errors.length) throw new StoreProtectedError(`invalid_stored_attribution_result:${errors.join('|')}`);
+        result = parsed as AttributionResult;
+      }
+      return {
+        runId: row.runId, workspaceId: row.workspaceId, planId: row.planId,
+        teachingEventId: row.teachingEventId, inputHash: row.inputHash,
+        status: row.status as AttributionRunStatus, result, modelJobId: row.modelJobId,
+        contentOrigin: row.contentOrigin as AttributionContentOrigin | null,
+        createdAt: row.createdAt, updatedAt: row.updatedAt
+      };
+    });
+    return { measurementReviews, attributionRuns };
   }
 
   // ===== G04 模型配置/作业持久化 =====

@@ -470,9 +470,65 @@ h1 {
   align-items: flex-start;
 }
 .observation-panel,
-.observation-history {
+.observation-history,
+.attribution-panel {
   margin-top: 16px;
 }
+.dispatch-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.analysis-result {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcff;
+}
+.analysis-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.measurement-list {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+.measurement-list li {
+  display: grid;
+  grid-template-columns: 64px minmax(150px, 1fr) minmax(180px, 2fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin: 7px 0;
+  font-size: 12px;
+}
+.check-state {
+  border-radius: 999px;
+  padding: 2px 8px;
+  text-align: center;
+  background: #eef1f5;
+}
+.check-state.pass { background: #e7f5eb; color: #23683a; }
+.check-state.fail,
+.check-state.unknown { background: #fff0df; color: #8a4b08; }
+.hypothesis-list {
+  display: grid;
+  gap: 10px;
+}
+.hypothesis-list article {
+  padding: 10px;
+  border-left: 3px solid var(--accent, #3b6cff);
+  background: #fff;
+}
+.hypothesis-list p,
+.blocked-checks,
+.proof-disclaimer { margin: 6px 0; font-size: 12px; }
+.blocked-checks,
+.proof-disclaimer { color: var(--muted); }
 .outcome-options {
   display: flex;
   flex-wrap: wrap;

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { TeachingEvent } from '../src/main/feedback/types';
+import type { FeedbackAnalysisResult, MeasurementReview, TeachingEvent } from '../src/main/feedback/types';
 import {
   OBSERVATION_OUTCOME_OPTIONS,
+  buildAnalysisView,
   buildObservationPrompt,
   buildTeachingStatus,
   teachingSubmissionKey
@@ -30,6 +31,44 @@ describe('G08 feedback renderer view model', () => {
       adoptionLabel: '已采用',
       teachingLabel: '已记录授课（部分实施）',
       canRecordTeaching: true
+    });
+  });
+
+  it('shows measurement checks before bounded hypotheses and keeps origin/blockers visible', () => {
+    const measurement: MeasurementReview = {
+      review_id: 'measurement_1', workspace_id: 'workspace_default', plan_id: 'plan_1',
+      plan_revision_id: 'revision_1', teaching_event_id: 'teach_1',
+      checks: [
+        { check_id: 'target_alignment', status: 'pass', evidence: 'aligned', object_ids: ['task_1'], return_module: 'M07' },
+        { check_id: 'scoring_available', status: 'pass', evidence: 'rubric', object_ids: ['rubric_1'], return_module: 'M07' },
+        { check_id: 'task_comparability', status: 'pass', evidence: 'conditions', object_ids: ['observation_1'], return_module: 'M11' },
+        { check_id: 'sample_coverage', status: 'pass', evidence: 'bounded', object_ids: ['observation_1'], return_module: 'M11' },
+        { check_id: 'implementation_conditions', status: 'pass', evidence: 'duration', object_ids: ['teach_1'], return_module: 'M11' }
+      ],
+      disposition: 'ready_for_attribution', inference_limits: ['class_inference_not_allowed'],
+      is_effectiveness_proof: false, created_at: '2026-09-20T08:15:00.000Z'
+    };
+    const result: FeedbackAnalysisResult = {
+      status: 'attributed', streamRevision: 4, measurement,
+      attribution: {
+        attribution_run_id: 'run_1', plan_revision_id: 'revision_1', teaching_event_id: 'teach_1',
+        measurement_review_id: 'measurement_1', model_job_id: 'job_1', content_origin: 'simulated',
+        hypotheses: [{
+          kind: 'support_mismatch', summary: '待验证：提示程度可能遮蔽独立表现。',
+          observation_ids: ['observation_1'], evidence_basis: ['结构化观察'], limitations: ['不能外推全班'],
+          disconfirming_evidence: ['无提示稳定完成则撤回'], return_modules: ['M11']
+        }],
+        not_executed_checks: ['real_api_validation', 'professional_teaching_review'],
+        is_effectiveness_proof: false
+      }
+    };
+
+    expect(buildAnalysisView(result)).toMatchObject({
+      originLabel: '模拟（测试替身）',
+      measurementChecks: expect.arrayContaining([expect.objectContaining({ id: 'target_alignment', status: 'pass' })]),
+      hypotheses: [expect.objectContaining({ summary: '待验证：提示程度可能遮蔽独立表现。' })],
+      notExecutedLabels: ['真实 API 质量验证未执行', '教学专业复核未执行'],
+      proofDisclaimer: '这些是待验证假设，不是教学有效性证明。'
     });
   });
 

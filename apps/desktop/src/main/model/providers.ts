@@ -21,7 +21,43 @@ export const testDoubleProvider: ModelProvider = {
     const n = (req.user.match(/【引用\d+】/g) ?? []).length;
     const cites = Array.from({ length: n }, (_v, i) => i + 1);
     let body: unknown;
-    if (req.outputContract === 'lesson_outline.v1') {
+    if (req.outputContract === 'teaching_attribution.v1') {
+      let observationIds: string[] = [];
+      try {
+        const marker = '补充要求：';
+        const start = req.user.indexOf(marker);
+        const end = req.user.indexOf('\n\n', start);
+        const raw = start >= 0 ? req.user.slice(start + marker.length, end >= 0 ? end : undefined) : '';
+        const parsed = JSON.parse(raw) as { observations?: Array<{ observationId?: unknown }> };
+        observationIds = (parsed.observations ?? []).flatMap((item) => typeof item.observationId === 'string' ? [item.observationId] : []);
+      } catch {
+        observationIds = [];
+      }
+      const observationId = observationIds[0] ?? 'observation_missing';
+      body = {
+        hypotheses: [
+          {
+            kind: 'support_mismatch',
+            summary: '待验证：当前提示程度可能遮蔽独立作答表现。',
+            observation_ids: [observationId],
+            evidence_basis: ['结构化记录显示作答发生在有提示条件下。'],
+            limitations: ['该观察不能外推为全班结论。'],
+            disconfirming_evidence: ['若相似新题在无提示下稳定完成，应撤回该假设。'],
+            return_modules: ['M11']
+          },
+          {
+            kind: 'time_constraint',
+            summary: '待验证：实际课堂时间可能限制了独立表达机会。',
+            observation_ids: [observationId],
+            evidence_basis: ['结构化上下文包含实际授课时长。'],
+            limitations: ['未进行教学专业复核，不能据此认定因果。'],
+            disconfirming_evidence: ['若等时条件下表现无变化，应撤回该假设。'],
+            return_modules: ['M08', 'M11']
+          }
+        ],
+        is_effectiveness_proof: false
+      };
+    } else if (req.outputContract === 'lesson_outline.v1') {
       body = {
         objectives: ['朗读课文，把握重音与停连', '体会比喻与拟人的表达效果'],
         steps: [

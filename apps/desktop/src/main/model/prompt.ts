@@ -1,9 +1,10 @@
 // 提示词工程作为正式产品能力：稳定原则 + 任务模板 + 必要上下文 + 学科方法 + 代表性正反例 + 输出合同。
 // 教师不负责编写或调试提示词；此处为产品内置、可版本化的组合。
 import type { Citation } from './types';
+import { validateTeachingAttributionModelOutput } from '../feedback/attribution';
 
 // 提示词版本：随原则/模板/示例/合同变化递增，用于结果持久化与基线对照。
-export const PROMPT_VERSION = 'yuwen-prompt-1.0.0';
+export const PROMPT_VERSION = 'yuwen-prompt-1.1.0';
 
 // 稳定原则：允许主动分析、联结与教学创造；精确事实/引文/版本以提供材料或明确标注不确定为准，不编造出处。
 const PRINCIPLES = [
@@ -42,6 +43,14 @@ const TASKS: Record<string, TaskTemplate> = {
     contractShape: '{"objectives":string[],"steps":[{"stage":string,"minutes":number,"activity":string,"citations":number[]}],"notes":string[]}',
     goodExample: '正例：环节含朗读/研读/活动，时间合理，引用到具体片段。',
     badExample: '反例：照搬检索片段拼接，无教学结构与时间安排。'
+  },
+  teaching_attribution: {
+    id: 'teaching_attribution',
+    instruction: '只依据产品提供的去身份化结构字段提出多个待验证教学假设。不得声称教学有效，不得给出全班比例、排名、永久学生标签、人格/智力/家庭归因或因果保证；每条必须写限制、可反证证据和退回模块。',
+    outputContract: 'teaching_attribution.v1',
+    contractShape: '{"hypotheses":[{"kind":"prerequisite_gap|support_mismatch|activity_mismatch|retention_gap|expression_gap|time_constraint","summary":string,"observation_ids":string[],"evidence_basis":string[],"limitations":string[],"disconfirming_evidence":string[],"return_modules":["M07|M08|M11|M12"]}],"is_effectiveness_proof":false}',
+    goodExample: '正例：以“待验证/可能”表述，逐条关联观察 ID，明确样本限制和撤回条件。',
+    badExample: '反例：声称“全班 60% 未掌握”、把表现归因于懒惰/智力/家庭，或断言教学已经有效。'
   }
 };
 
@@ -63,7 +72,7 @@ function citationsInRange(v: unknown, n: number): boolean {
 
 // 真实输出合同校验（供真实模型与测试替身共同遵守）：非法 JSON/缺字段/类型错误/越界引用一律判不合格。
 // citationCount = 提供给模型的获准引用数（引用序号须落在 1..citationCount）。
-export function validateContract(outputContract: string, text: string, citationCount: number): ContractCheck {
+export function validateContract(outputContract: string, text: string, citationCount: number, allowedObservationIds: string[] = []): ContractCheck {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -88,6 +97,10 @@ export function validateContract(outputContract: string, text: string, citationC
       if (!citationsInRange(st.citations, citationCount)) return { ok: false, reason: 'citation_out_of_range' };
     }
     return { ok: true, parsed };
+  }
+  if (outputContract === 'teaching_attribution.v1') {
+    const errors = validateTeachingAttributionModelOutput(parsed, allowedObservationIds);
+    return errors.length ? { ok: false, reason: errors.join('|') } : { ok: true, parsed };
   }
   return { ok: false, reason: 'unknown_contract' };
 }
