@@ -29,6 +29,7 @@ export type RunResult =
 
 export class ModelService {
   private readonly cancels = new Map<string, CancelSignalLike>();
+  private readonly aborts = new Map<string, AbortController>();
   private readonly inflight = new Map<string, Promise<RunResult>>();
   private readonly providers: Record<string, ModelProvider>;
   constructor(
@@ -74,6 +75,7 @@ export class ModelService {
     const sig = this.cancels.get(jobId);
     if (!sig) return false;
     sig.cancelled = true;
+    this.aborts.get(jobId)?.abort(); // 取消传播到传输层
     return true;
   }
   listJobs(limit = 50): ModelJobRecord[] {
@@ -180,44 +182,64 @@ export class ModelService {
     const auth = this.authorize(cfg, provider);
     if (!auth.ok) return { status: 'blocked', code: 'MODEL_NOT_AVAILABLE', note: auth.note };
 
-    // 预算预留：估算成本，预留后若超上限则拒绝。
-    const estCost = Math.ceil((params.maxTokens / 1000) * provider.costPer1kCents);
-    if (cfg.budgetCapCents > 0 && this.store.budgetSpentCents() + estCost > cfg.budgetCapCents) return { status: 'blocked', code: 'BUDGET_EXCEEDED', note: '预算不足以预留本次调用。' };
+    // 预算预留：含输入 + 输出 + 重试（×(MAX_RETRIES+1)）+ 探测余量；预留后若超上限则拒绝。
+    const estInputTokens = Math.ceil((prompt0(task, instructionExtra, citations)) / 4);
+    const estOutTokens = params.maxTokens;
+    const perCall = Math.ceil((estInputTokens / 1000) * provider.pricing.per1kInputCents + (estOutTokens / 1000) * provider.pricing.per1kOutputCents);
+    const probeOverhead = provider.requiresKey ? Math.ceil((1 / 1000) * provider.pricing.per1kOutputCents) : 0;
+    const estCost = perCall * (MAX_RETRIES + 1) + probeOverhead;
+    if (cfg.budgetCapCents > 0 && this.store.budgetSpentCents() + estCost > cfg.budgetCapCents) return { status: 'blocked', code: 'BUDGET_EXCEEDED', note: '预算不足以预留本次调用（含输入/输出/重试/探测余量）。' };
 
     const prompt = assemblePrompt(task, instructionExtra, citations);
     const jobId = randomUUID();
     const signal: CancelSignalLike = { cancelled: false };
+    const abort = new AbortController();
     this.cancels.set(jobId, signal);
+    this.aborts.set(jobId, abort);
+    const cleanup = (): void => {
+      this.cancels.delete(jobId);
+      this.aborts.delete(jobId);
+    };
     const nowTs = this.now();
     // 插入 running 并预留成本（budgetSpentCents 计入 running，保证在途预留）。
     this.store.insertModelJob({ id: jobId, task, cacheKey, provider: cfg.provider, model: cfg.model, paramsJson: JSON.stringify(params), promptVersion: PROMPT_VERSION, materialVersionsJson: JSON.stringify(materialVersions), status: 'running', resultJson: null, costCents: estCost, errorCode: null, createdAt: nowTs, updatedAt: nowTs });
 
+    let dispatched = false; // 是否已向传输层派发（用于取消/费用分离）
     try {
       let lastErr: Error | null = null;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        if (signal.cancelled) throw new Error('cancelled');
+        if (signal.cancelled) throw new Error('cancelled'); // 派发前取消
         try {
+          dispatched = true;
           const result = await this.withTimeout(
-            provider.complete({ system: prompt.system, user: prompt.user, params, outputContract: prompt.outputContract }, { model: cfg.model, apiKey: auth.apiKey, signal, timeoutMs: this.timeoutMs }),
-            this.timeoutMs
+            provider.complete({ system: prompt.system, user: prompt.user, params, outputContract: prompt.outputContract }, { model: cfg.model, apiKey: auth.apiKey, signal, abort: abort.signal, timeoutMs: this.timeoutMs, stream: cfg.model.includes('stream') }),
+            this.timeoutMs,
+            abort
           );
-          // 取消后提交保护：迟到结果不得作为成功/缓存提交。
+          // 取消后提交保护：迟到结果不得作为成功/缓存提交。已派发 → 费用不确定，保留预留额。
           if (signal.cancelled) {
-            this.store.updateModelJob(jobId, { status: 'cancelled', costCents: 0, errorCode: 'JOB_CANCELLED' });
-            this.cancels.delete(jobId);
+            this.store.updateModelJob(jobId, { status: 'cancelled', errorCode: 'JOB_CANCELLED' });
+            cleanup();
             return { status: 'cancelled', jobId };
           }
-          // 真实 Schema + 引用区间校验（真实模型与测试替身同一合同）。响应已发生 → 结算实际成本。
+          // 协议终止核对：finish_reason 非 'stop'（如 'length' 截断）→ 未完成，不入可用成功缓存。响应已发生 → 结算实际成本。
+          if (result.finishReason && result.finishReason !== 'stop') {
+            this.store.updateModelJob(jobId, { status: 'failed', costCents: result.usageKnown ? result.costCents : estCost, errorCode: 'EXPORT_INVALID' });
+            cleanup();
+            return { status: 'failed', jobId, code: 'EXPORT_INVALID', note: `响应未正常终止(finish_reason=${result.finishReason})，未纳入可用缓存。` };
+          }
+          // 真实 Schema/必填/数值/异常 + 引用区间校验（真实模型与测试替身同一合同）。
           const check = validateContract(prompt.outputContract, result.text, citations.length);
           if (!check.ok) {
-            this.store.updateModelJob(jobId, { status: 'failed', costCents: result.costCents, errorCode: 'EXPORT_INVALID' });
-            this.cancels.delete(jobId);
+            this.store.updateModelJob(jobId, { status: 'failed', costCents: result.usageKnown ? result.costCents : estCost, errorCode: 'EXPORT_INVALID' });
+            cleanup();
             return { status: 'failed', jobId, code: 'EXPORT_INVALID', note: `模型输出不合格(${check.reason})，未纳入可用缓存。` };
           }
-          const resultJson = JSON.stringify({ text: result.text, parsed: check.parsed, provider: result.provider, model: result.model, isTestDouble: result.isTestDouble, promptVersion: PROMPT_VERSION, params, usage: result.usage, citations, materialVersions });
-          this.store.updateModelJob(jobId, { status: 'succeeded', resultJson, costCents: result.costCents });
-          this.cancels.delete(jobId);
-          return { status: 'succeeded', jobId, result: JSON.parse(resultJson), costCents: result.costCents, fromCache: false };
+          // 内容来源身份随结果/缓存/下游成品传递。
+          const resultJson = JSON.stringify({ text: result.text, parsed: check.parsed, provider: result.provider, model: result.model, isTestDouble: result.isTestDouble, contentOrigin: result.contentOrigin, finishReason: result.finishReason, promptVersion: PROMPT_VERSION, params, usage: result.usage, usageKnown: result.usageKnown, pricing: result.pricing, citations, materialVersions });
+          this.store.updateModelJob(jobId, { status: 'succeeded', resultJson, costCents: result.usageKnown ? result.costCents : estCost });
+          cleanup();
+          return { status: 'succeeded', jobId, result: JSON.parse(resultJson), costCents: result.usageKnown ? result.costCents : estCost, fromCache: false };
         } catch (e) {
           lastErr = e as Error;
           const code = (e as Error).message;
@@ -228,30 +250,50 @@ export class ModelService {
       }
       throw lastErr ?? new Error('unknown');
     } catch (e) {
-      this.cancels.delete(jobId);
       const msg = (e as Error).message;
+      const reserved = this.store.getModelJob(jobId)?.costCents ?? estCost;
       if (msg === 'cancelled') {
-        this.store.updateModelJob(jobId, { status: 'cancelled', costCents: 0, errorCode: 'JOB_CANCELLED' });
+        // 取消与费用分离：已派发 → 费用不确定（保留预留额）；未派发 → 未计费(0)。
+        this.store.updateModelJob(jobId, { status: 'cancelled', costCents: dispatched ? reserved : 0, errorCode: dispatched ? 'JOB_CANCELLED_DISPATCHED' : 'JOB_CANCELLED' });
+        cleanup();
         return { status: 'cancelled', jobId };
       }
       if (msg === 'timeout') {
-        // 超时：执行与费用不确定；保留预留成本（不以“调用失败”直接认定未计费）。
-        this.store.updateModelJob(jobId, { status: 'uncertain', errorCode: 'REQUEST_UNCERTAIN' });
+        // 超时：执行与费用不确定；保留预留额（不以“调用失败”直接认定未计费）。
+        this.store.updateModelJob(jobId, { status: 'uncertain', costCents: reserved, errorCode: 'REQUEST_UNCERTAIN' });
+        cleanup();
         return { status: 'uncertain', jobId, code: 'REQUEST_UNCERTAIN', note: '调用超时：执行与费用不确定，已保留预留额待核实。' };
       }
-      // 明确未发生调用/未计费的失败（鉴权/密钥/网络前置）：成本置 0。
-      const noCharge = msg === 'AUTH_FAILED' || msg === 'KEY_UNAVAILABLE' || msg === 'MODEL_NOT_AVAILABLE' || msg === 'NETWORK_UNAVAILABLE';
-      this.store.updateModelJob(jobId, { status: 'failed', costCents: noCharge ? 0 : this.store.getModelJob(jobId)?.costCents ?? 0, errorCode: msg });
+      // 明确“未产生计费”的失败：鉴权拒绝/限流/密钥缺失 → 成本 0。
+      const rejectedNoCharge = msg === 'AUTH_FAILED' || msg === 'RATE_LIMITED' || msg === 'KEY_UNAVAILABLE';
+      // 已派发后的网络异常/不可解析响应/未知用量 → 费用不确定，保留预留额（不自动按零结算）。
+      const dispatchedUnknown = dispatched && (msg === 'NETWORK_UNAVAILABLE' || msg === 'MODEL_NOT_AVAILABLE' || msg === 'INCOMPLETE');
+      if (dispatchedUnknown) {
+        this.store.updateModelJob(jobId, { status: 'uncertain', costCents: reserved, errorCode: 'REQUEST_UNCERTAIN' });
+        cleanup();
+        return { status: 'uncertain', jobId, code: 'REQUEST_UNCERTAIN', note: `已派发后异常(${msg})：用量/费用不确定，保留预留额。` };
+      }
+      this.store.updateModelJob(jobId, { status: 'failed', costCents: rejectedNoCharge ? 0 : reserved, errorCode: msg });
       const code = msg === 'AUTH_FAILED' ? 'AUTH_FAILED' : msg === 'RATE_LIMITED' ? 'RATE_LIMITED' : msg === 'NETWORK_UNAVAILABLE' ? 'NETWORK_UNAVAILABLE' : 'MODEL_NOT_AVAILABLE';
+      cleanup();
       return { status: 'failed', jobId, code, note: `调用未成功：${msg}` };
     }
   }
 
-  private withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  private withTimeout<T>(p: Promise<T>, ms: number, abort?: AbortController): Promise<T> {
     let timer: NodeJS.Timeout;
     const t = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('timeout')), ms);
+      timer = setTimeout(() => {
+        abort?.abort(); // 超时传播到传输层
+        reject(new Error('timeout'));
+      }, ms);
     });
     return Promise.race([p.finally(() => clearTimeout(timer)), t]);
   }
+}
+
+// 估算 assemblePrompt 的输入规模（字符数）用于预留，不实际构造两次可复用。
+function prompt0(task: string, instructionExtra: string, citations: Citation[]): number {
+  const p = assemblePrompt(task, instructionExtra, citations);
+  return p.system.length + p.user.length;
 }

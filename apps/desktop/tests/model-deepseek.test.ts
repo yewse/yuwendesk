@@ -49,11 +49,13 @@ function jsonTransport(content: string, status = 200): HttpTransport {
 function statusTransport(status: number): HttpTransport {
   return async () => ({ status, text: '{"error":{"message":"x"}}' });
 }
-function streamTransport(chunks: string[]): HttpTransport {
-  return async () => ({
-    status: 200,
-    text: chunks.map((c) => `data: ${JSON.stringify({ choices: [{ delta: { content: c } }] })}`).join('\n') + '\ndata: [DONE]\n'
-  });
+function streamTransport(chunks: string[], finish = 'stop', done = true): HttpTransport {
+  async function* gen(): AsyncIterable<string> {
+    for (const c of chunks) yield `data: ${JSON.stringify({ choices: [{ delta: { content: c } }] })}\n`;
+    yield `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: finish }], usage: { prompt_tokens: 5, completion_tokens: 3 } })}\n`;
+    if (done) yield 'data: [DONE]\n';
+  }
+  return async () => ({ status: 200, stream: gen() });
 }
 
 describe('DeepSeek 真实协议（离线注入传输，禁止实网）', () => {
@@ -102,6 +104,18 @@ describe('DeepSeek 真实协议（离线注入传输，禁止实网）', () => {
     });
     await expect(ds.complete({ system: '', user: '', params: { temperature: 0, maxTokens: 1 }, outputContract: 'analyze_text.v1' }, { model: 'm', apiKey: 'k', timeoutMs: 100 })).rejects.toThrow('NETWORK_UNAVAILABLE');
   });
+
+  it('流无 [DONE]（协议未正常终止）→ INCOMPLETE', async () => {
+    const ds = createDeepseekProvider(streamTransport(['片段'], 'stop', false));
+    await expect(ds.complete({ system: 's', user: 'u', params: { temperature: 0, maxTokens: 10 }, outputContract: 'analyze_text.v1' }, { model: 'm', apiKey: 'k', timeoutMs: 1000, stream: true })).rejects.toThrow('INCOMPLETE');
+  });
+
+  it('离线注入 → contentOrigin=offline-injected（内容身份为模拟，非 test-double）', async () => {
+    const ds = createDeepseekProvider(jsonTransport(okBody), { contentOrigin: 'offline-injected' });
+    const r = await ds.complete({ system: 's', user: '【引用1】x', params: { temperature: 0, maxTokens: 100 }, outputContract: 'analyze_text.v1' }, { model: 'deepseek-flash', apiKey: 'k', timeoutMs: 1000 });
+    expect(r.contentOrigin).toBe('offline-injected');
+    expect(r.isTestDouble).toBe(false);
+  });
 });
 
 function seedFragment(s: SqliteStore) {
@@ -110,7 +124,8 @@ function seedFragment(s: SqliteStore) {
   return { versionId: s.getSourceVersions(r.documentId)[0].versionId, charStart: 0, charEnd: 8, approved: true };
 }
 function svcWith(s: SqliteStore, transport: HttpTransport): ModelService {
-  return new ModelService(s, { providers: { 'test-double': testDoubleProvider, deepseek: createDeepseekProvider(transport) } });
+  // 离线注入传输：内容来源身份为 offline-injected（经适配器仍为模拟内容）。
+  return new ModelService(s, { providers: { 'test-double': testDoubleProvider, deepseek: createDeepseekProvider(transport, { contentOrigin: 'offline-injected' }) } });
 }
 
 describe('DeepSeek 经 ModelService 授权后离线跑通（真实实网仍 BLOCKED）', () => {
@@ -120,7 +135,11 @@ describe('DeepSeek 经 ModelService 授权后离线跑通（真实实网仍 BLOC
     svc.configure({ provider: 'deepseek', apiKey: 'sk', allowRealNetwork: true, budgetCapCents: 0 });
     const r = await svc.run({ task: 'analyze_text', fragments: [seedFragment(s)] });
     expect(r.status).toBe('succeeded');
-    if (r.status === 'succeeded') expect(r.costCents).toBeGreaterThan(0); // 结算实际成本
+    if (r.status === 'succeeded') {
+      expect(r.costCents).toBeGreaterThan(0); // 结算实际成本
+      // 内容来源身份=offline-injected（经 DeepSeek 适配器的离线注入仍为模拟内容），随缓存/成品传递
+      expect((r.result as { contentOrigin: string }).contentOrigin).toBe('offline-injected');
+    }
   });
 
   it('非法输出(缺字段) → failed(EXPORT_INVALID)，不进入可用缓存', async () => {

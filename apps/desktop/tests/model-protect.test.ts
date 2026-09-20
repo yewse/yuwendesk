@@ -33,18 +33,20 @@ const VALID = JSON.stringify({ summary: 's', structure: ['a'], rhetoric: ['b'], 
 function controllable(costPer1kCents = 0, delayMs?: number): { provider: ModelProvider; release: () => void } {
   let release!: () => void;
   const gate = new Promise<void>((r) => (release = r));
+  const pricing = { currency: 'SIM', per1kInputCents: 0, per1kOutputCents: costPer1kCents, source: 'simulated', effectiveDate: 'N/A', isEstimate: true };
   const provider: ModelProvider = {
     id: 'ctrl',
     defaultModel: 'ctrl',
     requiresKey: false,
-    costPer1kCents,
+    pricing,
+    contentOrigin: 'simulated',
     async probe() {
       return { ok: true, provider: 'ctrl', model: 'ctrl', isTestDouble: true, note: 'ok' };
     },
     async complete() {
       if (delayMs !== undefined) await new Promise((r) => setTimeout(r, delayMs));
       else await gate;
-      return { text: VALID, usage: { promptTokens: 100, completionTokens: 50 }, costCents: Math.ceil((150 / 1000) * costPer1kCents), provider: 'ctrl', model: 'ctrl', isTestDouble: true };
+      return { text: VALID, usage: { promptTokens: 100, completionTokens: 50 }, usageKnown: true, costCents: Math.ceil((150 / 1000) * costPer1kCents), provider: 'ctrl', model: 'ctrl', isTestDouble: true, contentOrigin: 'simulated', finishReason: 'stop', pricing };
     }
   };
   return { provider, release };
