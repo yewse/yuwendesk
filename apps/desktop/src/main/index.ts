@@ -35,6 +35,7 @@ import { UpdateService } from './update/service';
 import { trustedUpdateKeys } from './update/trust';
 import { DatabaseMigrationCoordinator } from './update/migration';
 import { exportPreparedMaterials, PreparationService } from './preparation/service';
+import { isBoundPresentationRequest, PresentationService, PresentationWindowRegistry } from './presentation/service';
 
 const APP_NAME_ZH = '语文备课工作台';
 
@@ -45,6 +46,10 @@ let mainWindow: BrowserWindow | null = null;
 let store: SqliteStore;
 let ipcService: IpcService;
 let closeController: CloseController | null = null;
+const presentationWindows = new PresentationWindowRegistry<BrowserWindow>();
+const presentationWindowIds = new Set<number>();
+const presentationSessions = new Map<number, string>();
+let mainWindowOwnerId: string | null = null;
 
 // 仅在未打包（开发）且显式提供开发服务器地址时才进入开发模式；打包后一律走本地静态资源。
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
@@ -75,18 +80,68 @@ function detectWindowsProductType(): number | undefined {
   }
 }
 
-function isTrustedSender(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
+function isTrustedSender(event: IpcMainInvokeEvent | IpcMainEvent, operation?: string): boolean {
   if (!mainWindow) return false;
+  const fromMain = event.sender.id === mainWindow.webContents.id;
+  const fromPresentation = presentationWindowIds.has(event.sender.id);
+  if (!fromMain && !(fromPresentation && ['presentation.get', 'presentation.close'].includes(operation ?? ''))) return false;
   const expected = pathToFileURL(rendererIndexPath()).toString();
   return isTrustedIpcSender({
     senderId: event.sender.id,
-    mainWindowId: mainWindow.webContents.id,
+    mainWindowId: event.sender.id,
     senderFrame: event.senderFrame,
     mainFrame: event.sender.mainFrame,
     expectedFileUrl: expected,
     devServerUrl: DEV_SERVER_URL,
     allowDev: isDev
   });
+}
+
+function openPresentationWindow(sessionId: string): { opened: true; reused: boolean } {
+  if (!mainWindow || mainWindow.isDestroyed()) throw new Error('main_window_unavailable');
+  const ownerId = String(mainWindow.webContents.id);
+  const result = presentationWindows.open(ownerId, sessionId, () => {
+    const window = new BrowserWindow({
+      parent: mainWindow ?? undefined,
+      width: 1180,
+      height: 760,
+      minWidth: 800,
+      minHeight: 560,
+      show: false,
+      backgroundColor: '#171512',
+      title: `${APP_NAME_ZH} · 课堂展示`,
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: join(__dirname, '..', 'preload', 'index.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        spellcheck: false,
+        webviewTag: false,
+        devTools: isDev
+      }
+    });
+    presentationWindowIds.add(window.webContents.id);
+    presentationSessions.set(window.webContents.id, sessionId);
+    window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    window.webContents.on('will-navigate', (event, url) => {
+      if (!isAllowedInWindowNavigation(url, window.webContents.getURL())) event.preventDefault();
+    });
+    window.once('ready-to-show', () => window.show());
+    window.once('closed', () => {
+      presentationWindowIds.delete(window.webContents.id);
+      presentationSessions.delete(window.webContents.id);
+    });
+    if (isDev && DEV_SERVER_URL) {
+      const url = new URL(DEV_SERVER_URL);
+      url.searchParams.set('presentationSession', sessionId);
+      void window.loadURL(url.toString());
+    } else {
+      void window.loadFile(rendererIndexPath(), { query: { presentationSession: sessionId } });
+    }
+    return window;
+  });
+  return { opened: true, reused: result.reused };
 }
 
 function createWindow(): void {
@@ -113,6 +168,7 @@ function createWindow(): void {
       devTools: isDev
     }
   });
+  mainWindowOwnerId = String(mainWindow.webContents.id);
 
   // 禁止渲染进程打开任意窗口/导航到外部页面；外链仅在通过规范化 https 策略时交由系统浏览器。
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -173,7 +229,9 @@ function createWindow(): void {
   });
 
   mainWindow.on('closed', () => {
+    if (mainWindowOwnerId) presentationWindows.close(mainWindowOwnerId);
     mainWindow = null;
+    mainWindowOwnerId = null;
     closeController = null;
   });
 }
@@ -182,7 +240,7 @@ function registerIpc(): void {
   for (const op of IMPLEMENTED_OPERATIONS) {
     ipcMain.handle(`yuwen:${op}`, async (event: IpcMainInvokeEvent, request: unknown) => {
       // 逐调用校验发送者身份：仅接受本应用主窗口的受信任顶层 frame。
-      if (!isTrustedSender(event)) {
+      if (!isTrustedSender(event, op)) {
         return {
           ok: false,
           error: {
@@ -192,6 +250,20 @@ function registerIpc(): void {
             next_action: '请通过应用界面重新操作。'
           }
         };
+      }
+      if (op === 'presentation.get' && presentationWindowIds.has(event.sender.id)) {
+        const requested = (request as { payload?: { sessionId?: unknown } } | null)?.payload?.sessionId;
+        if (!isBoundPresentationRequest(presentationSessions, event.sender.id, op, requested)) {
+          return {
+            ok: false,
+            error: {
+              code: 'INPUT_INVALID',
+              message_zh: '课堂展示请求与当前受限窗口不一致。',
+              retryable: false,
+              next_action: '请关闭展示并从当前备课会话重新打开。'
+            }
+          };
+        }
       }
       return ipcService.handle(op, request);
     });
@@ -285,6 +357,7 @@ async function bootstrap(): Promise<void> {
     model: modelService,
     exportPlan: (planId) => exportPreparedMaterials(store, join(userDataDir, 'materials'), planId)
   });
+  const presentationService = new PresentationService(store);
   const feedbackService = new FeedbackService(store, store, modelService);
   const backupService = new BackupService({ userDataDir, appVersion: app.getVersion(), store });
   const backupCoordinator = new BackupCoordinator(backupService, () => new Date(), store);
@@ -406,6 +479,9 @@ async function bootstrap(): Promise<void> {
     lessonStore: store,
     preparationStore: store,
     preparationService,
+    presentationService,
+    openPresentation: openPresentationWindow,
+    closePresentation: () => mainWindow ? presentationWindows.close(String(mainWindow.webContents.id)) : false,
     feedbackStore: store,
     feedbackService,
     confirmObservationDelete: async ({ observationId }) => {

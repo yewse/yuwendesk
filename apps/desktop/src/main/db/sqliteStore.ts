@@ -3568,6 +3568,43 @@ export class SqliteStore {
     return rows.map((row) => this.mapPreparationSession(row));
   }
 
+  syncPreparationAfterPublishedChange(input: {
+    planId: string;
+    baseRevisionId: string;
+    revisionId: string;
+    reviewReportId: string;
+    bundleId: string;
+  }): number {
+    this.assertWritable();
+    for (const [field, value] of Object.entries(input)) assertPreparationId(value, field);
+    const db = this.requireDb();
+    return db.transaction((): number => {
+      const current = db.prepare('SELECT current_revision_id revisionId FROM lesson_plan WHERE plan_id=?')
+        .get(input.planId) as { revisionId: string } | undefined;
+      const review = db.prepare('SELECT 1 present FROM review_report WHERE report_id=? AND plan_id=? AND revision_id=?')
+        .get(input.reviewReportId, input.planId, input.revisionId) as { present: number } | undefined;
+      const bundle = db.prepare("SELECT 1 present FROM material_bundle WHERE bundle_id=? AND plan_id=? AND revision_id=? AND status='published'")
+        .get(input.bundleId, input.planId, input.revisionId) as { present: number } | undefined;
+      if (current?.revisionId !== input.revisionId || !review || !bundle) {
+        throw new PreparationVersionConflictError();
+      }
+      const updated = db.prepare(
+        `UPDATE preparation_session
+         SET status='EXPORTED',revision_id=?,review_report_id=?,bundle_id=?,last_error_code=NULL,
+             revision=revision+1,updated_at=?
+         WHERE plan_id=? AND revision_id=? AND status='EXPORTED'`
+      ).run(
+        input.revisionId,
+        input.reviewReportId,
+        input.bundleId,
+        new Date().toISOString(),
+        input.planId,
+        input.baseRevisionId
+      );
+      return Number(updated.changes);
+    }).immediate();
+  }
+
   createPreparationSession(
     contextId: string,
     mode: PreparationMode,

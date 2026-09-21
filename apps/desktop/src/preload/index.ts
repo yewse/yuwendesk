@@ -20,6 +20,8 @@ import type {
   StatusData
 } from '../shared/ipc';
 import type { ReviewReport } from '../main/review/types';
+import type { PresentationDTO } from '../main/presentation/service';
+import type { PreparationResumeDTO } from '../renderer/preparation/types';
 import type { ChangePreview, LessonChange } from '../main/change/types';
 import type { LessonChangeApplyOutcome } from '../main/store';
 import type { DiagnosticSaveResult, DiagnosticsPreview } from '../main/protection/diagnostics';
@@ -189,6 +191,8 @@ const api = {
     call<unknown>('preparation.session.get', { workspace_id: 'workspace_local', payload: { sessionId } }),
   preparationSessionList: () =>
     call<{ sessions: PreparationSessionSummaryDTO[] }>('preparation.session.list', { workspace_id: 'workspace_local' }),
+  preparationResume: (sessionId: string) =>
+    call<PreparationResumeDTO>('preparation.resume', { workspace_id: 'workspace_local', payload: { sessionId } }),
   preparationSourcesSet: (
     sessionId: string,
     sources: PreparationSourcePayload[],
@@ -220,8 +224,15 @@ const api = {
       workspace_id: 'workspace_local', expected_revision: expectedRevision, idempotency_key: idempotencyKey,
       payload: { sessionId }
     }),
+  presentationOpen: (sessionId: string) =>
+    call<{ opened: true; reused: boolean }>('presentation.open', {
+      workspace_id: 'workspace_local', payload: { sessionId }
+    }),
+  presentationGet: (sessionId: string) =>
+    call<PresentationDTO>('presentation.get', { workspace_id: 'workspace_local', payload: { sessionId } }),
+  presentationClose: () =>
+    call<{ closed: boolean }>('presentation.close', { workspace_id: 'workspace_local' }),
   // G05/G06 课时计划与三类五文件（自拟/测试内容明确标注）。
-  lessonBuildDemo: () => call<{ planId: string; revisionId: string; title: string; valid: boolean; contentOrigin: string }>('lesson.buildDemo'),
   lessonList: () => call<{ plans: { planId: string; title: string; currentRevisionId: string | null; updatedAt: string }[] }>('lesson.list'),
   lessonGet: (planId: string) => call<{ plan: unknown; contentOrigin: string; valid: boolean; revisionId: string }>('lesson.get', { payload: { planId } }),
   recordTeaching: (

@@ -274,41 +274,41 @@ git commit -m "feat(G12-T02): orchestrate reviewed lesson preparation"
 - Consumes: all Task 1/2 named preload methods and existing change APIs.
 - Produces: `buildPreparationView(session): PreparationView`, `PresentationService.open(sessionId)`, and the packaged renderer routes `main` / `presentation`.
 
-- [ ] **Step 1: Write failing view-model tests**
+- [x] **Step 1: Write failing view-model tests**
 
 Assert each state exposes only its legal primary action, displays content-origin labels and unknowns, disables export before confirmation, offers local fallback after model failure, and never includes API keys, raw model prompts, or arbitrary paths.
 
-- [ ] **Step 2: Run view tests and confirm RED**
+- [x] **Step 2: Run view tests and confirm RED**
 
 Run: `npm --workspace @yuwendesk/desktop exec vitest run tests/g12-preparation-view.test.ts`
 
-- [ ] **Step 3: Implement the split preparation UI**
+- [x] **Step 3: Implement the split preparation UI**
 
 Replace the hard-coded disabled `PreparePage` in `App.tsx` with the new orchestrated page. Keep one primary action per step, visible progress, keyboard labels, live regions, and explicit local/model identity. Context saves before source selection; selected sources show title/version/span and separate model permission. Do not add a prompt text area.
 
 On `EXPORTED`, show five artifacts, plan/revision/bundle IDs, hashes, classroom display, and existing one-change navigation. `My Courses` lists and resumes sessions; it no longer creates demo lessons.
 
-- [ ] **Step 4: Remove the production demo path**
+- [x] **Step 4: Remove the production demo path**
 
 Delete `lessonBuildDemo` from preload, shared operations, schema gate, production IPC dispatch, and renderer. Move any fixture-only use to test imports of `demoLessonSpec`. Add a contract assertion that production bundles do not contain the operation string `lesson.buildDemo`.
 
-- [ ] **Step 5: Write failing presentation tests**
+- [x] **Step 5: Write failing presentation tests**
 
 Test refusal for unreviewed/stale sessions; one active presentation per main window; task-first rendering; explicit hint reveal; explicit answer reveal; close without mutation; and no file path/network API in the presentation DTO.
 
-- [ ] **Step 6: Run presentation tests and confirm RED**
+- [x] **Step 6: Run presentation tests and confirm RED**
 
 Run: `npm --workspace @yuwendesk/desktop exec vitest run tests/g12-presentation.test.ts`
 
-- [ ] **Step 7: Implement the restricted presentation route/window**
+- [x] **Step 7: Implement the restricted presentation route/window**
 
 Build a `PresentationDTO` from the reviewed current LessonPlan. Create the BrowserWindow with `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, the packaged local renderer URL, no HTTP/WebSocket listener, and IPC authorization bound to that window sender/top frame. Keep reveal state in the renderer only; the DTO remains immutable.
 
-- [ ] **Step 8: Add an Electron vertical e2e script**
+- [x] **Step 8: Add an Electron vertical e2e script**
 
 The script uses isolated userData and synthetic source material. It drives named IPC through a real BrowserWindow to save context, import/select a fragment, build locally, review, confirm, export, open presentation, reveal answer, apply one change, verify a new revision/bundle, restart, and resume. It writes only a sanitized JSON result under the ignored acceptance-input directory and never upgrades frozen cases itself.
 
-- [ ] **Step 9: Run T03 verification and commit**
+- [x] **Step 9: Run T03 verification and commit**
 
 Run:
 

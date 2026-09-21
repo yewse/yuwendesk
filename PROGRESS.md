@@ -256,6 +256,10 @@
 - **T02 状态与发布边界**：模型不可用/取消/预算/无效输出不自动重试，不保存可用半成品，会话回到 `SOURCES_SELECTED`；上下文修改使旧审查失效。只有当前修订的软件审查为 `ready_for_teacher` 才可确认，五文件暂存、回读哈希、原子发布和数据库登记成功后才进入 `EXPORTED`；失败回到 `READY_TO_EXPORT` 并保留旧包。
 - **T02 验证**：计划内定向（local/model/service/DeepSeek/G07 failure）**52/52**，最终合并 local/model/service/DeepSeek/G07 failure/IPC/schema 为 **89/89**；真实五文件 exporter 集成测试登记 5 个制品，G07 文件系统/SQLite 故障边界与材料回归另跑 **36/36**。typecheck、lint、`git diff --check` 均退出 0。`verify:contracts` 的 1 项失败仅为历史 G11 发行证据与当前 G12 源码/候选/输入哈希漂移，保留到 T04 追加运行修复，不覆盖旧证据。既有 pdfjs 可选 canvas/字体警告仍如实出现，不改写为通过条件。
 - **T02 外部门保持不变**：本包没有执行真实 DeepSeek 请求、WPS/Office 打开与放映、真人教师专业复核、签名或分发；这些验收仍为 `BLOCKED_EXTERNAL/NOT_RUN`。本地软件审查不等同真人教学审查。
+- [x] **G12-T03 教师工作流界面与课堂展示完成（本地工程范围）**：“备下一课”已接通上下文、精确资料片段、教师自拟/模型辅助、软件审查、教师确认、三类五文件原子导出、受限课堂展示和“一处修改”；“我的课程”不再创建 demo。模型失败可显式转本地自拟，来源 SHA-256、内容来源身份、unknowns 和当前 plan/revision/bundle 均在界面可见，renderer DTO 不含任意路径、密钥或自由提示词。
+- **T03 展示与同步边界**：production `lesson.buildDemo` 已从 preload、IPC、schema gate、renderer 和构建产物删除。展示窗口只接受当前已审查修订，按主窗口限制单实例，保持 sandbox/contextIsolation 且不启动 HTTP/WebSocket；提示和答案必须分别显式揭示。已导出备课会话执行“一处修改”后同步到新审查报告/修订/五文件包；未导出会话不能从“我的课程”绕过确认和导出门。
+- **T03 验证**：G12 view/presentation/preparation/IPC/security 定向 **59/59**，schema 13 迁移夹具与无障碍渲染回归 **31/31**；全量 Vitest **683 passed / 1 failed / 1 skipped（685 total，75 files）**，唯一失败仍是既有 G11 最终状态 Markdown 的 CRLF/LF 差异。typecheck、lint、desktop build 均退出 0；`verify:contracts` 如实为 1 项失败，因为历史 G11 发行证据不绑定当前 G12 源码、候选和输入哈希。Electron 纵向脚本已加入并通过语法/构建检查，但本包尚未对当前 clean commit/候选实际执行，保持 `NOT_RUN`，留到 T04。
+- **T03 外部门保持不变**：真实 DeepSeek、WPS 打开/编辑/放映、干净标准用户 Windows、签名/时间戳、分发和真人教师专业复核没有由本包执行，继续 `BLOCKED_EXTERNAL/NOT_RUN`；本地软件审查和合成材料不替代真人复核或合法现用教材。
 
 ## G11-E01 追加外部验收准备 — 本地实现完成，实际运行待候选
 

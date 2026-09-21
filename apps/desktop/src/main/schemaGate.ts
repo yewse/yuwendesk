@@ -183,6 +183,12 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     additionalProperties: false
   },
   'preparation.session.list': null,
+  'preparation.resume': {
+    type: 'object',
+    properties: { sessionId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['sessionId'],
+    additionalProperties: false
+  },
   'preparation.sources.set': {
     type: 'object',
     properties: {
@@ -237,7 +243,19 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     required: ['sessionId'],
     additionalProperties: false
   },
-  'lesson.buildDemo': null,
+  'presentation.open': {
+    type: 'object',
+    properties: { sessionId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['sessionId'],
+    additionalProperties: false
+  },
+  'presentation.get': {
+    type: 'object',
+    properties: { sessionId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['sessionId'],
+    additionalProperties: false
+  },
+  'presentation.close': null,
   'lesson.list': null,
   'lesson.get': {
     type: 'object',

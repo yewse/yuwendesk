@@ -138,6 +138,13 @@ export interface PreparationStore {
   ): PreparationSession;
   getPreparationSession(sessionId: string): PreparationSession | null;
   listPreparationSessions(): PreparationSession[];
+  syncPreparationAfterPublishedChange?(input: {
+    planId: string;
+    baseRevisionId: string;
+    revisionId: string;
+    reviewReportId: string;
+    bundleId: string;
+  }): number;
 }
 
 export class PreparationVersionConflictError extends Error {

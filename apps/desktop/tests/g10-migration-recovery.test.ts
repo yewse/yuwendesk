@@ -367,7 +367,13 @@ describe('G10-T02 side-copy migration and recovery', () => {
     await initial.load();
     await initial.saveDraft('真实迁移链保留的数据');
     initial.withTransaction((db) => {
-      db.exec('DROP TABLE maintenance_error_count; DROP TABLE maintenance_state');
+      db.exec(`
+        DROP TABLE preparation_source;
+        DROP TABLE preparation_session;
+        DROP TABLE teaching_context;
+        DROP TABLE maintenance_error_count;
+        DROP TABLE maintenance_state;
+      `);
       db.prepare("DELETE FROM app_meta WHERE key='data_generation'").run();
       db.pragma(`user_version = ${SQLITE_SCHEMA_TARGET - 1}`);
     });

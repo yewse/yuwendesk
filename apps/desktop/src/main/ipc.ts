@@ -27,7 +27,6 @@ import {
 import { PreparationService, PreparationServiceError } from './preparation/service';
 import { StoreProtectedError } from './store';
 import { checkPayload } from './schemaGate';
-import { buildLessonPlan, demoLessonSpec, validateLessonPlan } from './lesson/build';
 import { buildMaterialSet } from './materials/generate';
 import { reviewLessonPlan } from './review/review';
 import { reviewMaterialSet } from './review/bundleReview';
@@ -65,6 +64,7 @@ import { createObservationRecord, ObservationPrivacyError } from './feedback/obs
 import type { CorrectionDecisionInput, CorrectionRevertInput, FeedbackAnalyzeInput } from './feedback/service';
 import { UpdateValidationError } from './update/types';
 import type { UpdateStageInput } from './update/service';
+import { PresentationEligibilityError, PresentationService } from './presentation/service';
 
 function errorResponse(
   code: ErrorCode,
@@ -99,6 +99,9 @@ export interface IpcServiceContext {
   feedbackStore?: FeedbackStore;
   preparationStore?: PreparationStore;
   preparationService?: PreparationService;
+  presentationService?: PresentationService;
+  openPresentation?: (sessionId: string) => { opened: true; reused: boolean };
+  closePresentation?: () => boolean;
   // G08 测量门与模型辅助归因；仅接受稳定 ID 和逐次许可，不接受自由提示词或 Observation JSON。
   feedbackService?: {
     analyze(input: FeedbackAnalyzeInput): Promise<FeedbackAnalysisResult>;
@@ -184,7 +187,7 @@ export function isImplementedOperation(op: string): op is OperationName {
 
 const BUSINESS_WRITE_OPERATIONS = new Set<OperationName>([
   'ui.saveDraft', 'sources.import', 'sources.importFile', 'sources.retire', 'sources.reclassify', 'sources.delete',
-  'model.configure', 'model.run', 'lesson.buildDemo', 'plans.recordTeaching',
+  'model.configure', 'model.run', 'plans.recordTeaching',
   'feedback.analyze', 'corrections.decide', 'corrections.revert',
   'observations.add', 'observations.delete', 'change.apply', 'materials.generate',
   'preparation.context.save', 'preparation.session.create', 'preparation.sources.set',
@@ -337,6 +340,8 @@ export class IpcService {
         return this.preparationSessionGet(request);
       case 'preparation.session.list':
         return this.preparationSessionList();
+      case 'preparation.resume':
+        return this.preparationResume(request);
       case 'preparation.sources.set':
         return this.preparationSourcesSet(request);
       case 'preparation.build':
@@ -347,8 +352,12 @@ export class IpcService {
         return this.preparationConfirm(request);
       case 'preparation.export':
         return this.preparationExport(request);
-      case 'lesson.buildDemo':
-        return this.lessonBuildDemo();
+      case 'presentation.open':
+        return this.presentationOpen(request);
+      case 'presentation.get':
+        return this.presentationGet(request);
+      case 'presentation.close':
+        return { ok: true, data: { closed: this.ctx.closePresentation?.() ?? false } };
       case 'lesson.list':
         return this.ctx.lessonStore ? { ok: true, data: { plans: this.ctx.lessonStore.listLessonPlans() } } : { ok: true, data: { plans: [] } };
       case 'lesson.get':
@@ -487,6 +496,74 @@ export class IpcService {
 
   private preparationSessionList(): IpcResponse {
     return { ok: true, data: { sessions: this.ctx.preparationStore?.listPreparationSessions() ?? [] } };
+  }
+
+  private preparationResume(req: IpcRequest): IpcResponse {
+    const preparationStore = this.ctx.preparationStore;
+    const lessonStore = this.ctx.lessonStore;
+    if (!preparationStore || !lessonStore) {
+      return errorResponse('CAPABILITY_UNSUPPORTED', '备课恢复功能不可用。', '请重启或更新应用。');
+    }
+    const session = preparationStore.getPreparationSession((req.payload as { sessionId: string }).sessionId);
+    if (!session) return errorResponse('SOURCE_MISSING', '备课会话不存在。', '请新建备课。');
+    const context = preparationStore.getTeachingContext(session.contextId);
+    if (!context) return errorResponse('SOURCE_MISSING', '教学上下文不存在。', '请新建备课。');
+    const revision = session.planId && session.revisionId
+      ? lessonStore.getLessonRevision(session.planId, session.revisionId)
+      : null;
+    let plan: LessonPlan | null = null;
+    if (revision) {
+      try { plan = JSON.parse(revision.contentJson) as LessonPlan; } catch { plan = null; }
+    }
+    const report = session.planId && session.revisionId
+      ? lessonStore.getLatestReviewReport(session.planId, session.revisionId)?.report ?? null
+      : null;
+    const artifacts = session.planId && session.revisionId
+      ? lessonStore.listMaterialArtifacts(session.planId, session.revisionId)
+        .filter((artifact) => !session.bundleId || artifact.bundleId === session.bundleId)
+        .map((artifact) => ({
+          role: artifact.role,
+          format: artifact.format,
+          filename: artifact.filename,
+          sha256: artifact.sha256,
+          byteSize: artifact.byteSize
+        }))
+      : [];
+    return { ok: true, data: { session, context, plan, report, artifacts } };
+  }
+
+  private presentationError(): IpcResponse<never> {
+    return errorResponse(
+      'SOURCE_CONFLICT',
+      '当前方案尚未确认，或计划、审查、来源已经变化，不能展示。',
+      '请返回备课流程重新审查并确认当前修订。'
+    );
+  }
+
+  private presentationOpen(req: IpcRequest): IpcResponse {
+    if (!this.ctx.presentationService || !this.ctx.openPresentation) {
+      return errorResponse('CAPABILITY_UNSUPPORTED', '课堂展示功能不可用。', '请重启或更新应用。');
+    }
+    const sessionId = (req.payload as { sessionId: string }).sessionId;
+    try {
+      this.ctx.presentationService.open(sessionId);
+      return { ok: true, data: this.ctx.openPresentation(sessionId) };
+    } catch (error) {
+      if (error instanceof PresentationEligibilityError) return this.presentationError();
+      return this.presentationError();
+    }
+  }
+
+  private presentationGet(req: IpcRequest): IpcResponse {
+    if (!this.ctx.presentationService) {
+      return errorResponse('CAPABILITY_UNSUPPORTED', '课堂展示功能不可用。', '请关闭展示并重试。');
+    }
+    try {
+      return { ok: true, data: this.ctx.presentationService.open((req.payload as { sessionId: string }).sessionId) };
+    } catch (error) {
+      if (error instanceof PresentationEligibilityError) return this.presentationError();
+      return this.presentationError();
+    }
   }
 
   private preparationSourcesSet(req: IpcRequest): IpcResponse {
@@ -978,20 +1055,6 @@ export class IpcService {
     return errorResponse(known, '模型调用未成功。', '请检查片段授权、预算与服务商状态。');
   }
 
-  // G05：组建自拟示例完整课时计划并持久化（内容来源 authored，明确标注自拟）。
-  private lessonBuildDemo(): IpcResponse {
-    const ls = this.ctx.lessonStore;
-    if (!ls) return errorResponse('INPUT_INVALID', '课时计划功能不可用。', '请重启应用。');
-    const plan = buildLessonPlan(demoLessonSpec());
-    const v = validateLessonPlan(plan);
-    if (!v.ok) return errorResponse('EXPORT_INVALID', `计划不合格：${v.errors.join(',')}`, '请检查计划结构。');
-    ls.saveLessonRevision(
-      { revisionId: plan.revision_id, planId: plan.plan_id, previousRevisionId: plan.previous_revision_id, title: plan.title, contentJson: JSON.stringify(plan), contentOrigin: 'authored', valid: true, createdAt: new Date().toISOString() },
-      true
-    );
-    return { ok: true, data: { planId: plan.plan_id, revisionId: plan.revision_id, title: plan.title, valid: true, contentOrigin: 'authored' } };
-  }
-
   private lessonGet(req: IpcRequest): IpcResponse {
     const ls = this.ctx.lessonStore;
     if (!ls) return errorResponse('SOURCE_MISSING', '不可用。', '请重启应用。');
@@ -1408,9 +1471,9 @@ export class IpcService {
     const rec = ls.getLessonRevision(payload.planId, payload.revisionId);
     if (!rec) return errorResponse('SOURCE_MISSING', '课时计划或指定修订不存在。', '请刷新计划后重试。');
 
-    let plan: ReturnType<typeof buildLessonPlan>;
+    let plan: LessonPlan;
     try {
-      plan = JSON.parse(rec.contentJson) as ReturnType<typeof buildLessonPlan>;
+      plan = JSON.parse(rec.contentJson) as LessonPlan;
     } catch {
       return errorResponse('EXPORT_INVALID', '课时计划数据损坏，无法审查。', '请恢复该修订或重新组建计划。');
     }
@@ -1458,11 +1521,29 @@ export class IpcService {
       return errorResponse('INPUT_INVALID', '接纳修改缺少幂等键。', '请重试当前操作。');
     }
     const payload = req.payload as { planId: string; baseRevisionId: string; change: LessonChange };
+    const linkedSessions = this.ctx.preparationStore?.listPreparationSessions()
+      .filter((session) => session.planId === payload.planId && session.revisionId === payload.baseRevisionId) ?? [];
+    if (linkedSessions.some((session) => session.status !== 'EXPORTED')) {
+      return errorResponse(
+        'SOURCE_CONFLICT',
+        '当前备课方案尚未完成教师确认和首次导出，不能从课程页绕过流程修改。',
+        '请返回“备下一课”完成审查、确认和首次五文件导出。'
+      );
+    }
     try {
       const result = await this.lessonChangeService.apply({
         ...payload,
         idempotencyKey: req.idempotency_key
       });
+      if (result.status === 'succeeded') {
+        this.ctx.preparationStore?.syncPreparationAfterPublishedChange?.({
+          planId: payload.planId,
+          baseRevisionId: payload.baseRevisionId,
+          revisionId: result.revisionId,
+          reviewReportId: result.reviewReportId,
+          bundleId: result.bundleId
+        });
+      }
       return { ok: true, data: { result } };
     } catch (error) {
       return this.lessonChangeError(error);

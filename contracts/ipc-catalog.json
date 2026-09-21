@@ -674,6 +674,17 @@
       "arbitrary_path_allowed": false
     },
     {
+      "operation": "preparation.resume",
+      "kind": "read",
+      "scope": "workspace",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": false,
+      "output_contract": "当前会话、上下文、计划、审查和无路径制品摘要",
+      "semantic_guard": "只返回当前稳定 ID 和闭集展示字段，不返回制品路径或模型请求",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
       "operation": "preparation.sources.set",
       "kind": "write",
       "scope": "workspace",
@@ -725,6 +736,39 @@
       "requires_idempotency_key": true,
       "output_contract": "已发布 bundle 与五文件登记",
       "semantic_guard": "暂存、回读哈希、原子发布和数据库登记全部成功后才进入 EXPORTED",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "presentation.open",
+      "kind": "read",
+      "scope": "workspace",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": false,
+      "output_contract": "受限课堂展示窗口状态",
+      "semantic_guard": "仅当前已审查并确认的修订；每个主窗口最多一个展示窗口",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "presentation.get",
+      "kind": "read",
+      "scope": "workspace",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": false,
+      "output_contract": "无路径课堂展示 DTO",
+      "semantic_guard": "仅展示窗口顶层 frame；不返回来源正文、文件路径或网络端点",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "presentation.close",
+      "kind": "read",
+      "scope": "workspace",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": false,
+      "output_contract": "展示窗口关闭状态",
+      "semantic_guard": "关闭不修改课时、会话、审查或制品",
       "sender_validation_required": true,
       "arbitrary_path_allowed": false
     }

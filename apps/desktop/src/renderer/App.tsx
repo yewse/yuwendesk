@@ -46,6 +46,7 @@ import { buildSourceDeleteSummary, sensitiveSourceNotice, type SourceDeleteSumma
 import type { DiagnosticsPreview } from '../main/protection/diagnostics';
 import { diagnosticsPreviewText, diagnosticsSaveEnabled, diagnosticsScopeNotice } from './diagnosticsView';
 import { MAIN_CONTENT_ID, startDialogFocusSession } from './accessibilityLayout';
+import { PreparePage as PreparationWorkflowPage } from './preparation/PreparePage';
 
 type NavKey = 'prepare' | 'courses' | 'resources' | 'settings';
 
@@ -298,32 +299,20 @@ function HealthPanel({ health }: { health: HealthData | null }): JSX.Element {
   );
 }
 
-function PreparePage({ boot, health }: { boot: BootstrapData | null; health: HealthData | null }): JSX.Element {
+function PreparePage({ boot, health, onOpenCourses }: { boot: BootstrapData | null; health: HealthData | null; onOpenCourses: () => void }): JSX.Element {
   return (
-    <div className="page">
-      <h1>备下一课</h1>
-      <p className="lead">
-        围绕当前单元和下一课完成资料核对、内容解读、任务设计与课时安排。常态下你只需确认推荐方案或提出一处修改。
-      </p>
-      <div className="grid">
-        <div className="card">
-          <div className="card-title">当前班级</div>
-          <p className="muted">尚未设置班级与教材。首次向导将引导你确认班级、教材与实际课时。</p>
-          <button className="btn" disabled>
-            开始准备（需先完成资料导入 · 后续版本开放）
-          </button>
+    <>
+      <PreparationWorkflowPage onOpenCourses={onOpenCourses} />
+      <div className="page prep-supporting">
+        <div className="grid">
+          <DraftNote />
+          <HealthPanel health={health} />
         </div>
-        <div className="card">
-          <div className="card-title">需处理的关键问题</div>
-          <p className="muted">暂无。只有当答案会改变核心安排时才会向你提问。</p>
-        </div>
-        <DraftNote />
-        <HealthPanel health={health} />
+        {boot && !boot.platform_supported && (
+          <div className="notice warn">当前系统非受支持平台，仅用于工程验证。</div>
+        )}
       </div>
-      {boot && !boot.platform_supported && (
-        <div className="notice warn">当前系统非受支持平台，仅用于工程验证。</div>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -332,14 +321,6 @@ interface PlanItem {
   title: string;
   currentRevisionId: string | null;
   updatedAt: string;
-}
-interface ArtifactItem {
-  role: string;
-  format: string;
-  filename: string;
-  path: string;
-  sha256: string;
-  byteSize: number;
 }
 interface LessonHistory {
   revisions: Array<{ revisionId: string; previousRevisionId: string | null; title: string; createdAt: string }>;
@@ -375,7 +356,6 @@ function localDateTimeValue(date = new Date()): string {
 
 function CoursesPage(): JSX.Element {
   const [plans, setPlans] = useState<PlanItem[]>([]);
-  const [manifest, setManifest] = useState<{ planId: string; revisionId: string; contentOrigin: string; versionStamp: string; files: ArtifactItem[] } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<LessonPlan | null>(null);
   const [history, setHistory] = useState<LessonHistory | null>(null);
@@ -439,22 +419,16 @@ function CoursesPage(): JSX.Element {
 
   async function reload(): Promise<void> {
     const r = await window.yuwen.lessonList();
-    if (r.ok) setPlans(r.data.plans);
+    if (r.ok) {
+      setPlans(r.data.plans);
+      setMsg(null);
+    } else {
+      setMsg(`课程列表加载失败：${r.error.message_zh}；${r.error.next_action}`);
+    }
   }
   useEffect(() => {
     void reload();
   }, []);
-
-  async function buildDemo(): Promise<void> {
-    const r = await window.yuwen.lessonBuildDemo();
-    setMsg(r.ok ? `已组建自拟课时计划（${r.data.title}，修订 ${r.data.revisionId.slice(0, 12)}…，内容来源 ${r.data.contentOrigin}）` : `组建失败：${r.error.message_zh}`);
-    await reload();
-  }
-  async function generate(planId: string): Promise<void> {
-    const r = await window.yuwen.materialsGenerate(planId);
-    if (r.ok) setManifest(r.data);
-    else setMsg(`生成失败：${r.error.message_zh}`);
-  }
 
   function invalidatePreview(): void {
     setPreviewed(null);
@@ -912,15 +886,10 @@ function CoursesPage(): JSX.Element {
     <div className="page">
       <h1>我的课程</h1>
       <p className="lead">完整课时计划（LessonPlan）与三类五文件成品：课堂 PPT、学生讲义(DOCX/PDF)、教师讲解版(DOCX/PDF)。软件审查只检查结构、引用与版本一致性。</p>
+      {msg && <LiveMessage urgent warning>{msg}</LiveMessage>}
       <div className="card">
         <div className="card-title">课时计划</div>
-        <p className="muted small">无真实模型授权时，可用“自拟完整计划”并行开发；模拟/自拟内容明确标注，不冒充真实备课质量。</p>
-        <div className="confirm-actions">
-          <button className="btn small" onClick={() => void buildDemo()}>
-            组建自拟完整课时计划（测试）
-          </button>
-        </div>
-        {msg && <LiveMessage urgent={messageNeedsAlert(msg)} warning={messageNeedsAlert(msg)}>{msg}</LiveMessage>}
+        <p className="muted small">新计划统一从“备下一课”按资料、生成、审查和确认流程建立；这里保留课程历史与一处修改。</p>
         <ul className="src-list">
           {plans.map((p) => (
             <li key={p.planId} className="src-item">
@@ -932,13 +901,10 @@ function CoursesPage(): JSX.Element {
                 <button className="btn small" onClick={() => void openPlan(p.planId)}>
                   打开课程与反馈
                 </button>
-                <button className="btn small" onClick={() => void generate(p.planId)}>
-                  生成三类五文件
-                </button>
               </div>
             </li>
           ))}
-          {plans.length === 0 && <p className="muted small">暂无课时计划。点击上方按钮组建自拟完整计划。</p>}
+          {plans.length === 0 && <p className="muted small">暂无课时计划。请从“备下一课”开始。</p>}
         </ul>
       </div>
 
@@ -1477,25 +1443,6 @@ function CoursesPage(): JSX.Element {
         </div>
       )}
 
-      {manifest && (
-        <div className="card">
-          <div className="card-title">三类五文件（版本一致 · 角色隔离）</div>
-          <p className="notice small">{manifest.versionStamp}</p>
-          <p className="muted small">内容来源：{manifest.contentOrigin}（自拟/模拟内容明确标注；真实备课质量需真实模型与教师核验）</p>
-          <ul className="src-list">
-            {manifest.files.map((f) => (
-              <li key={f.filename} className="src-item">
-                <div>
-                  <b>{f.filename}</b>{' '}
-                  <span className="tag">{f.role === 'presentation' ? '课堂PPT' : f.role === 'student' ? '学生' : '教师'}</span>{' '}
-                  <span className="tag">{f.format}</span>
-                  <div className="muted small mono">{f.byteSize} 字节 · sha256 {f.sha256.slice(0, 16)}…</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
@@ -2452,7 +2399,7 @@ export function App(): JSX.Element {
           </div>
         </header>
         <div className="scroll">
-          {nav === 'prepare' && <PreparePage boot={boot} health={health} />}
+          {nav === 'prepare' && <PreparePage boot={boot} health={health} onOpenCourses={() => setNav('courses')} />}
           {nav === 'courses' && <CoursesPage />}
           {nav === 'resources' && <ResourcesPage />}
           {nav === 'settings' && <SettingsPage boot={boot} health={health} />}

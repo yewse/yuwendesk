@@ -861,3 +861,231 @@ h1 {
   font-size: 0.76rem;
   line-height: 1.45;
 }
+
+/* ===== G12 正式备课闭环 ===== */
+.preparation-page {
+  display: grid;
+  gap: 16px;
+}
+
+.prep-heading {
+  align-items: flex-start;
+}
+
+.prep-heading > label {
+  min-width: 270px;
+}
+
+.prep-progress {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: prep;
+}
+
+.prep-progress li {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: center;
+  color: var(--muted);
+  background: #fff;
+}
+
+.prep-progress li.active {
+  color: var(--accent);
+  border-color: #cba982;
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.prep-step {
+  max-width: 920px;
+}
+
+.prep-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.prep-form-grid label,
+.prep-heading label {
+  display: grid;
+  gap: 5px;
+}
+
+.prep-form-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.prep-mode {
+  display: flex;
+  gap: 18px;
+  margin: 16px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.btn.primary {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.prep-toolbar {
+  align-items: center;
+}
+
+.prep-source-list {
+  display: grid;
+  gap: 8px;
+}
+
+.prep-source {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.prep-source.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.prep-source small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.prep-consent {
+  display: block;
+  margin-top: 14px;
+}
+
+.notice.ok {
+  color: var(--green);
+  border: 1px solid #abd0ba;
+  background: #edf8f1;
+}
+
+.prep-artifacts {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.prep-artifacts li {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 4px 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.prep-artifacts code {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.prep-supporting {
+  margin-top: 20px;
+}
+
+/* 独立课堂展示路由：无侧栏、无文件路径、提示与答案默认隐藏。 */
+.presentation-shell {
+  min-height: 100%;
+  padding: 24px;
+  color: #f7f1e7;
+  background: #171512;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  gap: 18px;
+}
+
+.presentation-header,
+.presentation-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.presentation-header span {
+  display: block;
+  color: #c7bcae;
+}
+
+.presentation-slide {
+  position: relative;
+  display: grid;
+  align-content: center;
+  gap: 20px;
+  padding: clamp(28px, 6vw, 72px);
+  border: 1px solid #4a433a;
+  border-radius: 22px;
+  background: #221f1a;
+}
+
+.presentation-slide h1 {
+  font-size: clamp(30px, 5vw, 58px);
+}
+
+.presentation-prompt {
+  max-width: 24em;
+  margin: 0;
+  font-size: clamp(26px, 4vw, 46px);
+  line-height: 1.45;
+}
+
+.presentation-count {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  color: #c7bcae;
+}
+
+.presentation-reveal {
+  padding: 14px 18px;
+  border-radius: 12px;
+  color: #191612;
+  background: #f0e6d8;
+}
+
+.presentation-reveal h2 {
+  margin: 0;
+}
+
+.presentation-controls {
+  justify-content: center;
+}
+
+.presentation-shortcuts {
+  margin: 0;
+  text-align: center;
+  color: #a99d8e;
+}
+
+@media (max-width: 760px) {
+  .prep-progress {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .prep-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .prep-form-grid .wide {
+    grid-column: auto;
+  }
+}

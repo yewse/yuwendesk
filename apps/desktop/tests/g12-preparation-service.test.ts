@@ -194,6 +194,94 @@ describe('G12 PreparationService', () => {
     const exported = await service.export(ready.sessionId, ready.revision, 'export-real');
     expect(exported.status).toBe('EXPORTED');
     expect(f.store.listMaterialArtifacts(exported.planId!, exported.revisionId!)).toHaveLength(5);
+    const ipc = new IpcService({
+      store: f.store, sourceStore: f.store, lessonStore: f.store, preparationStore: f.store,
+      appVersion: '0.1.0', appNameZh: '语文备课工作台', platformSupported: true,
+      httpListeners: 0, online: false, buildMode: 'production', sandboxEnabled: true,
+      platformDevOverride: false, platformTargetSupported: true, platformIdentity: 'win11'
+    });
+    const resumed = await ipc.handle('preparation.resume', {
+      schema_version: IPC_SCHEMA_VERSION, request_id: 'resume-exported', operation: 'preparation.resume',
+      workspace_id: 'workspace_local', payload: { sessionId: exported.sessionId }
+    });
+    expect(resumed.ok).toBe(true);
+    if (resumed.ok) {
+      const artifacts = (resumed.data as { artifacts: Array<Record<string, unknown>> }).artifacts;
+      expect(artifacts).toHaveLength(5);
+      expect(Object.keys(artifacts[0]).sort()).toEqual(['byteSize', 'filename', 'format', 'role', 'sha256']);
+      expect(JSON.stringify(resumed.data)).not.toContain(f.dir);
+    }
+  });
+
+  it('keeps a published preparation session on the new reviewed bundle after one change', async () => {
+    const f = await fixture();
+    const preparation = new PreparationService({
+      store: f.store,
+      exportPlan: (planId) => exportPreparedMaterials(f.store, join(f.dir, 'materials'), planId)
+    });
+    const built = await preparation.build(buildInput(f.session.sessionId, f.session.revision, 'build-change-sync'));
+    preparation.review(built.sessionId, built.revision, 'review-change-sync');
+    const ready = preparation.confirm(built.sessionId, built.revision, 'confirm-change-sync');
+    const exported = await preparation.export(ready.sessionId, ready.revision, 'export-change-sync');
+    const stored = f.store.getLessonRevision(exported.planId!, exported.revisionId!)!;
+    const plan = JSON.parse(stored.contentJson) as { tasks: Array<{ task_id: string; prompt: string }> };
+    const ipc = new IpcService({
+      store: f.store, sourceStore: f.store, lessonStore: f.store, preparationStore: f.store,
+      userDataDir: join(f.dir, 'materials-after-change'),
+      appVersion: '0.1.0', appNameZh: '语文备课工作台', platformSupported: true,
+      httpListeners: 0, online: false, buildMode: 'production', sandboxEnabled: true,
+      platformDevOverride: false, platformTargetSupported: true, platformIdentity: 'win11'
+    });
+    const response = await ipc.handle('change.apply', {
+      schema_version: IPC_SCHEMA_VERSION,
+      request_id: 'request-change-sync',
+      operation: 'change.apply',
+      workspace_id: 'workspace_local',
+      idempotency_key: 'change-sync',
+      payload: {
+        planId: exported.planId,
+        baseRevisionId: exported.revisionId,
+        change: {
+          kind: 'edit_task',
+          taskId: plan.tasks[0].task_id,
+          prompt: `${plan.tasks[0].prompt}（先独立作答）`,
+          acceptableVariants: ['答案需有材料依据。']
+        }
+      }
+    });
+    expect(response.ok).toBe(true);
+    if (!response.ok) return;
+    const result = (response.data as { result: { status: string; revisionId: string; bundleId: string } }).result;
+    expect(result.status).toBe('succeeded');
+    expect(f.store.getPreparationSession(exported.sessionId)).toMatchObject({
+      status: 'EXPORTED', revisionId: result.revisionId, bundleId: result.bundleId
+    });
+  });
+
+  it('does not let the courses page bypass preparation confirmation', async () => {
+    const f = await fixture();
+    const preparation = new PreparationService({ store: f.store });
+    const built = await preparation.build(buildInput(f.session.sessionId, f.session.revision, 'build-before-confirm'));
+    const ipc = new IpcService({
+      store: f.store, sourceStore: f.store, lessonStore: f.store, preparationStore: f.store,
+      userDataDir: join(f.dir, 'blocked-change'),
+      appVersion: '0.1.0', appNameZh: '语文备课工作台', platformSupported: true,
+      httpListeners: 0, online: false, buildMode: 'production', sandboxEnabled: true,
+      platformDevOverride: false, platformTargetSupported: true, platformIdentity: 'win11'
+    });
+    const response = await ipc.handle('change.apply', {
+      schema_version: IPC_SCHEMA_VERSION,
+      request_id: 'request-change-before-confirm',
+      operation: 'change.apply',
+      workspace_id: 'workspace_local',
+      idempotency_key: 'change-before-confirm',
+      payload: {
+        planId: built.planId,
+        baseRevisionId: built.revisionId,
+        change: { kind: 'change_duration', durationSec: 2400 }
+      }
+    });
+    expect(response).toMatchObject({ ok: false, error: { code: 'SOURCE_CONFLICT' } });
   });
 
   it('routes the named preparation IPC operations without a generic invoke surface', async () => {

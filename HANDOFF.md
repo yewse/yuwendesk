@@ -108,10 +108,10 @@ npm run build:candidate
 
 ## 下一个有界工作包建议
 
-0. G12-T01 已在 `codex/g12-teacher-workflow` 完成本地持久层和 IPC DTO 合同；下一步直接执行 G12-T02 的本地自拟 builder、严格 `lesson_plan_spec` parser 与编排服务。先写 RED 测试，不重做 G00–G06。
-1. G12-T02 必须保证无 DeepSeek 时本地自拟路径可完整生成；真实模型不可用/输出非法/来源漂移时回到 `SOURCES_SELECTED`，不得保存半成品计划。
-2. G12-T03 才移除 production `lesson.buildDemo` 并接通“上下文→资料→生成→审查→五文件→一处修改→课堂展示”；未审查或陈旧修订不得导出/展示。
-3. G12-T04 生成绑定当时 clean commit 和候选的新增验收运行。当前旧发行证据因 commit/候选/输入哈希漂移被合同脚本拒绝，这是正确阻断，不得覆盖旧 run。
+0. G12-T01–T03 本地实现已完成；不要重做 G00–G11，也不要恢复 production `lesson.buildDemo`。
+1. 下一步直接执行 G12-T04：先提交 T03，再以 RED 合同测试更新教师指南和追加验收入口；随后从 clean commit 构建候选并实际运行 G12 Electron 纵向脚本。
+2. 新验收运行只能使用绑定当前 commit、当前候选和当前输入哈希的实际证据；旧 G11 运行永久保留，不能覆盖或借证。
+3. 真实 DeepSeek/WPS/干净标准用户 Windows/签名/分发/真人教师复核只有实际执行后才能转为 PASS/FAIL，否则保持 `BLOCKED_EXTERNAL/NOT_RUN`。
 
 ## G12-T01 当前状态
 
@@ -126,6 +126,14 @@ npm run build:candidate
 - 内容来源三分：`teacher_authored`、`model_assisted_real`、`model_assisted_simulated`；模拟结果不会冒充真实 API。模型不可用只返回可见错误并允许本地降级，不自动消耗预算重试。
 - T02 计划内定向 52/52，最终合并 local/model/service/DeepSeek/G07 failure/IPC/schema 为 89/89，G07 failure + materials 另跑 36/36；typecheck、lint、diff 均通过。`verify:contracts` 实际执行后仍有 1 项失败，原因是历史 G11 证据不绑定当前 G12 commit/候选/输入哈希，留待 T04 追加验收重建。
 - 下一步 G12-T03：实现 renderer 分步界面、移除 production `lesson.buildDemo`、加入受限课堂展示和实际 UI 纵向脚本。真实 API/WPS/签名/分发/真人教师复核仍保持阻断。
+
+## G12-T03 当前状态
+
+- “备下一课”已接通上下文→资料→本地/模型生成→软件审查→教师确认→五文件导出→一处修改→课堂展示；production `lesson.buildDemo` 已删除，课堂窗口不暴露路径/网络端点并要求当前审查修订。
+- 已导出备课会话的一处修改会同步新 revision/review/bundle；未导出会话不能从课程页绕过准备状态机。模型失败只提供显式本地降级，不自动重试或消耗预算。
+- 定向验证 59/59，加迁移/无障碍回归 31/31；全量 683 passed / 1 failed / 1 skipped。唯一失败仍是既有 G11 Markdown CRLF/LF 差异。typecheck、lint、build 通过；合同校验的唯一失败是旧 G11 证据对当前 G12 commit/候选/输入哈希失效。
+- G12 Electron 纵向脚本已实现但尚未绑定 clean commit/候选实际执行，保持 NOT_RUN。下一步 T04 从提交后的 clean source 构建候选、运行脚本并创建新的追加验收，不覆盖历史运行。
+- 真实 API、WPS、干净标准用户 Windows、签名/时间戳、分发和真人教师复核仍为 `BLOCKED_EXTERNAL/NOT_RUN`。
 
 1. 提交 E10，保留第四轮追加验收与 clean-source 发行证据；不要覆盖前两轮 FAIL 或其他历史记录。
 2. 真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。

@@ -1481,7 +1481,7 @@
         "read-only classroom presentation"
       ],
       "acceptance_ids": [],
-      "status": "NOT_STARTED",
+      "status": "COMPLETED_LOCAL",
       "rules": [
         "移除 production lesson.buildDemo",
         "未审查或过期计划不得导出或展示",
