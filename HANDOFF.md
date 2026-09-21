@@ -141,6 +141,7 @@ npm run build:candidate
 - 新合同先 RED 后 GREEN；G12/G11 发行定向 84/84，全量 689 passed / 1 skipped；typecheck、lint、build 通过。Windows CRLF 只做公开文档比较规范化，文件哈希门没有放宽。
 - 当前旧 G11 发行证据对 G12 源码和候选已漂移，`verify:contracts` 仍有 1 项真实失败。下一步必须先提交 T04，随后从 clean HEAD 执行 `build:candidate`、G12 Electron 纵向、Node ABI 恢复、带 `--g12-evidence` 的新增 acceptance run，以及 release evidence/SBOM/verify；历史运行不得覆盖。
 - G12 本地工程完成不等于正式发行：真实 DeepSeek、WPS、干净标准用户 Windows、签名/时间戳、分发、合法现用教材和真人教师复核仍按实际证据保持 `BLOCKED_EXTERNAL/NOT_RUN`。
+- 首个 `3019830` 候选纵向运行真实失败于展示审查指针不一致，未记 PASS。修复已让五文件导出同步发布阶段的新 `reviewReportId`，回归先红后绿；必须提交该修复后重建候选并从头重跑。
 
 1. 提交 E10，保留第四轮追加验收与 clean-source 发行证据；不要覆盖前两轮 FAIL 或其他历史记录。
 2. 真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。

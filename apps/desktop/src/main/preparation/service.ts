@@ -51,7 +51,7 @@ type Store = PreparationStore & SourceStore & LessonStore;
 export interface PreparationServiceOptions {
   store: Store;
   model?: PreparationModelRunner;
-  exportPlan?: (planId: string) => Promise<{ bundleId: string }>;
+  exportPlan?: (planId: string) => Promise<{ bundleId: string; reviewReportId?: string }>;
   now?: () => string;
 }
 
@@ -59,7 +59,7 @@ export async function exportPreparedMaterials(
   store: LessonStore,
   root: string,
   planId: string
-): Promise<{ bundleId: string }> {
+): Promise<{ bundleId: string; reviewReportId: string }> {
   const revision = store.getLessonRevision(planId);
   if (!revision) throw new PreparationServiceError('PREPARATION_STALE');
   const bundleId = `bundle_${randomUUID()}`;
@@ -120,7 +120,7 @@ export async function exportPreparedMaterials(
       createdAt: now
     };
     store.commitMaterialBundle({ bundle, artifacts, review });
-    return { bundleId };
+    return { bundleId, reviewReportId: review.reportId };
   } catch (error) {
     await nodeBundleIo.rm(published?.directory ?? stagingDirectory).catch(() => undefined);
     throw error;
@@ -370,7 +370,11 @@ export class PreparationService {
         sessionId,
         started.revision,
         'EXPORTED',
-        { bundleId: exported.bundleId, lastErrorCode: null },
+        {
+          bundleId: exported.bundleId,
+          reviewReportId: exported.reviewReportId ?? started.reviewReportId,
+          lastErrorCode: null
+        },
         `${idempotencyKey}:complete`
       );
     } catch (error) {

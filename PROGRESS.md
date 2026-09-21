@@ -263,6 +263,7 @@
 - [x] **G12-T04 当前候选追加验收入口完成（本地工程范围）**：教师指南已改为真实启用流程，并继续明确模型教师复核、Office/WPS 独立保真门和未签名候选边界。新增 `AcceptanceRun.supplementalEvidence` 可选合同与严格 G12 纵向证据校验；runner 只追加保存绑定 source commit、固定候选字节和执行时窗的闭集观察结果，不改变冻结 170 案例的状态推导。来源/候选漂移、秘密、本机路径、额外字段或观察值与结论不一致均拒绝整轮。
 - **T04 提交前验证**：新合同先 RED 后 GREEN；G12/G11 发行定向 **84/84**，全量 Vitest **689 passed / 1 skipped（690 total，76 files）**；typecheck、lint、desktop build 均退出 0。旧 G11 公开 Markdown 的 Windows CRLF 假失败已按换行规范化关闭，逐文件 SHA-256 没有放宽。提交前 `verify:contracts` 仍如实为 1 项失败，仅因旧 G11 发行证据与 G12 当前源码/候选/输入哈希漂移；须在本包提交后的 clean commit 上构建候选并追加运行后重建，不得覆盖历史运行。
 - **T04 运行边界**：`e2e-g12.cjs` 的实际 Electron/SQLite 纵向执行、clean candidate、追加 AcceptanceRun 和发行事务必须在 T04 源码提交后生成；其真实 commit/hash/计数以 `reports/acceptance-runs/` 和 `reports/release/` 的追加产物为准。未实际执行前不把这些步骤称为 PASS。
+- **T04 首次候选失败与修复**：`3019830` 候选实际纵向运行在课堂展示资格门失败，未形成 PASS 证据。根因是五文件发布写入新的材料包审查报告后，备课会话仍保留导出前 `reviewReportId`；展示服务因此正确拒绝。新增回归先 RED 后 GREEN，导出完成状态现同步最新发布审查 ID，资格门本身未放宽。须从修复后的新 clean commit 重建候选并重跑，不能沿用 `3019830` 候选。
 
 ## G11-E01 追加外部验收准备 — 本地实现完成，实际运行待候选
 

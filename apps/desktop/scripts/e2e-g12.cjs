@@ -134,13 +134,26 @@ async function run() {
     const exported=await window.yuwen.preparationExport(built.data.session.sessionId,confirmed.data.session.revision,key('export'));
     const resumed=await window.yuwen.preparationResume(built.data.session.sessionId);
     const opened=await window.yuwen.presentationOpen(built.data.session.sessionId);
-    return {sessionId:built.data.session.sessionId,planId:resumed.data.session.planId,revisionId:resumed.data.session.revisionId,bundleId:exported.data.session.bundleId,artifactCount:resumed.data.artifacts.length,reviewDisposition:resumed.data.report.disposition,presentationOpened:opened.ok};
+    return {sessionId:built.data.session.sessionId,planId:resumed.data.session.planId,revisionId:resumed.data.session.revisionId,bundleId:exported.data.session.bundleId,artifactCount:resumed.data.artifacts.length,reviewDisposition:resumed.data.report.disposition,presentationOpened:opened.ok,presentationError:opened.ok?null:opened.error.code};
   `);
   const deadline = Date.now() + 10000;
   while ((!presentationWindow || presentationWindow.isDestroyed()) && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  if (!presentationWindow || presentationWindow.isDestroyed()) throw new Error('presentation-window');
+  if (!presentationWindow || presentationWindow.isDestroyed()) {
+    const session = store.getPreparationSession(first.sessionId);
+    const current = session?.planId ? store.getLessonRevision(session.planId) : null;
+    const report = session?.planId && session.revisionId ? store.getLatestReviewReport(session.planId, session.revisionId) : null;
+    const sourceState = session?.sources.map((source) => store.getVersionMeta(source.sourceVersionId)) ?? [];
+    throw new Error(`presentation-window:${JSON.stringify({
+      presentationError: first.presentationError,
+      status: session?.status ?? null,
+      currentMatches: current?.revisionId === session?.revisionId,
+      reportMatches: report?.reportId === session?.reviewReportId,
+      disposition: report?.report.disposition ?? null,
+      sourceActiveCurrent: sourceState.every((item) => item?.status === 'active' && item.isCurrent)
+    })}`);
+  }
   const reveal = await runIn(presentationWindow, `
     const deadline=Date.now()+5000;
     while(!document.querySelector('.presentation-slide')&&Date.now()<deadline) await new Promise(r=>setTimeout(r,80));

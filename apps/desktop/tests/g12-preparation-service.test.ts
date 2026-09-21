@@ -194,6 +194,9 @@ describe('G12 PreparationService', () => {
     const exported = await service.export(ready.sessionId, ready.revision, 'export-real');
     expect(exported.status).toBe('EXPORTED');
     expect(f.store.listMaterialArtifacts(exported.planId!, exported.revisionId!)).toHaveLength(5);
+    expect(exported.reviewReportId).toBe(
+      f.store.getLatestReviewReport(exported.planId!, exported.revisionId!)?.reportId
+    );
     const ipc = new IpcService({
       store: f.store, sourceStore: f.store, lessonStore: f.store, preparationStore: f.store,
       appVersion: '0.1.0', appNameZh: '语文备课工作台', platformSupported: true,
