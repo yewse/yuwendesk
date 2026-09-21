@@ -39,3 +39,9 @@ export function restorePreviewNotice(preview: { apiReconnectRequired: boolean })
   return `恢复将在完整验证后通过重启切换数据。${preview.apiReconnectRequired ? 'API 密钥不会迁移，重启后需重新连接 AI。' : ''}`;
 }
 
+export function storageProtectionNotice(kind: 'none' | 'newer_data' | 'migration_recovery' | 'other'): string {
+  if (kind === 'newer_data') return '本地数据来自更新版本，当前版本已停止写入。请先更新应用，不要继续配置 AI。';
+  if (kind === 'migration_recovery') return '本地数据升级尚未安全完成，AI 和备课写入已暂停。请在“备份与恢复”中完成恢复。';
+  return '本地数据库未能可靠读取，AI 和备课写入已暂停。请在“备份与恢复”中选择已验证本机备份并恢复。';
+}
+

@@ -100,6 +100,8 @@ describe('G09 protection payload schemas', () => {
     expect(checkPayload('backup.restore', {
       action: 'confirm', restoreJobId: 'r1', previewHash: 'a'.repeat(64), confirmationToken: 'token'
     }).ok).toBe(true);
+    expect(checkPayload('backup.restore', { action: 'local-preview', backupId: 'b1' }).ok).toBe(true);
+    expect(checkPayload('backup.restore', { action: 'local-preview', backupId: 'b1', path: 'C:\\private\\backup.ready' }).ok).toBe(false);
     expect(checkPayload('backups.delete', { action: 'prepare', backupId: 'b1' }).ok).toBe(true);
   });
 

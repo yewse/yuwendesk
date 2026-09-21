@@ -138,6 +138,80 @@ export async function preparePortableRestore(input: {
   }
 }
 
+export async function prepareLocalRestore(input: {
+  backupDirectory: string;
+  expectedBackupId: string;
+  userDataDir: string;
+  jobId: string;
+  now: Date;
+}): Promise<PreparedRestore> {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(input.jobId)) throw new Error('restore_job_id_invalid');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(input.expectedBackupId)) throw new Error('backup_id_invalid');
+  const backupsRoot = resolve(input.userDataDir, 'backups');
+  const backupDirectory = resolve(input.backupDirectory);
+  const expectedDirectory = resolve(backupsRoot, `${input.expectedBackupId}.ready`);
+  if (backupDirectory !== expectedDirectory || !inside(backupsRoot, backupDirectory)) throw new Error('backup_local_path_invalid');
+
+  let manifest: BackupManifest;
+  try {
+    manifest = JSON.parse(await fs.readFile(join(backupDirectory, 'manifest.json'), 'utf8')) as BackupManifest;
+  } catch {
+    throw new Error('backup_manifest_invalid');
+  }
+  const errors = validateBackupManifest(manifest);
+  if (errors.length || manifest.kind !== 'local' || manifest.backupId !== input.expectedBackupId) {
+    throw new Error(`backup_manifest_invalid:${errors[0] ?? 'identity'}`);
+  }
+  if (manifest.schemaVersion > SQLITE_SCHEMA_TARGET) throw new Error('backup_schema_too_new');
+  const verified = await verifyBackupDirectory(backupDirectory, manifest);
+  if (!verified.ok) throw new Error(`backup_verification_failed:${verified.reason}`);
+  const space = await fs.statfs(input.userDataDir);
+  const expandedBytes = manifest.files.reduce((sum, entry) => sum + entry.byteSize, 0);
+  if (!hasRestoreCapacity(space, expandedBytes)) throw new Error('backup_disk_space_insufficient');
+
+  const stageRoot = join(input.userDataDir, 'restore-staging', input.jobId);
+  const stagedUserDataDir = join(stageRoot, 'userData');
+  await fs.rm(stageRoot, { recursive: true, force: true });
+  await fs.mkdir(stagedUserDataDir, { recursive: true });
+  try {
+    for (const entry of manifest.files) {
+      if (entry.role === 'workspace-key') throw new Error('backup_local_workspace_key_invalid');
+      const source = resolve(backupDirectory, ...entry.path.split('/'));
+      if (!inside(backupDirectory, source)) throw new Error('backup_local_path_invalid');
+      const relativeDestination = entry.role === 'database' ? 'yuwendesk.db' : entry.path;
+      const destination = resolve(stagedUserDataDir, ...relativeDestination.split('/'));
+      if (!inside(stagedUserDataDir, destination)) throw new Error('backup_local_path_invalid');
+      const stat = await fs.lstat(source);
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('backup_local_file_invalid');
+      const bytes = await fs.readFile(source);
+      if (bytes.length !== entry.byteSize || createHash('sha256').update(bytes).digest('hex') !== entry.sha256) {
+        throw new Error('backup_local_changed');
+      }
+      await fs.mkdir(dirname(destination), { recursive: true });
+      await fs.writeFile(destination, bytes, { flag: 'wx' });
+    }
+
+    const db = new Database(join(stagedUserDataDir, 'yuwendesk.db'), { readonly: true });
+    try {
+      if (db.pragma('integrity_check', { simple: true }) !== 'ok') throw new Error('backup_database_invalid');
+      if (Number(db.pragma('user_version', { simple: true })) > SQLITE_SCHEMA_TARGET) throw new Error('backup_schema_too_new');
+      if (Number(db.prepare('SELECT COUNT(*) FROM credential').pluck().get()) !== 0) throw new Error('backup_credential_present');
+    } finally {
+      db.close();
+    }
+    const preview: RestorePreview = {
+      backupId: manifest.backupId,
+      createdAt: manifest.createdAt,
+      schemaVersion: manifest.schemaVersion,
+      apiReconnectRequired: true
+    };
+    return { jobId: input.jobId, previewHash: hash(preview), stagedUserDataDir, preview };
+  } catch (error) {
+    await fs.rm(stageRoot, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 export async function writePendingRestore(userDataDir: string, prepared: PreparedRestore, grant: RestoreConfirmationGrant): Promise<void> {
   if (grant.token.length < 8 || grant.jobId !== prepared.jobId || grant.previewHash !== prepared.previewHash || grant.expiresAt <= Date.now()) {
     throw new Error('restore_confirmation_invalid');
@@ -237,7 +311,6 @@ export async function applyPendingRestoreBeforeOpen(
   const stagedDb = join(staged, 'yuwendesk.db');
   if (!databaseLooksUsable(stagedDb)) throw new Error('restore_stage_invalid');
   const originalDatabasePresent = existsSync(currentDb);
-  if (originalDatabasePresent && !databaseLooksUsable(currentDb)) throw new Error('restore_rollback_invalid');
   const originalDatabaseHash = originalDatabasePresent ? await fileSha256(currentDb) : null;
   if (originalDatabasePresent && !originalDatabaseHash) throw new Error('restore_rollback_invalid');
   await fs.mkdir(rollback, { recursive: true });

@@ -455,6 +455,7 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     type: 'object',
     properties: {
       action: { type: 'string', minLength: 1, maxLength: 32 },
+      backupId: { type: 'string', minLength: 1, maxLength: 128 },
       passphrase: { type: 'string', maxLength: 1024 },
       restoreJobId: { type: 'string', maxLength: 128 },
       previewHash: { type: 'string', maxLength: 64 },

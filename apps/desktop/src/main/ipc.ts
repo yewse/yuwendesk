@@ -174,6 +174,7 @@ export interface UpdateServiceLike {
 export interface ModelServiceLike {
   providerCatalog(): { id: string; defaultModel: string; requiresKey: boolean }[];
   getConfig(): unknown;
+  credentialStatus?(): { status: 'not_required' | 'missing' | 'stored' | 'unavailable'; last4: string | null };
   configure(input: { provider: string; model?: string; params?: { temperature?: number; maxTokens?: number }; budgetCapCents?: number; allowRealNetwork?: boolean; apiKey?: string }): { ok: boolean; code?: string; note?: string; config?: unknown; keyStored?: boolean };
   probe(): Promise<{ ok: boolean; note: string; code?: string; provider?: string; model?: string; isTestDouble?: boolean }>;
   run(input: { task: string; instructionExtra?: string; fragments?: { versionId: string; charStart: number; charEnd: number; approved: boolean }[] }): Promise<{ status: string; jobId?: string; result?: unknown; costCents?: number; fromCache?: boolean; code?: string; note?: string }>;
@@ -315,7 +316,12 @@ export class IpcService {
       case 'model.providers':
         return this.ctx.modelService ? { ok: true, data: { providers: this.ctx.modelService.providerCatalog() } } : { ok: true, data: { providers: [] } };
       case 'model.getConfig':
-        return this.ctx.modelService ? { ok: true, data: { config: this.ctx.modelService.getConfig() } } : { ok: true, data: { config: null } };
+        if (this.ctx.store.isProtected()) {
+          return errorResponse('DATABASE_LOCKED', '本地数据已进入保护状态，AI 配置无法读取。', '请先在“备份与恢复”中恢复已验证的本机备份。');
+        }
+        return this.ctx.modelService
+          ? { ok: true, data: { config: this.ctx.modelService.getConfig(), credential: this.ctx.modelService.credentialStatus?.() ?? { status: 'unavailable', last4: null } } }
+          : { ok: true, data: { config: null, credential: { status: 'unavailable', last4: null } } };
       case 'model.configure':
         return this.modelConfigure(request);
       case 'model.probe':
@@ -1009,29 +1015,52 @@ export class IpcService {
     const m = this.ctx.modelService;
     if (!m) return errorResponse('INPUT_INVALID', '模型功能不可用。', '请重启应用。');
     const p = req.payload as { provider: string; model?: string; temperature?: number; maxTokens?: number; budgetCapCents?: number; allowRealNetwork?: boolean; apiKey?: string };
-    const r = m.configure({
-      provider: p.provider,
-      model: p.model,
-      params: { temperature: p.temperature, maxTokens: p.maxTokens },
-      budgetCapCents: p.budgetCapCents,
-      allowRealNetwork: p.allowRealNetwork,
-      apiKey: p.apiKey
-    });
+    let r;
+    try {
+      r = m.configure({
+        provider: p.provider,
+        model: p.model,
+        params: { temperature: p.temperature, maxTokens: p.maxTokens },
+        budgetCapCents: p.budgetCapCents,
+        allowRealNetwork: p.allowRealNetwork,
+        apiKey: p.apiKey
+      });
+    } catch (error) {
+      if (error instanceof StoreProtectedError) {
+        return errorResponse('DATABASE_LOCKED', '本地数据已进入保护状态，AI 配置没有保存。', '请先恢复已验证的本机备份。');
+      }
+      throw error;
+    }
     if (!r.ok) {
       const code = r.code === 'KEY_UNAVAILABLE' ? 'KEY_UNAVAILABLE' : 'INPUT_INVALID';
-      return errorResponse(code, '模型配置未通过校验。', '请检查服务商与密钥后重试。');
+      return errorResponse(
+        code,
+        r.code === 'KEY_UNAVAILABLE' ? 'API 密钥无法安全保存。' : '模型配置未通过校验。',
+        r.code === 'KEY_UNAVAILABLE' ? '请确认 Windows 安全加密可用后重试。' : '请检查服务商和模型名称后重试。'
+      );
     }
-    return { ok: true, data: { config: r.config, keyStored: r.keyStored } };
+    return { ok: true, data: { config: r.config, keyStored: r.keyStored, credential: m.credentialStatus?.() ?? { status: 'unavailable', last4: null } } };
   }
 
   private async modelProbe(): Promise<IpcResponse> {
     const m = this.ctx.modelService;
     if (!m) return errorResponse('INPUT_INVALID', '模型功能不可用。', '请重启应用。');
+    if (this.ctx.store.isProtected()) {
+      return errorResponse('DATABASE_LOCKED', '本地数据已进入保护状态，AI 探测已停止。', '请先恢复已验证的本机备份。');
+    }
     const r = await m.probe();
     if (!r.ok) {
       const code = (r.code as ErrorCode) ?? 'MODEL_NOT_AVAILABLE';
       const known = ['MODEL_NOT_AVAILABLE', 'AUTH_FAILED', 'NETWORK_UNAVAILABLE', 'KEY_UNAVAILABLE'].includes(code) ? code : 'MODEL_NOT_AVAILABLE';
-      return errorResponse(known as ErrorCode, '模型服务探测未成功。', '真实调用需授权账户与联网；当前保持未验证。');
+      if (known === 'KEY_UNAVAILABLE') {
+        return errorResponse('KEY_UNAVAILABLE', '尚未保存可用的 API 密钥。', '请在 AI 连接中输入密钥、保存配置，然后重新探测。');
+      }
+      const nextAction = known === 'AUTH_FAILED'
+        ? 'API 密钥已被服务商拒绝，请更换密钥并重新保存。'
+        : known === 'NETWORK_UNAVAILABLE'
+          ? '请检查网络连接后重试。'
+          : '请检查模型名称和服务商可用状态后重试。';
+      return errorResponse(known as ErrorCode, '模型服务探测未成功。', nextAction);
     }
     return { ok: true, data: r };
   }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SqliteStore } from '../src/main/db/sqliteStore';
@@ -9,6 +9,7 @@ import { BackupCoordinator, BackupService } from '../src/main/protection/backup'
 import {
   applyPendingRestoreBeforeOpen,
   hasRestoreCapacity,
+  prepareLocalRestore,
   preparePortableRestore,
   writePendingRestore
 } from '../src/main/protection/restore';
@@ -80,6 +81,44 @@ describe('G09 backup and portable restore flow', () => {
     expect(existsSync(created.path.replace(/\.ready$/u, '.partial'))).toBe(false);
     expect((await service.list()).map((item) => item.backupId)).toEqual(['backup_local_1']);
     expect(readFileSync(join(created.path, 'data', 'yuwendesk.db')).includes(Buffer.from('sk-LOCAL-SECRET-1234'))).toBe(false);
+  });
+
+  it('restores a corrupted current database from a verified managed local backup without restoring API credentials', async () => {
+    const userDataDir = temp('yuwendesk-local-restore-');
+    const store = await open(userDataDir);
+    await store.saveDraft('recoverable local state');
+    store.setCredential('model_api_key', 'sk-LOCAL-SECRET-RESTORE');
+    const service = new BackupService({
+      userDataDir, appVersion: '0.1.0', store,
+      ids: { backupId: () => 'backup_local_restore' },
+      now: () => new Date('2026-09-21T04:04:27.157Z')
+    });
+    const backup = await service.createLocal();
+    const prepared = await prepareLocalRestore({
+      backupDirectory: backup.path,
+      expectedBackupId: backup.backupId,
+      userDataDir,
+      jobId: 'restore_local_1',
+      now: new Date('2026-09-21T10:00:00.000Z')
+    });
+    expect(prepared.preview).toMatchObject({ backupId: 'backup_local_restore', apiReconnectRequired: true });
+
+    store.close();
+    stores.delete(store);
+    writeFileSync(join(userDataDir, 'yuwendesk.db'), Buffer.from('corrupted current database'));
+    await writePendingRestore(userDataDir, prepared, {
+      token: 'local-restore-token', jobId: prepared.jobId, previewHash: prepared.previewHash,
+      expiresAt: Date.now() + 60_000
+    });
+    const applied = await applyPendingRestoreBeforeOpen(userDataDir, async (candidateDir) => {
+      const db = new Database(join(candidateDir, 'yuwendesk.db'), { readonly: true });
+      try { return db.pragma('integrity_check', { simple: true }) === 'ok'; } finally { db.close(); }
+    });
+    expect(applied.status).toBe('applied');
+
+    const restored = await open(userDataDir);
+    expect(restored.getDraft().content).toBe('recoverable local state');
+    expect(restored.getCredentialLast4('model_api_key')).toBeNull();
   });
 
   it('restores data on another safeStorage backend while leaving API credentials empty', async () => {

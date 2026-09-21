@@ -13,6 +13,7 @@ export interface CredentialLike {
   credentialEncryptionAvailable(): boolean;
   setCredential(name: string, plaintext: string): { ok: true; last4: string } | { ok: false; reason: string };
   readCredential(name: string): { ok: true; plaintext: string } | { ok: false; reason: string };
+  getCredentialLast4?(name: string): string | null;
 }
 const KEY_NAME = 'model_api_key';
 const MAX_RETRIES = 2;
@@ -79,6 +80,14 @@ export class ModelService {
   getConfig(): ModelConfig | null {
     return this.store.getModelConfig();
   }
+  credentialStatus(): { status: 'not_required' | 'missing' | 'stored' | 'unavailable'; last4: string | null } {
+    const config = this.store.getModelConfig();
+    const provider = config ? this.getProvider(config.provider) : undefined;
+    if (!provider?.requiresKey) return { status: 'not_required', last4: null };
+    if (!this.store.credentialEncryptionAvailable()) return { status: 'unavailable', last4: null };
+    const last4 = this.store.getCredentialLast4?.(KEY_NAME) ?? null;
+    return last4 ? { status: 'stored', last4 } : { status: 'missing', last4: null };
+  }
   cancel(jobId: string): boolean {
     const sig = this.cancels.get(jobId);
     if (!sig) return false;
@@ -95,11 +104,11 @@ export class ModelService {
   }
 
   // 派发前联网授权：真实服务商需 allowRealNetwork 且持有受保护密钥；否则 BLOCKED（不发起网络）。
-  private authorize(cfg: ModelConfig, provider: ModelProvider): { ok: true; apiKey?: string } | { ok: false; note: string } {
+  private authorize(cfg: ModelConfig, provider: ModelProvider): { ok: true; apiKey?: string } | { ok: false; code: 'MODEL_NOT_AVAILABLE' | 'KEY_UNAVAILABLE'; note: string } {
     if (!provider.requiresKey) return { ok: true };
-    if (!cfg.allowRealNetwork) return { ok: false, note: '真实联网未授权（allowRealNetwork=false），保持 BLOCKED。' };
+    if (!cfg.allowRealNetwork) return { ok: false, code: 'MODEL_NOT_AVAILABLE', note: '真实联网未授权（allowRealNetwork=false），保持 BLOCKED。' };
     const apiKey = this.readKey();
-    if (!apiKey) return { ok: false, note: '未配置受保护的 API 密钥。' };
+    if (!apiKey) return { ok: false, code: 'KEY_UNAVAILABLE', note: '未配置受保护的 API 密钥。' };
     return { ok: true, apiKey };
   }
 
@@ -113,7 +122,7 @@ export class ModelService {
     let apiKey: string | undefined;
     if (provider.requiresKey) {
       const auth = this.authorize(cfg, provider);
-      if (!auth.ok) return { ok: false, note: auth.note, code: 'MODEL_NOT_AVAILABLE' };
+      if (!auth.ok) return { ok: false, note: auth.note, code: auth.code };
       apiKey = auth.apiKey;
     }
     try {

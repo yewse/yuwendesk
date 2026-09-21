@@ -4,6 +4,7 @@ import type { SafeStorageLike } from '../crypto/secrets';
 import type { BackupRecord, BackupService } from './backup';
 import type { ProtectionFaultHooks } from './types';
 import {
+  prepareLocalRestore,
   preparePortableRestore,
   writePendingRestore,
   type PreparedRestore,
@@ -36,6 +37,7 @@ interface ProtectionServiceOptions {
   confirmDelete(backupId: string): Promise<boolean>;
   relaunch(): void;
   prepareRestore?: typeof preparePortableRestore;
+  prepareLocalRestore?: typeof prepareLocalRestore;
   writePending?: typeof writePendingRestore;
   ids?: { restoreJobId(): string; token(): string };
   now?: () => number;
@@ -45,6 +47,7 @@ interface ProtectionServiceOptions {
 type RestorePayload = {
   action: string;
   passphrase?: string;
+  backupId?: string;
   restoreJobId?: string;
   previewHash?: string;
   confirmationToken?: string;
@@ -61,6 +64,7 @@ function omitLocalPath<T>(value: T): T {
 
 export class ProtectionService {
   private readonly prepareRestoreImpl: typeof preparePortableRestore;
+  private readonly prepareLocalRestoreImpl: typeof prepareLocalRestore;
   private readonly writePendingImpl: typeof writePendingRestore;
   private readonly ids: { restoreJobId(): string; token(): string };
   private readonly now: () => number;
@@ -72,6 +76,7 @@ export class ProtectionService {
 
   constructor(private readonly options: ProtectionServiceOptions) {
     this.prepareRestoreImpl = options.prepareRestore ?? preparePortableRestore;
+    this.prepareLocalRestoreImpl = options.prepareLocalRestore ?? prepareLocalRestore;
     this.writePendingImpl = options.writePending ?? writePendingRestore;
     this.ids = options.ids ?? {
       restoreJobId: () => `restore_${randomUUID()}`,
@@ -199,7 +204,22 @@ export class ProtectionService {
 
   async restore(payload: RestorePayload, idempotencyKey?: string): Promise<unknown> {
     try {
-      const result = await this.once(idempotencyKey, `restore:${payload.action}:${payload.restoreJobId ?? ''}:${payload.previewHash ?? ''}`, async () => {
+      const result = await this.once(idempotencyKey, `restore:${payload.action}:${payload.backupId ?? ''}:${payload.restoreJobId ?? ''}:${payload.previewHash ?? ''}`, async () => {
+      if (payload.action === 'local-preview') {
+        const backupId = payload.backupId ?? '';
+        const record = (await this.options.backup.list()).find((item) => item.backupId === backupId && item.valid === true);
+        if (!record || typeof record.path !== 'string') throw new Error('backup_local_not_found');
+        const jobId = this.ids.restoreJobId();
+        const prepared = await this.prepareLocalRestoreImpl({
+          backupDirectory: record.path,
+          expectedBackupId: backupId,
+          userDataDir: this.options.userDataDir,
+          jobId,
+          now: new Date(this.now())
+        });
+        this.prepared.set(jobId, prepared);
+        return { restoreJobId: jobId, previewHash: prepared.previewHash, preview: prepared.preview };
+      }
       if (payload.action === 'preview') {
         if (!payload.passphrase || !this.options.safeStorage) {
           if (!this.options.prepareRestore) throw new Error('restore_environment_unavailable');

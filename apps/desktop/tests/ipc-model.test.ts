@@ -1,18 +1,26 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { IpcService } from '../src/main/ipc';
 import { SqliteStore } from '../src/main/db/sqliteStore';
 import { ModelService } from '../src/main/model/service';
 import { IPC_SCHEMA_VERSION } from '../src/shared/ipc';
+import type { SafeStorageLike } from '../src/main/crypto/secrets';
 
 const stores = new Set<SqliteStore>();
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), 'yuwendesk-ipc-model-'));
 }
-async function svcOn(dir: string): Promise<{ svc: IpcService; store: SqliteStore }> {
-  const store = new SqliteStore(dir);
+function fakeSafe(): SafeStorageLike {
+  return {
+    isEncryptionAvailable: () => true,
+    encryptString: (value) => Buffer.from(`SAFE:${Buffer.from(value).toString('base64')}`),
+    decryptString: (value) => Buffer.from(value.toString().slice(5), 'base64').toString()
+  };
+}
+async function svcOn(dir: string, safeStorage?: SafeStorageLike): Promise<{ svc: IpcService; store: SqliteStore }> {
+  const store = new SqliteStore(dir, { safeStorage });
   stores.add(store);
   await store.load();
   const svc = new IpcService({
@@ -90,6 +98,31 @@ describe('IPC 模型闭环：配置/探测/运行/边界/schema', () => {
     const run = await svc.handle('model.run', req('model.run', { task: 'analyze_text', fragments: [{ versionId, charStart: 0, charEnd: 8, approved: true }] }));
     expect(run.ok).toBe(false);
     if (!run.ok) expect(run.error.code).toBe('MODEL_NOT_AVAILABLE');
+  });
+
+  it('reports whether the DeepSeek key is missing or securely stored without returning the key', async () => {
+    const { svc } = await svcOn(tmp(), fakeSafe());
+    await svc.handle('model.configure', req('model.configure', {
+      provider: 'deepseek', model: 'deepseek-flash', budgetCapCents: 1000, allowRealNetwork: true
+    }));
+    const missing = await svc.handle('model.getConfig', req('model.getConfig', undefined));
+    expect(missing).toMatchObject({ ok: true, data: { credential: { status: 'missing', last4: null } } });
+
+    await svc.handle('model.configure', req('model.configure', {
+      provider: 'deepseek', model: 'deepseek-flash', budgetCapCents: 1000, allowRealNetwork: true, apiKey: 'sk-secret-4321'
+    }));
+    const stored = await svc.handle('model.getConfig', req('model.getConfig', undefined));
+    expect(stored).toMatchObject({ ok: true, data: { credential: { status: 'stored', last4: '4321' } } });
+    expect(JSON.stringify(stored)).not.toContain('sk-secret-4321');
+  });
+
+  it('returns DATABASE_LOCKED instead of throwing when model settings are read from a corrupted database', async () => {
+    const dir = tmp();
+    writeFileSync(join(dir, 'yuwendesk.db'), Buffer.from('not a sqlite database'));
+    const { svc, store } = await svcOn(dir, fakeSafe());
+    expect(store.isProtected()).toBe(true);
+    const result = await svc.handle('model.getConfig', req('model.getConfig', undefined));
+    expect(result).toMatchObject({ ok: false, error: { code: 'DATABASE_LOCKED' } });
   });
 
   it('schema 门：model.run 未知字段被拒', async () => {

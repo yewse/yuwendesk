@@ -185,6 +185,45 @@ describe('G09 ProtectionService main-process authority', () => {
     }, 'restore-confirm-replay')).rejects.toThrow('restore_confirmation_invalid');
   });
 
+  it('previews a verified managed local backup by id without accepting a renderer path', async () => {
+    const root = temp();
+    const managedPath = join(root, 'backups', 'local_1.ready');
+    let preparedFrom: string | null = null;
+    const service = new ProtectionService({
+      userDataDir: root,
+      backup: {
+        createLocal: async () => ({ backupId: 'local_1' }),
+        exportPortable: async () => ({ container: Buffer.from('encrypted'), manifest: { backupId: 'portable_1' } }),
+        list: async () => [{
+          backupId: 'local_1', path: managedPath, valid: true, kind: 'local' as const,
+          createdAt: '2026-09-21T04:04:27.157Z', retention: ['daily' as const], byteSize: 100
+        }],
+        deleteManaged: async () => true
+      },
+      choosePortableSavePath: async () => null,
+      choosePortableOpenPath: async () => null,
+      prepareLocalRestore: async (input) => {
+        preparedFrom = input.backupDirectory;
+        return {
+          jobId: input.jobId, previewHash: 'b'.repeat(64),
+          stagedUserDataDir: join(root, 'restore-staging', input.jobId, 'userData'),
+          preview: { backupId: 'local_1', createdAt: '2026-09-21T04:04:27.157Z', schemaVersion: 13, apiReconnectRequired: true }
+        };
+      },
+      confirmRestore: async () => false,
+      confirmDelete: async () => false,
+      relaunch: () => undefined,
+      ids: { restoreJobId: () => 'restore_local_1', token: () => 'restore-token-local' }
+    });
+
+    const preview = await service.restore({ action: 'local-preview', backupId: 'local_1' }, 'restore-local-preview') as Record<string, unknown>;
+    expect(preparedFrom).toBe(managedPath);
+    expect(preview).toMatchObject({ restoreJobId: 'restore_local_1', previewHash: 'b'.repeat(64) });
+    expect(JSON.stringify(preview)).not.toContain(managedPath);
+    await expect(service.restore({ action: 'local-preview', backupId: 'missing' }, 'restore-missing-preview'))
+      .rejects.toThrow('backup_local_not_found');
+  });
+
   it('binds managed-backup deletion to one backup and consumes the token', async () => {
     const root = temp();
     const deleted: string[] = [];

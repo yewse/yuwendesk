@@ -166,9 +166,16 @@ const api = {
   }),
   // G04 模型（教师不写提示词；此处仅配置/探测/运行/查看）。
   modelProviders: () => call<{ providers: { id: string; defaultModel: string; requiresKey: boolean }[] }>('model.providers'),
-  modelGetConfig: () => call<{ config: unknown }>('model.getConfig'),
+  modelGetConfig: () => call<{
+    config: unknown;
+    credential: { status: 'not_required' | 'missing' | 'stored' | 'unavailable'; last4: string | null };
+  }>('model.getConfig'),
   modelConfigure: (payload: { provider: string; model?: string; temperature?: number; maxTokens?: number; budgetCapCents?: number; allowRealNetwork?: boolean; apiKey?: string }) =>
-    call<{ config: unknown; keyStored: boolean }>('model.configure', { payload }),
+    call<{
+      config: unknown;
+      keyStored: boolean;
+      credential: { status: 'not_required' | 'missing' | 'stored' | 'unavailable'; last4: string | null };
+    }>('model.configure', { payload }),
   modelProbe: () => call<{ ok: boolean; note: string; provider?: string; model?: string; isTestDouble?: boolean }>('model.probe'),
   modelRun: (payload: { task: string; instructionExtra?: string; fragments?: { versionId: string; charStart: number; charEnd: number; approved: boolean }[] }) =>
     call<{ status: string; jobId?: string; result?: unknown; costCents?: number; fromCache?: boolean }>('model.run', { payload }),
@@ -375,6 +382,11 @@ const api = {
     call<{ cancelled?: boolean; restoreJobId?: string; previewHash?: string; preview?: RestorePreviewDTO }>('backup.restore', {
       idempotency_key: idempotencyKey,
       payload: { action: 'preview', passphrase }
+    }),
+  backupRestoreLocalPreview: (backupId: string, idempotencyKey: string) =>
+    call<{ restoreJobId: string; previewHash: string; preview: RestorePreviewDTO }>('backup.restore', {
+      idempotency_key: idempotencyKey,
+      payload: { action: 'local-preview', backupId }
     }),
   backupRestoreRequestConfirmation: (restoreJobId: string, previewHash: string, idempotencyKey: string) =>
     call<{ cancelled?: boolean; confirmationToken?: string; expiresAt?: number }>('backup.restore', {

@@ -41,7 +41,7 @@ import {
   updateReadyNotice,
   updateTrustNotice
 } from './updateView';
-import { buildBackupRows, portableBackupNotice, restorePreviewNotice } from './protectionView';
+import { buildBackupRows, portableBackupNotice, restorePreviewNotice, storageProtectionNotice } from './protectionView';
 import { buildSourceDeleteSummary, sensitiveSourceNotice, type SourceDeleteSummary } from './sourcePrivacyView';
 import type { DiagnosticsPreview } from '../main/protection/diagnostics';
 import { diagnosticsPreviewText, diagnosticsSaveEnabled, diagnosticsScopeNotice } from './diagnosticsView';
@@ -1791,6 +1791,10 @@ function ModelPanel(): JSX.Element {
   const [allowNet, setAllowNet] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [probeNote, setProbeNote] = useState<string | null>(null);
+  const [credential, setCredential] = useState<{
+    status: 'not_required' | 'missing' | 'stored' | 'unavailable';
+    last4: string | null;
+  }>({ status: 'not_required', last4: null });
 
   useEffect(() => {
     void (async () => {
@@ -1804,6 +1808,8 @@ function ModelPanel(): JSX.Element {
         setBudget(String(cfg.budgetCapCents));
         setAllowNet(!!cfg.allowRealNetwork);
       }
+      if (c.ok) setCredential(c.data.credential);
+      else setMsg(`${c.error.message_zh} ${c.error.next_action}`);
     })();
   }, []);
 
@@ -1816,12 +1822,17 @@ function ModelPanel(): JSX.Element {
       allowRealNetwork: allowNet,
       apiKey: apiKey.trim() || undefined
     });
-    setMsg(r.ok ? '已保存配置。' : `配置失败：${r.error.message_zh}`);
-    if (r.ok) setApiKey('');
+    setMsg(r.ok
+      ? (r.data.credential.status === 'stored' ? '配置和 API 密钥已由 Windows 安全保存。' : '配置已保存，但尚无可用 API 密钥。')
+      : `配置失败：${r.error.message_zh} ${r.error.next_action}`);
+    if (r.ok) {
+      setApiKey('');
+      setCredential(r.data.credential);
+    }
   }
   async function probe(): Promise<void> {
     const r = await window.yuwen.modelProbe();
-    setProbeNote(r.ok ? `可用：${r.data.note}` : `未通过：${r.error.message_zh}`);
+    setProbeNote(r.ok ? `可用：${r.data.note}` : `未通过：${r.error.message_zh} ${r.error.next_action}`);
   }
 
   return (
@@ -1852,7 +1863,7 @@ function ModelPanel(): JSX.Element {
         <input id="model-id" className="search-input" value={model} placeholder={current?.defaultModel} onChange={(e) => setModel(e.target.value)} />
       </div>
       <div className="row">
-        <label className="muted small" htmlFor="model-budget">预算上限(分)</label>
+        <label className="muted small" htmlFor="model-budget">预算上限（分；1000=10元，0=不限额）</label>
         <input id="model-budget" className="search-input" inputMode="numeric" value={budget} onChange={(e) => setBudget(e.target.value)} />
       </div>
       {current?.requiresKey && (
@@ -1861,6 +1872,12 @@ function ModelPanel(): JSX.Element {
             <label className="muted small" htmlFor="model-api-key">API 密钥</label>
             <input id="model-api-key" className="search-input" type="password" value={apiKey} placeholder="仅经系统加密保存，无安全后端将拒绝" onChange={(e) => setApiKey(e.target.value)} />
           </div>
+          <p className={`small ${credential.status === 'stored' ? 'muted' : 'notice warn'}`} role="status">
+            {credential.status === 'stored' && `密钥已安全保存（末四位 ${credential.last4}）。`}
+            {credential.status === 'missing' && '尚未保存 API 密钥；真实 AI 暂不可用。请粘贴密钥并保存配置。'}
+            {credential.status === 'unavailable' && 'Windows 安全加密当前不可用，应用不会以明文保存密钥。'}
+            {credential.status === 'not_required' && '当前服务商不需要 API 密钥。'}
+          </p>
           <div className="row">
             <label className="muted small">
               <input type="checkbox" checked={allowNet} onChange={(e) => setAllowNet(e.target.checked)} /> 允许真实联网（需授权账户；未勾选保持 BLOCKED）
@@ -1934,6 +1951,29 @@ function ProtectionPanel(): JSX.Element {
     setPassphrase('');
     setBusy(false);
   }
+  async function restoreLocal(backupId: string): Promise<void> {
+    setBusy(true);
+    const previewResponse = await window.yuwen.backupRestoreLocalPreview(backupId, operationKey('restore-local-preview'));
+    if (!previewResponse.ok) {
+      setMessage(`${previewResponse.error.message_zh} ${previewResponse.error.next_action}`);
+      setBusy(false);
+      return;
+    }
+    setMessage(restorePreviewNotice(previewResponse.data.preview));
+    const grant = await window.yuwen.backupRestoreRequestConfirmation(
+      previewResponse.data.restoreJobId, previewResponse.data.previewHash, operationKey('restore-local-confirmation')
+    );
+    if (!grant.ok || grant.data.cancelled || !grant.data.confirmationToken) {
+      setMessage(grant.ok ? '已取消恢复。' : `${grant.error.message_zh} ${grant.error.next_action}`);
+      setBusy(false);
+      return;
+    }
+    const confirmed = await window.yuwen.backupRestoreConfirm(
+      previewResponse.data.restoreJobId, previewResponse.data.previewHash, grant.data.confirmationToken, operationKey('restore-local-apply')
+    );
+    setMessage(confirmed.ok ? '恢复点已验证，将重启并安全切换。' : `${confirmed.error.message_zh} ${confirmed.error.next_action}`);
+    setBusy(false);
+  }
   async function deleteBackup(backupId: string): Promise<void> {
     const prepared = await window.yuwen.backupDeletePrepare(backupId, operationKey('backup-delete-prepare'));
     if (!prepared.ok || prepared.data.cancelled || !prepared.data.confirmationToken) {
@@ -1966,7 +2006,10 @@ function ProtectionPanel(): JSX.Element {
           {buildBackupRows(backups).map((backup) => (
             <li key={backup.backupId}>
               <span>{backup.createdAt}<br /><small>{backup.retentionLabel} · {backup.sizeLabel}</small></span>
-              <b>{backup.statusLabel} <button className="btn small" onClick={() => void deleteBackup(backup.backupId)}>删除</button></b>
+              <b>{backup.statusLabel}{' '}
+                <button className="btn small" disabled={busy} onClick={() => void restoreLocal(backup.backupId)}>恢复</button>{' '}
+                <button className="btn small" disabled={busy} onClick={() => void deleteBackup(backup.backupId)}>删除</button>
+              </b>
             </li>
           ))}
         </ul>
@@ -2234,6 +2277,12 @@ export function App(): JSX.Element {
           </div>
         </header>
         <div className="scroll">
+          {health?.storage_protected && (
+            <div className="notice warn" role="alert">
+              {storageProtectionNotice(health.storage_protection_kind)}{' '}
+              <button className="btn small" type="button" onClick={() => setNav('settings')}>打开恢复</button>
+            </div>
+          )}
           {nav === 'prepare' && <PreparationRoute boot={boot} onOpenCourses={() => setNav('courses')} />}
           {nav === 'courses' && <CoursesPage />}
           {nav === 'resources' && <ResourcesPage />}
