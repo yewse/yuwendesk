@@ -1,6 +1,6 @@
 // G06：从 LessonPlan 生成“三类五文件”。PPTX 用成熟库 PptxGenJS（标准页/形状/文本框/布局/关系）；
 // PDF 用内置许可 CJK 字体（不依赖系统字体路径），缺字体即失败不静默成功；DOCX 段落+表格+书写区。
-// 内容随任务展开（非固定提纲）：学生讲义含必要材料/课本定位 + 书写/比较/修改空间；教师版与任务/PPT 位置对应。
+// 内容随任务展开（非固定提纲）：教材全文只供规划与核验，学生讲义含课本阅读提示 + 书写/比较/修改空间；教师版与任务/PPT 位置对应。
 // 角色规则（CR-001）：私密学情不入 PPT/学生；合理答案与追问可在课堂推进后由 PPT 展示，但不提前发给学生。
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -72,26 +72,29 @@ export interface Section {
 function minutes(sec: number): string {
   return `${Math.round(sec / 60)}′`;
 }
-function anchorFor(plan: LessonPlan, task: Task): { quote: string; locator: string } | null {
-  const id = task.material_anchor_ids[0];
-  const a = plan.source_anchors.find((x) => x.anchor_id === id);
-  if (!a) return null;
-  const loc = Object.entries(a.locator).map(([k, v]) => `${k}=${v}`).join(',');
-  return { quote: a.quote, locator: loc };
+function lessonLabel(plan: LessonPlan): string {
+  return plan.title.match(/《[^》]+》/u)?.[0] ?? plan.title.split(/[：:]/u)[0].trim();
+}
+
+function hasMaterialAnchor(plan: LessonPlan, task: Task): boolean {
+  const ids = new Set(task.material_anchor_ids);
+  return plan.source_anchors.some((anchor) => ids.has(anchor.anchor_id));
+}
+
+function sourceInstruction(plan: LessonPlan, task: Task): string {
+  if (!hasMaterialAnchor(plan, task)) return '阅读提示：请按教师课堂指定的课本段落完成任务。';
+  return `阅读提示：请在课本${lessonLabel(plan)}对应段落中圈画证据，结合任务作答。`;
 }
 function isCompare(t: Task): boolean {
   return t.cognitive_demand === 'compare';
 }
 
-// ---- 学生讲义：任务材料 + 课本定位 + 书写/比较/修改空间；不含答案/教师私密内容 ----
+// ---- 学生讲义：任务 + 课本阅读提示 + 书写/比较/修改空间；不复制教材全文，不含答案/教师私密内容 ----
 export function studentSections(plan: LessonPlan, stamp: string): Section[] {
   const secs: Section[] = [{ heading: `学生讲义：${plan.title}`, lines: [stamp, `建议时长 ${minutes(plan.declared_duration_sec)}`] }];
   secs.push({ heading: '学习目标', lines: plan.objectives.map((o, i) => `${i + 1}. ${o.description}`) });
   plan.tasks.forEach((t, i) => {
-    const anc = anchorFor(plan, t);
-    const lines = [`任务：${t.prompt}`];
-    if (anc) lines.push(`阅读材料（课本定位 ${anc.locator}）：${anc.quote}`);
-    else lines.push('阅读材料：见课本对应段落（教师课堂指定）');
+    const lines = [`任务：${t.prompt}`, sourceInstruction(plan, t)];
     const sec: Section = { heading: `学习任务 ${i + 1}`, lines, writeLines: 3 };
     if (isCompare(t)) sec.table = [['比较角度', '甲', '乙'], ['', '', ''], ['', '', '']];
     secs.push(sec);
@@ -133,9 +136,7 @@ function presentationSlides(plan: LessonPlan, stamp: string): Slide[] {
   const slides: Slide[] = [{ title: plan.title, body: [stamp, `建议时长 ${minutes(plan.declared_duration_sec)}`] }];
   slides.push({ title: '学习目标', body: plan.objectives.map((o) => o.description) });
   plan.tasks.forEach((t, i) => {
-    const anc = anchorFor(plan, t);
-    const body = [`任务：${t.prompt}`];
-    if (anc) body.push(`原文（课本定位 ${anc.locator}）：${anc.quote}`);
+    const body = [`任务：${t.prompt}`, sourceInstruction(plan, t)];
     // 活动指令（对应该任务的活动）
     const act = plan.activities.find((a) => a.task_ids.includes(t.task_id));
     if (act) body.push(`活动：${act.student_action}`);

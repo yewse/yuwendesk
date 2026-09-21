@@ -128,10 +128,33 @@ describe('G06 三类五文件：生成/角色隔离/版本一致/一处修改联
     }
     // PPT 含“课堂推进后展示”的揭示页标记
     expect(pptxText).toContain('课堂推进后展示');
-    // 学生版含任务、阅读材料/课本定位、书写留白
+    // 学生版含任务、可读的课本提示、书写留白，但不复制完整教材片段
     expect(sDocxText).toContain('朗读第一段并标出重音与停连');
-    expect(sDocxText).toContain('课本定位');
+    expect(sDocxText).toContain('阅读提示');
     expect(sDocxText).toContain('＿'); // 书写区
+  });
+
+  it('完整教材片段只供 AI 规划，不重复写入学生讲义或课堂 PPT', async () => {
+    const sourceCanary = '教材正文片段不可重复外显';
+    const plan = buildLessonPlan(chunSpec({
+      anchors: [{
+        source_version_id: 'ver_long',
+        locator: { char_start: 1498, char_end: 3848 },
+        quote: sourceCanary.repeat(200),
+        source_class: 'licensed_reference',
+        verification: 'exact_checked'
+      }]
+    }));
+    const set = await buildMaterialSet(plan, ORIGIN);
+    const studentText = await textOf(set.files.find((f) => f.role === 'student' && f.format === 'docx')!.bytes, 'docx');
+    const presentationText = await textOf(set.files.find((f) => f.format === 'pptx')!.bytes, 'pptx');
+
+    expect(studentText).not.toContain(sourceCanary);
+    expect(presentationText).not.toContain(sourceCanary);
+    expect(studentText).not.toContain('char_start');
+    expect(presentationText).not.toContain('char_start');
+    expect(studentText).toContain('请在课本《春》对应段落中圈画证据');
+    expect(presentationText).toContain('请在课本《春》对应段落中圈画证据');
   });
 
   it('版本一致：五个文件都内嵌同一 plan_id 与 revision_id', async () => {
