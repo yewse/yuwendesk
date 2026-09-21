@@ -18,6 +18,7 @@ import {
   validateAcceptanceMap,
   validateAcceptanceRun,
   validateExternalEvidenceInput,
+  validateG12VerticalEvidenceInput,
   validateNormalizedVitest,
   writeJsonAtomic,
   writeJsonSetAtomic
@@ -72,39 +73,52 @@ function nextRunId(date, sourceCommit) {
   throw new Error('ACCEPTANCE_RUN_SEQUENCE_EXHAUSTED');
 }
 
-function externalEvidenceArgument(argv) {
-  if (argv.length === 0) return null;
-  if (argv.length !== 2 || argv[0] !== '--external-evidence' || argv[1].length === 0) {
-    throw new Error('USAGE: npm run acceptance:run -- --external-evidence apps/desktop/release/acceptance/external-input.json');
+function evidenceArguments(argv) {
+  if (argv.length % 2 !== 0) {
+    throw new Error('USAGE: npm run acceptance:run -- [--external-evidence <path>] [--g12-evidence <path>]');
   }
   const allowedRoot = resolve(root, 'apps', 'desktop', 'release', 'acceptance');
-  const requested = resolve(root, argv[1]);
-  if (!existsSync(requested)) throw new Error('EXTERNAL_EVIDENCE_FILE_MISSING');
-  const allowedReal = realpathSync(allowedRoot);
-  const requestedReal = realpathSync(requested);
-  const rel = relative(allowedReal, requestedReal);
-  if (rel === '..' || rel.startsWith('../') || rel.startsWith('..\\')) {
-    throw new Error('EXTERNAL_EVIDENCE_PATH_REJECTED');
+  const result = { external: null, g12: null };
+  for (let index = 0; index < argv.length; index += 2) {
+    const flag = argv[index];
+    const key = flag === '--external-evidence' ? 'external' : flag === '--g12-evidence' ? 'g12' : null;
+    if (key === null || result[key] !== null || !argv[index + 1]) {
+      throw new Error('USAGE: npm run acceptance:run -- [--external-evidence <path>] [--g12-evidence <path>]');
+    }
+    const requested = resolve(root, argv[index + 1]);
+    if (!existsSync(requested)) throw new Error(`${key.toUpperCase()}_EVIDENCE_FILE_MISSING`);
+    const allowedReal = realpathSync(allowedRoot);
+    const requestedReal = realpathSync(requested);
+    const rel = relative(allowedReal, requestedReal);
+    if (rel === '..' || rel.startsWith('../') || rel.startsWith('..\\')) {
+      throw new Error(`${key.toUpperCase()}_EVIDENCE_PATH_REJECTED`);
+    }
+    result[key] = requestedReal;
   }
-  return requestedReal;
+  return result;
 }
 
 const started = new Date();
 const sourceCommit = git('rev-parse', 'HEAD');
 const repositoryDirty = git('status', '--porcelain').length > 0;
 const runId = nextRunId(started, sourceCommit);
-const externalEvidenceInputPath = externalEvidenceArgument(process.argv.slice(2));
+const evidenceInputPaths = evidenceArguments(process.argv.slice(2));
+const externalEvidenceInputPath = evidenceInputPaths.external;
 const externalReport = externalEvidenceInputPath === null
   ? null
   : JSON.parse(readFileSync(externalEvidenceInputPath, 'utf8'));
-const startedAt = externalReport && Date.parse(externalReport.startedAt) < started.getTime()
-  ? externalReport.startedAt
-  : started.toISOString();
+const g12Report = evidenceInputPaths.g12 === null ? null : JSON.parse(readFileSync(evidenceInputPaths.g12, 'utf8'));
+const evidenceStartedAt = [externalReport?.startedAt, g12Report?.startedAt]
+  .filter((value) => typeof value === 'string' && Date.parse(value) < started.getTime())
+  .sort()[0];
+const startedAt = evidenceStartedAt ?? started.toISOString();
 const rawPath = resolve(reportsRoot, `.${runId}.${process.pid}-${randomUUID()}.vitest.raw.partial`);
 const normalizedPath = resolve(reportsRoot, `vitest-${runId}.json`);
 const normalizedRelativePath = relative(root, normalizedPath).replaceAll('\\', '/');
 const externalPath = resolve(reportsRoot, `external-${runId}.json`);
 const externalRelativePath = relative(root, externalPath).replaceAll('\\', '/');
+const g12Path = resolve(reportsRoot, `g12-${runId}.json`);
+const g12RelativePath = relative(root, g12Path).replaceAll('\\', '/');
 const runPath = resolve(reportsRoot, `${runId}.json`);
 const runRelativePath = relative(root, runPath).replaceAll('\\', '/');
 
@@ -130,6 +144,10 @@ if (externalReport !== null) {
     throw new Error(`EXTERNAL_EVIDENCE_INVALID:${JSON.stringify(externalValidation.errors)}`);
   }
 }
+if (g12Report !== null) {
+  const g12Validation = validateG12VerticalEvidenceInput({ root, sourceCommit, report: g12Report });
+  if (!g12Validation.ok) throw new Error(`G12_EVIDENCE_INVALID:${JSON.stringify(g12Validation.errors)}`);
+}
 
 const vitestPath = resolve(root, 'node_modules', 'vitest', 'vitest.mjs');
 const vitestRelative = relative(desktopRoot, vitestPath).replaceAll('\\', '/');
@@ -143,6 +161,7 @@ const vitestStartedAt = new Date().toISOString();
 let vitestOutcome;
 let normalizedPublished = false;
 let externalPublished = false;
+let g12Published = false;
 let runPublished = false;
 try {
   vitestOutcome = run(process.execPath, vitestArgs, {
@@ -179,6 +198,15 @@ try {
     });
     externalPublished = true;
   }
+  if (g12Report !== null) {
+    writeJsonAtomic({
+      targetPath: g12Path,
+      value: g12Report,
+      validate: (value) => validateG12VerticalEvidenceInput({ root, sourceCommit, report: value }),
+      noClobber: true
+    });
+    g12Published = true;
+  }
 
   const acceptanceRun = buildAcceptanceRun({
     root,
@@ -199,6 +227,7 @@ try {
       npm: npmVersion()
     },
     evidencePath: normalizedRelativePath,
+    supplementalEvidencePaths: g12Report === null ? [] : [g12RelativePath],
     externalReport,
     externalEvidencePath: externalReport === null ? null : externalRelativePath,
     externalInputs
@@ -257,6 +286,7 @@ try {
 } catch (cause) {
   if (normalizedPublished) rmSync(normalizedPath, { force: true });
   if (externalPublished) rmSync(externalPath, { force: true });
+  if (g12Published) rmSync(g12Path, { force: true });
   if (runPublished) rmSync(runPath, { force: true });
   throw cause;
 } finally {

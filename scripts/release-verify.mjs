@@ -9,6 +9,7 @@ import {
   verifyChecksumManifest
 } from './lib/g11-supply-chain.mjs';
 import {
+  canonicalizeReleaseText,
   releaseVerificationExitCode,
   renderFinalStatus,
   renderKnownLimitations,
@@ -61,10 +62,10 @@ try {
     const finalStatusText = readFixed(fixedPaths.finalStatus);
     const limitationsText = readFixed(fixedPaths.limitations);
     const teacherGuideText = readFixed(fixedPaths.teacherGuide);
-    if (finalStatusText !== renderFinalStatus(evidence)) {
+    if (canonicalizeReleaseText(finalStatusText) !== renderFinalStatus(evidence)) {
       structuralErrors.push('RELEASE_FINAL_STATUS_MISMATCH');
     }
-    if (limitationsText !== renderKnownLimitations(evidence)) {
+    if (canonicalizeReleaseText(limitationsText) !== renderKnownLimitations(evidence)) {
       structuralErrors.push('RELEASE_LIMITATIONS_MISMATCH');
     }
     structuralErrors.push(...validatePublicReleaseText(finalStatusText).errors);

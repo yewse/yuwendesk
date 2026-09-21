@@ -16,7 +16,7 @@ import {
   validateReleaseEvidence,
   verifyCandidateArtifactSnapshot
 } from './lib/g11-release-evidence.mjs';
-import { renderFinalStatus, renderKnownLimitations } from './lib/g11-release-verify.mjs';
+import { canonicalizeReleaseText, renderFinalStatus, renderKnownLimitations } from './lib/g11-release-verify.mjs';
 import {
   allowedScopedDisplayNamesFromPackageLock,
   buildChecksumManifest,
@@ -239,10 +239,10 @@ writeFileSetAtomic({
     if (!evidenceValidation.ok) {
       throw new Error(`RELEASE_EVIDENCE_INVALID:${JSON.stringify(evidenceValidation.errors)}`);
     }
-    if (readFileSync(outputPaths.limitations, 'utf8') !== renderKnownLimitations(publishedEvidence)) {
+    if (canonicalizeReleaseText(readFileSync(outputPaths.limitations, 'utf8')) !== renderKnownLimitations(publishedEvidence)) {
       throw new Error('RELEASE_LIMITATIONS_MISMATCH');
     }
-    if (readFileSync(outputPaths.finalStatus, 'utf8') !== renderFinalStatus(publishedEvidence)) {
+    if (canonicalizeReleaseText(readFileSync(outputPaths.finalStatus, 'utf8')) !== renderFinalStatus(publishedEvidence)) {
       throw new Error('RELEASE_FINAL_STATUS_MISMATCH');
     }
   },

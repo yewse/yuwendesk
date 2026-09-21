@@ -9,6 +9,10 @@ const TEACHER_GUIDE_FORBIDDEN = Object.freeze([
   'npm run', 'node scripts/', 'PowerShell', '关闭 SmartScreen', '全部通过', '保证提分'
 ]);
 
+export function canonicalizeReleaseText(text) {
+  return typeof text === 'string' ? text.replace(/\r\n?/gu, '\n') : text;
+}
+
 function sortedGaps(evidence) {
   return [...(Array.isArray(evidence?.knownGaps) ? evidence.knownGaps : [])].sort((left, right) =>
     String(left?.blockerCode ?? '').localeCompare(String(right?.blockerCode ?? ''), 'en') ||

@@ -343,15 +343,15 @@ git commit -m "feat(G12-T03): deliver teacher preparation and presentation UI"
 - Consumes: the complete Task 1–3 workflow and existing G11 evidence transaction.
 - Produces: one clean-source commit, one fixed candidate installer, one append-only acceptance run, and one engineering delivery ZIP.
 
-- [ ] **Step 1: Add failing release/guide contracts**
+- [x] **Step 1: Add failing release/guide contracts**
 
 Assert the teacher guide no longer says the start button is disabled only when the renderer and production IPC expose the complete preparation path. Assert it still says model output needs review, WPS fidelity is separate, and unsigned candidates are not formal releases. Assert frozen acceptance definitions and hashes are unchanged.
 
-- [ ] **Step 2: Run contracts and confirm RED**
+- [x] **Step 2: Run contracts and confirm RED**
 
 Run: `npm --workspace @yuwendesk/desktop exec vitest run tests/g12-vertical-contract.test.ts`
 
-- [ ] **Step 3: Update guide, evidence, package ledger, and final code docs**
+- [x] **Step 3: Update guide, evidence, package ledger, and final code docs**
 
 Record exact commands and exit codes. Set G12-T01–T04 local scope to complete only after their tests pass. Keep API/WPS/human/signing/distribution gates unchanged unless their execution evidence exists.
 

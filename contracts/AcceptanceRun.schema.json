@@ -38,6 +38,11 @@
         }
       }
     },
+    "supplementalEvidence": {
+      "type": "array",
+      "maxItems": 1,
+      "items": { "$ref": "#/$defs/fileEvidence" }
+    },
     "results": {
       "type": "array",
       "minItems": 170,

@@ -1,6 +1,8 @@
 // G12 纵向 Electron 验收驱动：只使用合成资料和命名 preload API。
 // 输出是无路径、无提示词、无密钥的 JSON；它本身不改变冻结验收案例状态。
 const { app, BrowserWindow, ipcMain, safeStorage } = require('electron');
+const { createHash } = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -8,6 +10,8 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 const OUTPUT = process.env.E2E_G12_OUTPUT || path.join(ROOT, 'release', 'acceptance', 'g12-e2e.json');
+const CANDIDATE_RELATIVE = 'apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe';
+const CANDIDATE = path.join(ROOT, 'release', 'YuwenDesk-Setup-0.1.0-x64.exe');
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'yuwendesk-g12-'));
 app.setPath('userData', userData);
 
@@ -86,7 +90,30 @@ async function wire() {
 
 const runIn = (window, body) => window.webContents.executeJavaScript(`(async()=>{${body}})()`);
 
+function sourceCommit() {
+  const result = spawnSync('git', ['rev-parse', 'HEAD'], {
+    cwd: path.join(ROOT, '..', '..'),
+    encoding: 'utf8',
+    shell: false,
+    windowsHide: true
+  });
+  if (result.status !== 0) throw new Error('source-commit');
+  return result.stdout.trim();
+}
+
+function candidateDescriptor() {
+  const bytes = fs.readFileSync(CANDIDATE);
+  return {
+    path: CANDIDATE_RELATIVE,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    sizeBytes: bytes.byteLength
+  };
+}
+
 async function run() {
+  const startedAt = new Date().toISOString();
+  const commit = sourceCommit();
+  const candidate = candidateDescriptor();
   await wire();
   mainWindow = await makeWindow();
   const first = await runIn(mainWindow, `
@@ -142,21 +169,43 @@ async function run() {
     const resumed=await window.yuwen.preparationResume(${JSON.stringify(first.sessionId)});
     return {ok:resumed.ok,status:resumed.ok?resumed.data.session.status:null,planId:resumed.ok?resumed.data.session.planId:null,revisionId:resumed.ok?resumed.data.session.revisionId:null,bundleId:resumed.ok?resumed.data.session.bundleId:null};
   `);
+  const sqliteIntegrity = store.withTransaction((database) => String(database.pragma('integrity_check', { simple: true })));
+  const observations = {
+    artifactCount: first.artifactCount,
+    reviewDisposition: first.reviewDisposition,
+    presentationOpened: first.presentationOpened,
+    taskVisible: reveal.taskVisible,
+    answerVisible: reveal.answerVisible,
+    changedFileCount: changed.fileCount,
+    restartStatus: restarted.status,
+    revisionAdvanced: changed.revisionId !== first.revisionId && restarted.revisionId === changed.revisionId,
+    bundleAdvanced: changed.bundleId !== first.bundleId && restarted.bundleId === changed.bundleId,
+    sqliteIntegrity
+  };
+  const passed = observations.artifactCount === 5 && observations.reviewDisposition === 'ready_for_teacher' &&
+    observations.presentationOpened && observations.taskVisible && observations.answerVisible &&
+    observations.changedFileCount === 5 && observations.restartStatus === 'EXPORTED' &&
+    observations.revisionAdvanced && observations.bundleAdvanced && observations.sqliteIntegrity === 'ok';
   const result = {
-    schemaVersion: '1.0.0',
+    schemaVersion: 1,
+    sourceCommit: commit,
+    startedAt,
+    completedAt: new Date().toISOString(),
+    candidate,
+    environment: {
+      os: os.platform(),
+      release: os.release(),
+      arch: os.arch(),
+      electron: process.versions.electron
+    },
     syntheticDataOnly: true,
     frozenAcceptanceCasesUpdated: false,
-    first,
-    reveal,
-    changed,
-    restarted,
-    passed: first.artifactCount === 5 && first.reviewDisposition === 'ready_for_teacher' &&
-      reveal.taskVisible && reveal.answerVisible && changed.fileCount === 5 && restarted.ok &&
-      restarted.revisionId === changed.revisionId && restarted.bundleId === changed.bundleId
+    observations,
+    passed
   };
   fs.mkdirSync(path.dirname(OUTPUT), { recursive: true });
   fs.writeFileSync(OUTPUT, JSON.stringify(result, null, 2) + '\n', 'utf8');
-  if (!result.passed) throw new Error('g12-e2e-assertion');
+  if (!passed) throw new Error('g12-e2e-assertion');
   process.stdout.write(JSON.stringify({ passed: true, artifactCount: 5, changedFileCount: 5 }) + '\n');
 }
 

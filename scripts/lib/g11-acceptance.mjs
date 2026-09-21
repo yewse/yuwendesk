@@ -337,6 +337,58 @@ export function validateExternalEvidenceInput({ root, map, externalInputs, sourc
   return { ok: errors.length === 0, errors };
 }
 
+export function validateG12VerticalEvidenceInput({ root, sourceCommit, report }) {
+  const errors = [];
+  const reportKeys = new Set([
+    'schemaVersion', 'sourceCommit', 'startedAt', 'completedAt', 'candidate', 'environment',
+    'syntheticDataOnly', 'frozenAcceptanceCasesUpdated', 'observations', 'passed'
+  ]);
+  const environmentKeys = new Set(['os', 'release', 'arch', 'electron']);
+  const observationKeys = new Set([
+    'artifactCount', 'reviewDisposition', 'presentationOpened', 'taskVisible', 'answerVisible',
+    'changedFileCount', 'restartStatus', 'revisionAdvanced', 'bundleAdvanced', 'sqliteIntegrity'
+  ]);
+  if (!hasOnlyKeys(report, reportKeys) || report?.schemaVersion !== 1 || report?.sourceCommit !== sourceCommit ||
+      !isIsoDate(report?.startedAt) || !isIsoDate(report?.completedAt) ||
+      typeof report?.syntheticDataOnly !== 'boolean' || typeof report?.frozenAcceptanceCasesUpdated !== 'boolean' ||
+      typeof report?.passed !== 'boolean') {
+    errors.push(error(report?.sourceCommit !== sourceCommit ? 'G12_EVIDENCE_SOURCE_MISMATCH' : 'G12_EVIDENCE_INVALID'));
+    return { ok: false, errors };
+  }
+  if (Date.parse(report.startedAt) > Date.parse(report.completedAt)) {
+    errors.push(error('G12_EVIDENCE_TIME_INVALID'));
+  }
+  if (reportContainsSecret(report)) errors.push(error('G12_EVIDENCE_SECRET_REJECTED'));
+  if (reportContainsLocalPath(report)) errors.push(error('G12_EVIDENCE_LOCAL_PATH_REJECTED'));
+  if (report.candidate?.path !== FIXED_CANDIDATE_PATH) {
+    errors.push(error('G12_EVIDENCE_CANDIDATE_INVALID'));
+  } else {
+    errors.push(...validateEvidenceFile(root, report.candidate, 'g12:candidate'));
+  }
+  if (!hasOnlyKeys(report.environment, environmentKeys) || report.environment.os !== 'win32' ||
+      !Object.values(report.environment).every(isNonEmptyString)) {
+    errors.push(error('G12_EVIDENCE_ENVIRONMENT_INVALID'));
+  }
+  const observed = report.observations;
+  if (!hasOnlyKeys(observed, observationKeys) ||
+      !Number.isSafeInteger(observed?.artifactCount) || observed.artifactCount < 0 ||
+      !Number.isSafeInteger(observed?.changedFileCount) || observed.changedFileCount < 0 ||
+      !isNonEmptyString(observed?.reviewDisposition) || !isNonEmptyString(observed?.restartStatus) ||
+      !isNonEmptyString(observed?.sqliteIntegrity) ||
+      !['presentationOpened', 'taskVisible', 'answerVisible', 'revisionAdvanced', 'bundleAdvanced']
+        .every((key) => typeof observed?.[key] === 'boolean')) {
+    errors.push(error('G12_EVIDENCE_OBSERVATIONS_INVALID'));
+  } else {
+    const derivedPass = report.syntheticDataOnly === true && report.frozenAcceptanceCasesUpdated === false &&
+      observed.artifactCount === 5 && observed.reviewDisposition === 'ready_for_teacher' &&
+      observed.presentationOpened === true && observed.taskVisible === true && observed.answerVisible === true &&
+      observed.changedFileCount === 5 && observed.restartStatus === 'EXPORTED' &&
+      observed.revisionAdvanced === true && observed.bundleAdvanced === true && observed.sqliteIntegrity === 'ok';
+    if (report.passed !== derivedPass) errors.push(error('G12_EVIDENCE_RESULT_MISMATCH'));
+  }
+  return { ok: errors.length === 0, errors };
+}
+
 export function loadAcceptanceDefinitions(root) {
   const definitions = [];
   const definitionSources = FROZEN_DEFINITION_SOURCES.map((source) => {
@@ -501,11 +553,30 @@ function validateExternalEvidence(root, result, map, run) {
   }
 }
 
+function validateSupplementalEvidence(root, run) {
+  const supplemental = run?.supplementalEvidence ?? [];
+  if (!Array.isArray(supplemental) || supplemental.length > 1) return false;
+  if (supplemental.length === 0) return true;
+  const descriptor = supplemental[0];
+  const expectedPath = `reports/acceptance-runs/g12-${run.runId}.json`;
+  if (descriptor?.path !== expectedPath || validateEvidenceFile(root, descriptor, 'g12:supplemental').length > 0) {
+    return false;
+  }
+  try {
+    const report = JSON.parse(readFileSync(resolve(root, expectedPath), 'utf8'));
+    const validation = validateG12VerticalEvidenceInput({ root, sourceCommit: run.sourceCommit, report });
+    return validation.ok && Date.parse(report.startedAt) >= Date.parse(run.startedAt) &&
+      Date.parse(report.completedAt) <= Date.parse(run.completedAt);
+  } catch {
+    return false;
+  }
+}
+
 export function validateAcceptanceRun({ root, definitionIds, map, run }) {
   const errors = [];
   const runKeys = new Set([
     'schemaVersion', 'runId', 'sourceCommit', 'repositoryDirty', 'startedAt', 'completedAt',
-    'environment', 'definitionSources', 'results'
+    'environment', 'definitionSources', 'supplementalEvidence', 'results'
   ]);
   const envKeys = new Set(['os', 'release', 'arch', 'node', 'npm']);
   const sourceKeys = new Set(['path', 'sha256']);
@@ -518,6 +589,7 @@ export function validateAcceptanceRun({ root, definitionIds, map, run }) {
     Array.isArray(run?.results);
   if (!structurallyValid) errors.push(error('ACCEPTANCE_RUN_INVALID'));
   if (!validateDefinitionSources(root, run?.definitionSources)) errors.push(error('ACCEPTANCE_DEFINITION_SOURCE_INVALID'));
+  if (!validateSupplementalEvidence(root, run)) errors.push(error('ACCEPTANCE_SUPPLEMENTAL_EVIDENCE_INVALID'));
   if (isIsoDate(run?.startedAt) && isIsoDate(run?.completedAt) && Date.parse(run.startedAt) > Date.parse(run.completedAt)) {
     errors.push(error('ACCEPTANCE_RUN_TIME_INVALID'));
   }
@@ -587,7 +659,7 @@ function evidenceDescriptor(root, path) {
 export function buildAcceptanceRun({
   root, definitions, definitionSources, map, automationReport, sourceCommit, repositoryDirty,
   runId, startedAt, completedAt, environment, evidencePath,
-  externalReport = null, externalEvidencePath = null, externalInputs = null
+  externalReport = null, externalEvidencePath = null, externalInputs = null, supplementalEvidencePaths = []
 }) {
   const assertions = new Map();
   for (const item of automationReport?.assertions ?? []) assertions.set(`${item.testFile}\0${item.fullName}`, item);
@@ -653,6 +725,7 @@ export function buildAcceptanceRun({
   return {
     schemaVersion: 1, runId, sourceCommit, repositoryDirty, startedAt, completedAt, environment,
     definitionSources,
+    supplementalEvidence: supplementalEvidencePaths.map((path) => evidenceDescriptor(root, path)),
     results
   };
 }

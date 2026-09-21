@@ -486,6 +486,69 @@ describe('G11-T01 acceptance run invariants', () => {
     expect(rejected.errors.map((error: { code: string }) => error.code)).toContain('EXTERNAL_EVIDENCE_SOURCE_MISMATCH');
   });
 
+  it('binds sanitized G12 supplemental evidence without changing frozen case status', () => {
+    const fixtureRoot = makeFixtureRoot();
+    seedFrozenDefinitions(fixtureRoot);
+    mkdirSync(join(fixtureRoot, 'apps', 'desktop', 'release'), { recursive: true });
+    mkdirSync(join(fixtureRoot, 'reports', 'acceptance-runs'), { recursive: true });
+    const candidatePath = join(fixtureRoot, 'apps', 'desktop', 'release', 'YuwenDesk-Setup-0.1.0-x64.exe');
+    const candidateBytes = Buffer.from('g12-candidate');
+    writeFileSync(candidatePath, candidateBytes);
+    const sourceCommit = 'abcdef0123456789';
+    const runId = 'run-20260920-abcdef0-97';
+    const g12EvidencePath = `reports/acceptance-runs/g12-${runId}.json`;
+    const g12Report = {
+      schemaVersion: 1,
+      sourceCommit,
+      startedAt: '2026-09-20T00:00:05.000Z',
+      completedAt: '2026-09-20T00:00:20.000Z',
+      candidate: {
+        path: 'apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe',
+        sha256: createHash('sha256').update(candidateBytes).digest('hex'),
+        sizeBytes: candidateBytes.byteLength
+      },
+      environment: { os: 'win32', release: 'test', arch: 'x64', electron: '44.4.3' },
+      syntheticDataOnly: true,
+      frozenAcceptanceCasesUpdated: false,
+      observations: {
+        artifactCount: 5, reviewDisposition: 'ready_for_teacher', presentationOpened: true,
+        taskVisible: true, answerVisible: true, changedFileCount: 5, restartStatus: 'EXPORTED',
+        revisionAdvanced: true, bundleAdvanced: true, sqliteIntegrity: 'ok'
+      },
+      passed: true
+    };
+    writeFileSync(join(fixtureRoot, ...g12EvidencePath.split('/')), `${JSON.stringify(g12Report)}\n`, 'utf8');
+    const automationEvidencePath = 'reports/acceptance-runs/vitest-placeholder.json';
+    writeFileSync(join(fixtureRoot, ...automationEvidencePath.split('/')), '{"success":true}\n', 'utf8');
+    const map = { schemaVersion: 1, cases: [{
+      caseId: 'CASE-A', mode: 'not_run', requiredEvidenceLevel: 'engineering_automation',
+      reasonCode: 'FORMAL_CASE_NOT_EXECUTED'
+    }] };
+    const loaded = loadAcceptanceDefinitions(fixtureRoot);
+    const run = buildAcceptanceRun({
+      root: fixtureRoot,
+      definitions: [{ id: 'CASE-A' }],
+      definitionSources: loaded.definitionSources,
+      map,
+      automationReport: { success: true, exitCode: 0, command: 'node vitest run', assertions: [] },
+      sourceCommit,
+      repositoryDirty: false,
+      runId,
+      startedAt: '2026-09-20T00:00:00.000Z',
+      completedAt: '2026-09-20T00:01:00.000Z',
+      environment: { os: 'win32', release: 'test', arch: 'x64', node: 'v24.15.0', npm: '11.12.1' },
+      evidencePath: automationEvidencePath,
+      supplementalEvidencePaths: [g12EvidencePath]
+    });
+    expect(run.results[0].status).toBe('NOT_RUN');
+    expect(run.supplementalEvidence).toHaveLength(1);
+    expect(validateAcceptanceRun({ root: fixtureRoot, definitionIds: ['CASE-A'], map, run })).toEqual({ ok: true, errors: [] });
+
+    writeFileSync(candidatePath, 'candidate-drift', 'utf8');
+    const validation = validateAcceptanceRun({ root: fixtureRoot, definitionIds: ['CASE-A'], map, run });
+    expect(validation.errors.map((item: { code: string }) => item.code)).toContain('ACCEPTANCE_SUPPLEMENTAL_EVIDENCE_INVALID');
+  });
+
   it('rejects external evidence containing an API key instead of publishing it into the ledger', () => {
     const fixtureRoot = makeFixtureRoot();
     mkdirSync(join(fixtureRoot, 'apps', 'desktop', 'release'), { recursive: true });

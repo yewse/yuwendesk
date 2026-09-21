@@ -1501,7 +1501,7 @@
         "updated teacher guide"
       ],
       "acceptance_ids": [],
-      "status": "NOT_STARTED",
+      "status": "COMPLETED_LOCAL",
       "rules": [
         "只用当前 commit 和当前候选的实际证据判定 PASS/FAIL",
         "历史验收运行只追加不覆盖",

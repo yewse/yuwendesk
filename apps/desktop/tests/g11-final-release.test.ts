@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 // @ts-expect-error pure root ESM module
 import {
+  canonicalizeReleaseText,
   exitCodeForDisposition,
   releaseVerificationExitCode,
   renderFinalStatus,
@@ -144,13 +145,16 @@ describe('G11-T04 teacher and final-status documentation contracts', () => {
     ]) {
       expect(guide).not.toContain(forbidden);
     }
-    expect(guide).toContain('后续版本开放');
-    expect(guide).toContain('开始准备（需先完成资料导入 · 后续版本开放）');
+    expect(guide).toContain('先保存班级、教材和课时');
+    expect(guide).toContain('生成方案并查看内容来源');
+    expect(guide).toContain('软件审查通过后仍需教师确认');
     expect(guide).toContain('证据不足');
-    expect(guide).toContain('尚未提供课堂展示入口');
-    expect(guide).toContain('尚未提供班级、教材或实际课时设置入口');
-    expect(guide).not.toContain('完成资料、内容解读、任务设计与课时安排后');
-    expect(guide).not.toContain('开始准备下一课');
+    expect(guide).toContain('打开应用内课堂展示');
+    expect(guide).toContain('模型生成内容必须由教师复核');
+    expect(guide).not.toContain('后续版本开放');
+    expect(guide).not.toContain('仍为禁用状态');
+    expect(guide).not.toContain('尚未提供课堂展示入口');
+    expect(guide).not.toContain('尚未提供班级、教材或实际课时设置入口');
     expect(guide).not.toContain('没有足够证据');
     expect(validateTeacherGuide(guide)).toEqual({ ok: true, errors: [] });
   });
@@ -159,8 +163,8 @@ describe('G11-T04 teacher and final-status documentation contracts', () => {
     const evidence = JSON.parse(readFileSync(join(root, 'reports', 'release', 'release-evidence.json'), 'utf8'));
     const finalStatus = readFileSync(join(root, 'reports', 'release', 'FINAL_STATUS.md'), 'utf8');
     const limitations = readFileSync(join(root, 'reports', 'release', 'KNOWN_LIMITATIONS.md'), 'utf8');
-    expect(finalStatus).toBe(renderFinalStatus(evidence));
-    expect(limitations).toBe(renderKnownLimitations(evidence));
+    expect(canonicalizeReleaseText(finalStatus)).toBe(renderFinalStatus(evidence));
+    expect(canonicalizeReleaseText(limitations)).toBe(renderKnownLimitations(evidence));
     expect(finalStatus).toContain(`\`${evidence.statuses.releaseDisposition}\``);
     const blockerCodes = [...new Set(evidence.knownGaps.map((gap: { blockerCode: string }) => gap.blockerCode))];
     for (const blockerCode of blockerCodes) {

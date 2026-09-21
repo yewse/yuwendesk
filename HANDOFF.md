@@ -135,6 +135,13 @@ npm run build:candidate
 - G12 Electron 纵向脚本已实现但尚未绑定 clean commit/候选实际执行，保持 NOT_RUN。下一步 T04 从提交后的 clean source 构建候选、运行脚本并创建新的追加验收，不覆盖历史运行。
 - 真实 API、WPS、干净标准用户 Windows、签名/时间戳、分发和真人教师复核仍为 `BLOCKED_EXTERNAL/NOT_RUN`。
 
+## G12-T04 当前状态
+
+- 教师指南、G12 纵向合同、候选绑定 evidence validator、AcceptanceRun supplemental evidence 和发行来源白名单已实现；冻结 130+40 案例及其哈希没有修改。
+- 新合同先 RED 后 GREEN；G12/G11 发行定向 84/84，全量 689 passed / 1 skipped；typecheck、lint、build 通过。Windows CRLF 只做公开文档比较规范化，文件哈希门没有放宽。
+- 当前旧 G11 发行证据对 G12 源码和候选已漂移，`verify:contracts` 仍有 1 项真实失败。下一步必须先提交 T04，随后从 clean HEAD 执行 `build:candidate`、G12 Electron 纵向、Node ABI 恢复、带 `--g12-evidence` 的新增 acceptance run，以及 release evidence/SBOM/verify；历史运行不得覆盖。
+- G12 本地工程完成不等于正式发行：真实 DeepSeek、WPS、干净标准用户 Windows、签名/时间戳、分发、合法现用教材和真人教师复核仍按实际证据保持 `BLOCKED_EXTERNAL/NOT_RUN`。
+
 1. 提交 E10，保留第四轮追加验收与 clean-source 发行证据；不要覆盖前两轮 FAIL 或其他历史记录。
 2. 真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。
 3. 补齐干净标准用户 VM、Grok、签名/时间戳、可信分发、锁定环境、缺陷审计和真人教师复核后，再创建新的追加运行；当前不得发布。

@@ -139,9 +139,10 @@ export function inspectRepositoryProvenance({ root, sourceCommit, allowedDirtyPa
 export function collectAcceptanceEvidencePaths(run) {
   if (!Array.isArray(run?.results)) fail('RELEASE_ACCEPTANCE_EVIDENCE_PATH_REJECTED', 'results');
   const paths = new Set();
-  for (const result of run.results) {
-    if (!Array.isArray(result?.evidence)) fail('RELEASE_ACCEPTANCE_EVIDENCE_PATH_REJECTED', 'evidence');
-    for (const descriptor of result.evidence) {
+  const evidenceGroups = [run.supplementalEvidence ?? [], ...run.results.map((result) => result?.evidence)];
+  for (const evidence of evidenceGroups) {
+    if (!Array.isArray(evidence)) fail('RELEASE_ACCEPTANCE_EVIDENCE_PATH_REJECTED', 'evidence');
+    for (const descriptor of evidence) {
       const path = descriptor?.path;
       if (normalizeInputPath(path) === null || !path.startsWith('reports/acceptance-runs/')) {
         fail('RELEASE_ACCEPTANCE_EVIDENCE_PATH_REJECTED', path ?? '');
