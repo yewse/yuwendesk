@@ -82,6 +82,27 @@ function containsSensitiveSupplyValue(value) {
   return false;
 }
 
+export function normalizeNpmSbomRoot({ sbom, expectedRoot, workingDirectoryName }) {
+  const component = sbom?.metadata?.component;
+  if (component?.name === expectedRoot?.name) return sbom;
+  const expectedReference = `${expectedRoot?.name}@${expectedRoot?.version}`;
+  if (
+    !isPlainObject(component) ||
+    component.name !== workingDirectoryName ||
+    component.version !== expectedRoot?.version ||
+    component['bom-ref'] !== expectedReference
+  ) {
+    throw new Error('SBOM_ROOT_NORMALIZATION_REJECTED');
+  }
+  return {
+    ...sbom,
+    metadata: {
+      ...sbom.metadata,
+      component: { ...component, name: expectedRoot.name }
+    }
+  };
+}
+
 function isWithin(parent, child) {
   const path = relative(parent, child);
   return path === '' || (!path.startsWith(`..${sep}`) && path !== '..' && !isAbsolute(path));

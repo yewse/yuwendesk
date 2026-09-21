@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
@@ -24,6 +24,7 @@ import {
   inspectAuthenticodeStatus,
   lockedComponentsFromPackageLock,
   lockedDependencyGraphFromPackageLock,
+  normalizeNpmSbomRoot,
   validateSbomEnvironmentRecord,
   validateCycloneDxSbom,
   validateSigningStatusRecord,
@@ -104,9 +105,13 @@ const generatedAt = new Date().toISOString();
 const aggregationInput = loadReleaseAggregationInputs({ root, releaseInput, generatedAt });
 const repositoryProvenance = aggregationInput.repositoryProvenance;
 
-const sbom = JSON.parse(runNodeNpm([
+const sbom = normalizeNpmSbomRoot({
+  sbom: JSON.parse(runNodeNpm([
   'sbom', '--package-lock-only', '--sbom-format=cyclonedx', '--sbom-type=application'
-]));
+])),
+  expectedRoot: { name: packageValue.name, version: packageValue.version },
+  workingDirectoryName: basename(root)
+});
 const lockedComponents = lockedComponentsFromPackageLock(packageLock);
 const lockedDependencyGraph = lockedDependencyGraphFromPackageLock(packageLock);
 const allowedScopedDisplayNames = allowedScopedDisplayNamesFromPackageLock(packageLock);

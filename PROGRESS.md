@@ -265,6 +265,7 @@
 - **T04 运行边界**：`e2e-g12.cjs` 的实际 Electron/SQLite 纵向执行、clean candidate、追加 AcceptanceRun 和发行事务必须在 T04 源码提交后生成；其真实 commit/hash/计数以 `reports/acceptance-runs/` 和 `reports/release/` 的追加产物为准。未实际执行前不把这些步骤称为 PASS。
 - **T04 首次候选失败与修复**：`3019830` 候选实际纵向运行在课堂展示资格门失败，未形成 PASS 证据。根因是五文件发布写入新的材料包审查报告后，备课会话仍保留导出前 `reviewReportId`；展示服务因此正确拒绝。新增回归先 RED 后 GREEN，导出完成状态现同步最新发布审查 ID，资格门本身未放宽。须从修复后的新 clean commit 重建候选并重跑，不能沿用 `3019830` 候选。
 - **T04 追加运行启动修复**：`5acf2cf` 候选纵向流程已实际通过，但首次 `acceptance:run` 在生成运行记录前因 worktree 无本地 `node_modules/vitest` 而停止，未写入或提升任何案例。runner 现通过项目模块解析层级定位 Vitest，新增回归先 RED 后 GREEN；该源码修复需再次提交、重建候选并重跑，`5acf2cf` 证据不得跨 commit 借用。
+- **T04 worktree 供应链修复**：`58e7ca4` 已生成追加运行，但供应链生成时 npm 把 worktree 目录名误填为 CycloneDX 根组件显示名，严格校验按设计失败。现只在版本、`bom-ref` 和实际 worktree 目录名同时匹配锁文件身份时规范化根显示名，其他差异继续 fail closed；回归先 RED 后 GREEN，SBOM 663/663 组件和 664 依赖验证通过。仍须在该修复提交后重新绑定候选与追加运行。
 
 ## G11-E01 追加外部验收准备 — 本地实现完成，实际运行待候选
 

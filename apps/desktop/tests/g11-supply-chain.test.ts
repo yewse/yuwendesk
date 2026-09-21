@@ -11,6 +11,7 @@ import {
   lockedComponentsFromPackageLock,
   allowedScopedDisplayNamesFromPackageLock,
   normalizeAuthenticodeResult,
+  normalizeNpmSbomRoot,
   resolveWindowsPowerShell,
   validateSbomEnvironmentRecord,
   validateCycloneDxSbom,
@@ -33,6 +34,32 @@ afterEach(() => {
 });
 
 describe('G11-T03 CycloneDX validation', () => {
+  it('normalizes only npm worktree display-name drift when the locked root identity still matches', () => {
+    const raw = {
+      bomFormat: 'CycloneDX',
+      specVersion: '1.5',
+      metadata: {
+        component: {
+          type: 'application', name: 'g12-teacher-workflow', version: '0.1.0', 'bom-ref': 'yuwendesk@0.1.0'
+        }
+      },
+      components: [],
+      dependencies: []
+    };
+    const normalized = normalizeNpmSbomRoot({
+      sbom: raw,
+      expectedRoot: { name: 'yuwendesk', version: '0.1.0' },
+      workingDirectoryName: 'g12-teacher-workflow'
+    });
+    expect(normalized.metadata.component.name).toBe('yuwendesk');
+    expect(raw.metadata.component.name).toBe('g12-teacher-workflow');
+    expect(() => normalizeNpmSbomRoot({
+      sbom: { ...raw, metadata: { component: { ...raw.metadata.component, 'bom-ref': 'other@0.1.0' } } },
+      expectedRoot: { name: 'yuwendesk', version: '0.1.0' },
+      workingDirectoryName: 'g12-teacher-workflow'
+    })).toThrow(/SBOM_ROOT_NORMALIZATION_REJECTED/);
+  });
+
   it('requires the application root, components, dependency graph, and every locked name/version pair', () => {
     const result = validateCycloneDxSbom({
       sbom: {
