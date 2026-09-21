@@ -142,6 +142,7 @@ export interface SourceReadResult {
   char_start: number | null;
   char_end: number | null;
   truncated: boolean;
+  full_length: number;
 }
 export interface SourceVersionItem {
   versionId: string;

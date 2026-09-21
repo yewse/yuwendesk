@@ -271,6 +271,7 @@ export interface SourceReadDTO {
   char_start: number | null;
   char_end: number | null;
   truncated: boolean;
+  full_length: number;
 }
 export interface SourceImportPayload {
   title: string;

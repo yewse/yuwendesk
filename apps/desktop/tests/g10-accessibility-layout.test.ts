@@ -49,7 +49,9 @@ describe('G10-T03 accessibility and layout contract', () => {
     expect(html).toContain('<nav aria-label="主导航">');
     expect(html).toContain('aria-current="page"');
     expect(html).toContain(`id="${MAIN_CONTENT_ID}"`);
-    expect(html).toContain('aria-label="备课草稿"');
+    expect(html).toContain('aria-label="备课只需三步"');
+    expect(html).toContain('aria-label="选择备课资料文件"');
+    expect(html).not.toContain('备课草稿（本地保存）');
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain('aria-pressed="false"');
     expect(html).toContain('大字模式');
@@ -75,6 +77,10 @@ describe('G10-T03 accessibility and layout contract', () => {
   it('keeps shell regions independently scrollable, focus visible, responsive, and non-color-only', () => {
     const css = readFileSync(join(__dirname, '..', 'src', 'renderer', 'styles.css'), 'utf8');
     const appSource = readFileSync(join(__dirname, '..', 'src', 'renderer', 'App.tsx'), 'utf8');
+    const preparationSource = readFileSync(
+      join(__dirname, '..', 'src', 'renderer', 'preparation', 'AiPreparationStart.tsx'),
+      'utf8'
+    );
     expect(css).toMatch(/\.content\s*\{[^}]*min-height:\s*0/su);
     expect(css).toMatch(/\.scroll\s*\{[^}]*flex:\s*1[^}]*min-height:\s*0[^}]*overflow:\s*auto/su);
     expect(css).toMatch(/\.sidebar\s*\{[^}]*overflow-y:\s*auto/su);
@@ -82,7 +88,9 @@ describe('G10-T03 accessibility and layout contract', () => {
     expect(css).toMatch(/@media\s*\(max-width:\s*980px\)[\s\S]*?\.app\s*\{[^}]*grid-template-columns:\s*1fr/su);
     expect(css).toMatch(/@media\s*\(max-width:\s*700px\)[\s\S]*?\.grid\s*\{[^}]*grid-template-columns:\s*1fr/su);
     expect(css).toMatch(/@media\s*\(forced-colors:\s*active\)/u);
-    expect(appSource).toMatch(/aria-label=\{r\.ok \? '通过' : '需处理'\}/u);
+    expect(preparationSource).toContain('已选');
+    expect(preparationSource).toContain('同意将本次选中资料的必要片段发送给已配置的 AI 服务');
+    expect(preparationSource).toContain('aria-label="选择备课资料文件"');
     expect(appSource).toContain("event.key === 'Tab'");
     expect(appSource).toContain('startDialogFocusSession(previousFocus');
     expect(appSource).not.toContain('autoFocus');

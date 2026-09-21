@@ -18,7 +18,7 @@ import { observationCoverageSummary } from '../main/feedback/observation';
 import type { LessonPlan } from '../main/lesson/types';
 import type { LessonChangeApplyResult } from '../main/store';
 import type { UpdateSummary } from '../main/update/types';
-import { DraftController, DraftSnapshot, getDraftController } from './draftController';
+import { getDraftController } from './draftController';
 import {
   OBSERVATION_OUTCOME_OPTIONS,
   buildAnalysisView,
@@ -51,7 +51,7 @@ import { PreparePage as PreparationWorkflowPage } from './preparation/PreparePag
 type NavKey = 'prepare' | 'courses' | 'resources' | 'settings';
 
 const NAV: { key: NavKey; label: string; hint: string }[] = [
-  { key: 'prepare', label: '备下一课', hint: '当前单元 · 下一任务' },
+  { key: 'prepare', label: '备下一课', hint: '资料 + 本课信息 → AI 完成' },
   { key: 'courses', label: '我的课程', hint: '单元与课时 · 版本' },
   { key: 'resources', label: '资料', hint: '导入 · 来源 · 覆盖' },
   { key: 'settings', label: '帮助与设置', hint: '连接 · 备份 · 诊断' }
@@ -142,176 +142,11 @@ function StatusPill({ online }: { online: boolean }): JSX.Element {
   );
 }
 
-function useDraftController(): [DraftSnapshot, DraftController] {
-  const controller = getDraftController();
-  const [snap, setSnap] = useState<DraftSnapshot>(() => controller.snapshot());
-  useEffect(() => {
-    const unsub = controller.subscribe(() => setSnap(controller.snapshot()));
-    void controller.load();
-    return unsub;
-  }, [controller]);
-  return [snap, controller];
-}
-
-function DraftNote(): JSX.Element {
-  const [snap, controller] = useDraftController();
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const onChange = (text: string): void => {
-    controller.setContent(text);
-    if (timer.current) clearTimeout(timer.current);
-    // 防抖仅决定何时触发；真正的等待/串行由控制器保证（关闭刷新会等待在途与后续 dirty）。
-    timer.current = setTimeout(() => void controller.save(), 500);
-  };
-
-  return (
-    <div className="card">
-      <div className="card-title">备课草稿（本地保存）</div>
-      <p className="muted small">
-        随手记录本课思路；内容仅保存在本机，自动保存并保留版本。退出前会先完成保存。
-      </p>
-      <textarea
-        className="draft"
-        aria-label="备课草稿"
-        value={snap.content}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="例如：本课《春》——朗读中体会比喻与排比，学生尝试仿写一句…"
-        spellCheck={false}
-      />
-      <div className="row small muted">
-        <span>版本 v{snap.revision}</span>
-        <span>
-          {snap.saving
-            ? '保存中…'
-            : snap.updatedAt
-              ? `已保存 ${new Date(snap.updatedAt).toLocaleString('zh-CN')}`
-              : '尚未保存'}
-        </span>
-      </div>
-      {snap.conflict && (
-        <div className="notice warn small">
-          本地草稿与本机较新版本冲突。已保留你的本地内容，未自动覆盖；继续打字不会覆盖。请明确选择：
-          <div className="row" style={{ marginTop: 8, gap: 8, justifyContent: 'flex-start' }}>
-            <button className="btn" onClick={() => void controller.resolveKeepLocal()}>
-              保留我的内容并覆盖
-            </button>
-            <button className="btn" onClick={() => controller.resolveUseRemote()}>
-              采用较新版本
-            </button>
-          </div>
-          {snap.remoteContent !== null && (
-            <div className="muted small" style={{ marginTop: 6 }}>
-              较新版本预览：{snap.remoteContent.slice(0, 80)}
-            </div>
-          )}
-        </div>
-      )}
-      {!snap.conflict && snap.lastError && (
-        <div className="notice warn small">保存未完成：{snap.lastError}。已保留本地内容，可继续编辑重试。</div>
-      )}
-    </div>
-  );
-}
-
-function platformIdentityText(identity: string, targetSupported: boolean): string {
-  switch (identity) {
-    case 'win11':
-      return 'Windows 11 x64 工作站（正式目标）';
-    case 'windows-server':
-      return 'Windows Server（可运行，非正式目标）';
-    case 'windows-domain-controller':
-      return 'Windows 域控（非正式目标）';
-    case 'windows-other':
-      return '较旧 Windows 工作站（非正式目标）';
-    case 'windows-unknown':
-      return 'Windows 身份未确认（不冒称 Win11）';
-    case 'dev-override':
-      return '开发放行（非正式发布）';
-    default:
-      return targetSupported ? '正式目标平台' : '非正式目标平台';
-  }
-}
-
-function HealthPanel({ health }: { health: HealthData | null }): JSX.Element {
-  const rows: { label: string; ok: boolean; text: string }[] = health
-    ? [
-        { label: '主进程', ok: health.main_process === 'ok', text: '正常' },
-        {
-          label: '本地存储',
-          ok: health.storage_probe === 'ok',
-          text: health.storage_probe === 'ok' ? '可写（实测写入探针）' : '写入失败'
-        },
-        {
-          label: '本地服务',
-          ok: true,
-          text: '未启动（设计保证；INS-008 以系统级证据为准）'
-        },
-        { label: '离线能力', ok: health.offline_capable_by_design, text: '支持（设计能力）' },
-        {
-          label: '运行模式',
-          ok: health.build_mode === 'production',
-          text: health.build_mode === 'production' ? '生产（打包）' : '开发验证（非正式发布）'
-        },
-        {
-          label: 'OS 沙箱',
-          ok: health.sandbox_enabled,
-          text: health.sandbox_enabled ? '启用（仅启动参数指示）' : '已禁用（仅开发验证）'
-        },
-        {
-          label: '平台身份',
-          ok: health.platform_target_supported,
-          text: platformIdentityText(health.platform_identity, health.platform_target_supported)
-        },
-        {
-          label: '数据保护',
-          ok: !health.storage_protected,
-          text: health.storage_protection_kind === 'newer_data'
-            ? '已暂停写入（旧版未覆盖新版数据）'
-            : health.storage_protection_kind === 'migration_recovery'
-              ? '已暂停写入（迁移恢复状态待处理）'
-              : health.storage_protected
-                ? '已暂停写入（请按恢复说明处理）'
-                : '正常'
-        },
-        {
-          label: '凭据加密',
-          ok: health.credential_encryption === 'available',
-          text: health.credential_encryption === 'available' ? '可用（safeStorage）' : '不可用（将拒绝落明文密钥）'
-        }
-      ]
-    : [];
-  return (
-    <div className="card">
-      <div className="card-title">系统状态</div>
-      {!health && <p className="muted small">读取中…</p>}
-      <ul className="status-list">
-        {rows.map((r) => (
-          <li key={r.label}>
-            <span className={`tick ${r.ok ? 'ok' : 'bad'}`} aria-label={r.ok ? '通过' : '需处理'}>
-              <span aria-hidden="true">{r.ok ? '✓' : '!'}</span>
-            </span>
-            <span className="status-label">{r.label}</span>
-            <span className="muted">{r.text}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function PreparePage({ boot, health, onOpenCourses }: { boot: BootstrapData | null; health: HealthData | null; onOpenCourses: () => void }): JSX.Element {
+function PreparationRoute({ boot, onOpenCourses }: { boot: BootstrapData | null; onOpenCourses: () => void }): JSX.Element {
   return (
     <>
       <PreparationWorkflowPage onOpenCourses={onOpenCourses} />
-      <div className="page prep-supporting">
-        <div className="grid">
-          <DraftNote />
-          <HealthPanel health={health} />
-        </div>
-        {boot && !boot.platform_supported && (
-          <div className="notice warn">当前系统非受支持平台，仅用于工程验证。</div>
-        )}
-      </div>
+      {boot && !boot.platform_supported && <div className="page"><div className="notice warn">当前系统非受支持平台，仅用于工程验证。</div></div>}
     </>
   );
 }
@@ -2399,7 +2234,7 @@ export function App(): JSX.Element {
           </div>
         </header>
         <div className="scroll">
-          {nav === 'prepare' && <PreparePage boot={boot} health={health} onOpenCourses={() => setNav('courses')} />}
+          {nav === 'prepare' && <PreparationRoute boot={boot} onOpenCourses={() => setNav('courses')} />}
           {nav === 'courses' && <CoursesPage />}
           {nav === 'resources' && <ResourcesPage />}
           {nav === 'settings' && <SettingsPage boot={boot} health={health} />}

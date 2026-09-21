@@ -72,8 +72,11 @@ describe('G12-T06 preparation interface keeps AI primary and teacher input small
     expect(html).toMatch(/<button class="btn primary" disabled="">生成本地方案<\/button>/u);
   });
 
-  it('starts a new preparation in recommended AI mode', () => {
+  it('starts directly in the AI workflow without asking teachers to choose an implementation mode', () => {
     const html = renderToStaticMarkup(createElement(PreparePage, { onOpenCourses: noop }));
-    expect(html).toMatch(/<input type="radio" checked=""\/> AI 生成（推荐）/u);
+    expect(html).toContain('把资料交给 AI，备好这一课');
+    expect(html).toContain('让 AI 完成备课');
+    expect(html).not.toContain('生成方式');
+    expect(html).not.toContain('本地自拟');
   });
 });

@@ -2192,7 +2192,7 @@ export class SqliteStore {
     if (typeof charStart === 'number' && typeof charEnd === 'number' && charStart >= 0 && charEnd >= charStart) {
       const s = Math.max(0, charStart - 40);
       const e = Math.min(full.length, charEnd + 40);
-      return { title: meta.title, version: meta.version, text: full.slice(s, e), char_start: charStart, char_end: charEnd, truncated: false };
+      return { title: meta.title, version: meta.version, text: full.slice(s, e), char_start: charStart, char_end: charEnd, truncated: false, full_length: full.length };
     }
     return {
       title: meta.title,
@@ -2200,7 +2200,8 @@ export class SqliteStore {
       text: full.slice(0, SOURCE_PREVIEW_MAX),
       char_start: null,
       char_end: null,
-      truncated: full.length > SOURCE_PREVIEW_MAX
+      truncated: full.length > SOURCE_PREVIEW_MAX,
+      full_length: full.length
     };
   }
 
