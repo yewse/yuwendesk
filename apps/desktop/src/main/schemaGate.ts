@@ -218,9 +218,9 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     type: 'object',
     properties: {
       sessionId: { type: 'string', minLength: 1, maxLength: 80 },
-      focus: { type: 'string', minLength: 1, maxLength: 2000 },
-      coreTask: { type: 'string', minLength: 1, maxLength: 4000 },
-      answerScope: { type: 'string', minLength: 1, maxLength: 4000 }
+      focus: { type: 'string', maxLength: 2000 },
+      coreTask: { type: 'string', maxLength: 4000 },
+      answerScope: { type: 'string', maxLength: 4000 }
     },
     required: ['sessionId', 'focus', 'coreTask', 'answerScope'],
     additionalProperties: false

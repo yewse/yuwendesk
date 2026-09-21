@@ -32,7 +32,7 @@ export function PreparePage({ onOpenCourses }: { onOpenCourses: () => void }): J
   const [session, setSession] = useState<PreparationSession | null>(null);
   const [context, setContext] = useState<TeachingContext | null>(null);
   const [contextDraft, setContextDraft] = useState<ContextDraft>(EMPTY_CONTEXT);
-  const [mode, setMode] = useState<'local_authored' | 'model_assisted'>('local_authored');
+  const [mode, setMode] = useState<'local_authored' | 'model_assisted'>('model_assisted');
   const [plan, setPlan] = useState<LessonPlan | null>(null);
   const [report, setReport] = useState<ReviewReport | null>(null);
   const [artifacts, setArtifacts] = useState<PreparationArtifactView[]>([]);
@@ -202,6 +202,9 @@ export function PreparePage({ onOpenCourses }: { onOpenCourses: () => void }): J
       if (!selected.ok) { setMessage(selected.error.message_zh); return; }
       setSession((selected.data as { session: PreparationSession }).session);
       setMode('local_authored');
+      setFocus('');
+      setCoreTask('');
+      setAnswerScope('');
       setMessage('已创建本地自拟会话，资料未重复导入。');
     });
   }
@@ -251,7 +254,7 @@ export function PreparePage({ onOpenCourses }: { onOpenCourses: () => void }): J
       {message && <div className="notice" role="status" aria-live="polite">{message}</div>}
       {view.step === 'context' && <ContextStep value={contextDraft} mode={mode} busy={busy} onChange={setContextDraft} onModeChange={setMode} onSave={() => void saveContext()} />}
       {view.step === 'sources' && <SourceSelectionStep candidates={candidates} selectedVersionId={selectedVersionId} importTitle={importTitle} importText={importText} approvedForModel={approvedForModel} modelMode={session?.mode === 'model_assisted'} busy={busy} onRefresh={() => void loadCandidates()} onSelect={setSelectedVersionId} onImportTitle={setImportTitle} onImportText={setImportText} onApproval={setApprovedForModel} onContinue={() => void selectSource()} />}
-      {view.step === 'build' && <BuildStep focus={focus} coreTask={coreTask} answerScope={answerScope} modeLabel={session?.mode === 'model_assisted' ? '模型辅助' : '本地自拟'} busy={busy || session?.status === 'BUILDING'} localFallback={view.localFallbackAvailable} onFocus={setFocus} onCoreTask={setCoreTask} onAnswerScope={setAnswerScope} onBuild={() => void build()} onUseLocal={() => void useLocalFallback()} />}
+      {view.step === 'build' && <BuildStep focus={focus} coreTask={coreTask} answerScope={answerScope} mode={session?.mode ?? mode} busy={busy || session?.status === 'BUILDING'} localFallback={view.localFallbackAvailable} onFocus={setFocus} onCoreTask={setCoreTask} onAnswerScope={setAnswerScope} onBuild={() => void build()} onUseLocal={() => void useLocalFallback()} />}
       {view.step === 'review' && <PlanReviewStep plan={plan} report={report} originLabel={view.originLabel} busy={busy} onReview={() => void review()} onConfirm={() => void confirm()} />}
       {(view.step === 'export' || view.step === 'complete') && <ExportStep exported={view.step === 'complete'} artifacts={artifacts} planId={view.planId} revisionId={view.revisionId} bundleId={view.bundleId} busy={busy || session?.status === 'EXPORTING'} onExport={() => void exportFiles()} onPresent={() => void openPresentation()} onChange={onOpenCourses} />}
     </div>

@@ -270,6 +270,9 @@
 - [x] **G12-T05 教材量级 PDF 导入修复（本地工程范围）**：截图同批 6 本 16–26 MB PDF 均能由解析器独立抽取，但经真实 renderer/preload/IPC 导入时，大体积 Base64 在 `schemaGate` 的整串回溯正则中触发 `RangeError: Maximum call stack size exceeded`，因此在解析前被界面统一显示为“读取失败”。校验已改为常量调用栈、无大额副本的逐字符扫描；40 MB 原文件上限、60 MB IPC 字符串上限、四字符分组、尾部填充和非法字符拒绝均未放宽。
 - **T05 测试与真实诊断**：32 MB Base64 回归先 RED（确切复现栈溢出）后 GREEN，非法尾部仍拒绝；Schema 与 G09 内容/隐私攻击定向 **25/25**。随后重新构建生产 main/preload/renderer，并把截图同批 6 本真实 PDF 逐一本地送入生产 IPC/SQLite/worker 链路，6/6 返回 `status=imported`，Base64 长度 22,540,108–34,222,468，单本约 1.9–2.8 秒。真实教材只用于本机诊断，未写入仓库、验收报告或发行包；pdfjs 的可选 canvas/CMap/字体兼容警告仍如实保留。
 - **T05 提交前验证与证据边界**：全量 Vitest **692 passed / 1 skipped（693 total，76 files）**，typecheck、lint、desktop build 均退出 0。该实测证明本次六文件导入故障已修复，但不自动提升冻结验收案例；旧 `56c6faa` 候选及其运行已经作为历史证据归档。T05 源码提交后仍须从 clean HEAD 重建候选、重跑 G12 纵向/追加 AcceptanceRun 和发行链，不能复用旧候选。真实 DeepSeek、WPS、干净标准用户 Windows、签名/时间戳、分发和真人教师专业复核继续按实际证据保持 `BLOCKED_EXTERNAL/NOT_RUN`。
+- [x] **G12-T06 资料选择精简与 AI 主导备课（本地工程范围）**：资料步骤改为“选择本课资料”的主路径，卡片只显示标题、版本、中文资料类型、最多 140 字/三行摘要和明确的“已选择”状态，不再把长 OCR 正文铺满页面；粘贴小段文字降为折叠备用入口。AI 模式默认选中并标为推荐，生成步骤只保留一个“补充要求（可选）”，空白也可直接让 AI 生成教学重点、核心任务、合理答案范围和课堂活动；离线本地自拟仍保留三个必填教学判断，模型失败后的降级也会清空模型输入，避免把补充要求冒充教师完整判断。
+- **T06 隐私与合同边界**：AI 模式在资料步骤仍要求逐次勾选“将本次选中的必要片段发送给已配置的 AI 服务”，未授权时继续按钮明确禁用且提示可返回选择本地自拟；不自动外发、重试或消费预算。`preparation.build` 的三个字符串字段仍必需、保留类型与长度上限，只允许为空以支持 AI 主导；本地 builder 与本地 UI 继续拒绝空教学判断，模型输出仍受 `lesson_plan_spec.v1` 严格合同和后续软件审查约束。
+- **T06 测试与视觉证据**：新增真实 React 渲染回归覆盖短摘要/隐藏 OCR 尾部、AI 单一可选输入、本地三个必填输入、AI 默认选择及未授权禁用；schema 回归覆盖空字符串、错误类型和超长拒绝。测试先 RED 后 GREEN；全量 Vitest **698 passed / 1 skipped（699 total，77 files）**，typecheck 与 lint 均退出 0。生产 renderer/main/preload 构建后，以隔离临时 SQLite 和合成资料启动实际 Electron 页面截图核对：资料卡未显示长正文，AI 页只有一个可选输入；当前 Codex 控制面没有原生应用入口，因此这不是 WPS 或安装器验收。候选构建、G12 纵向、追加 AcceptanceRun 与发行链须在 T06 clean commit 后重新绑定；真实 API、WPS、干净标准用户 Windows、签名/时间戳、分发和真人教师复核继续 `BLOCKED_EXTERNAL/NOT_RUN`。
 
 ## G11-E01 追加外部验收准备 — 本地实现完成，实际运行待候选
 

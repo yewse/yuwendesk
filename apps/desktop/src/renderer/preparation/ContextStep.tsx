@@ -41,8 +41,8 @@ export function ContextStep({ value, mode, busy, onChange, onModeChange, onSave 
       </div>
       <fieldset className="prep-mode">
         <legend>生成方式</legend>
-        <label><input type="radio" checked={mode === 'local_authored'} onChange={() => onModeChange('local_authored')} /> 本地自拟（离线可完成）</label>
-        <label><input type="radio" checked={mode === 'model_assisted'} onChange={() => onModeChange('model_assisted')} /> 模型辅助（只发送逐片段授权内容）</label>
+        <label><input type="radio" checked={mode === 'model_assisted'} onChange={() => onModeChange('model_assisted')} /> AI 生成（推荐）<small>AI 完成主体，教师只补充少量要求并复核。</small></label>
+        <label><input type="radio" checked={mode === 'local_authored'} onChange={() => onModeChange('local_authored')} /> 本地自拟（离线备用）<small>不访问网络，需要教师填写完整教学判断。</small></label>
       </fieldset>
       <button className="btn primary" disabled={busy} onClick={onSave}>{busy ? '保存中…' : '保存并选择资料'}</button>
     </section>

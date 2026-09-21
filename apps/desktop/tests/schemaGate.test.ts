@@ -61,6 +61,18 @@ describe('IPC 载荷 Schema 门（G02-T01 / SEC 边界）', () => {
     }).errors).toContain('字段 base64 编码无效');
   });
 
+  it('模型主导备课允许三个教师约束为空，但仍限制字段类型和长度', () => {
+    expect(checkPayload('preparation.build', {
+      sessionId: 'session-1', focus: '', coreTask: '', answerScope: ''
+    })).toEqual({ ok: true, errors: [] });
+    expect(checkPayload('preparation.build', {
+      sessionId: 'session-1', focus: 1, coreTask: '', answerScope: ''
+    }).ok).toBe(false);
+    expect(checkPayload('preparation.build', {
+      sessionId: 'session-1', focus: '重'.repeat(2001), coreTask: '', answerScope: ''
+    }).errors).toContain('字段 focus 过长');
+  });
+
   it('content 过长 → 失败', () => {
     const r = checkPayload('ui.saveDraft', { content: 'a'.repeat(200_001) });
     expect(r.ok).toBe(false);

@@ -923,11 +923,29 @@ h1 {
 }
 
 .prep-mode {
-  display: flex;
-  gap: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   margin: 16px 0 4px;
   border: 1px solid var(--line);
   border-radius: 10px;
+}
+
+.prep-mode label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.prep-mode label:has(input:checked) {
+  background: var(--accent-soft);
+}
+
+.prep-mode small {
+  grid-column: 2;
+  color: var(--muted);
 }
 
 .btn.primary {
@@ -960,11 +978,53 @@ h1 {
   background: var(--accent-soft);
 }
 
+.prep-source-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.prep-selected {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 .prep-source small {
   display: block;
   margin-top: 4px;
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.prep-source-preview {
+  display: -webkit-box !important;
+  overflow: hidden !important;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.prep-paste {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+}
+
+.prep-paste summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.prep-paste .prep-form-grid {
+  margin-top: 12px;
 }
 
 .prep-consent {
@@ -1087,5 +1147,8 @@ h1 {
   }
   .prep-form-grid .wide {
     grid-column: auto;
+  }
+  .prep-mode {
+    grid-template-columns: 1fr;
   }
 }
