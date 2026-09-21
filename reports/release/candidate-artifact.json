@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "56c6faaccf858b4f4b7ccfb7f6df602d50c36c5f",
-  "checkedAt": "2026-09-21T03:16:21.346Z",
+  "sourceCommit": "4649ac75327db1e40753bb3482c74562cf780d9a",
+  "checkedAt": "2026-09-21T04:17:57.077Z",
   "expectedPath": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
   "artifactPresent": true,
   "artifactClass": "UNSIGNED_TEST_BUILD",
-  "sha256": "2c2bcb4263cef88322d9691d7755fe34dc9e0e13e416b3d4e36f9ded7f61dbe0",
-  "sizeBytes": 131049412,
+  "sha256": "918334691fb807746139d012d43f555a2205c9c3aeeb4cf3932e0df3f6c18c73",
+  "sizeBytes": 131049698,
   "buildCommand": "npm run build:candidate",
   "buildEnvironment": {
     "os": "win32",
