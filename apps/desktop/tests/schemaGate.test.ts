@@ -51,6 +51,16 @@ describe('IPC 载荷 Schema 门（G02-T01 / SEC 边界）', () => {
     expect(checkPayload('ui.saveDraft', { content: '仅内容' }).ok).toBe(true);
   });
 
+  it('教材量级 Base64 不因整串正则耗尽调用栈，非法尾部仍被拒绝', () => {
+    const textbookSizedBase64 = 'QUJD'.repeat(8_000_000);
+    expect(checkPayload('sources.importFile', {
+      title: '语文教材.pdf', format: 'pdf', base64: textbookSizedBase64
+    })).toEqual({ ok: true, errors: [] });
+    expect(checkPayload('sources.importFile', {
+      title: '语文教材.pdf', format: 'pdf', base64: `${textbookSizedBase64.slice(0, -4)}***=`
+    }).errors).toContain('字段 base64 编码无效');
+  });
+
   it('content 过长 → 失败', () => {
     const r = checkPayload('ui.saveDraft', { content: 'a'.repeat(200_001) });
     expect(r.ok).toBe(false);

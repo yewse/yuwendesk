@@ -108,9 +108,9 @@ npm run build:candidate
 
 ## 下一个有界工作包建议
 
-0. G12-T01–T03 本地实现已完成；不要重做 G00–G11，也不要恢复 production `lesson.buildDemo`。
-1. 下一步直接执行 G12-T04：先提交 T03，再以 RED 合同测试更新教师指南和追加验收入口；随后从 clean commit 构建候选并实际运行 G12 Electron 纵向脚本。
-2. 新验收运行只能使用绑定当前 commit、当前候选和当前输入哈希的实际证据；旧 G11 运行永久保留，不能覆盖或借证。
+0. G12-T01–T05 本地实现已完成；不要重做 G00–G11，也不要恢复 production `lesson.buildDemo`。
+1. 下一步提交 T05，然后从 clean HEAD 重建候选，重跑 G12 Electron 纵向、追加 AcceptanceRun、发行证据/SBOM/最终验证；旧 `56c6faa` 候选只作历史证据。
+2. 新验收运行只能使用绑定当前 commit、当前候选和当前输入哈希的实际证据；旧 G11/G12 运行永久保留，不能覆盖或借证。
 3. 真实 DeepSeek/WPS/干净标准用户 Windows/签名/分发/真人教师复核只有实际执行后才能转为 PASS/FAIL，否则保持 `BLOCKED_EXTERNAL/NOT_RUN`。
 
 ## G12-T01 当前状态
@@ -145,6 +145,14 @@ npm run build:candidate
 - `5acf2cf` 候选的 G12 Electron 纵向已通过，但追加验收 runner 在落盘前暴露 worktree 依赖定位缺陷；没有生成或提升运行记录。现已改为按项目 Node 模块解析层级寻找 Vitest，回归先红后绿；提交后仍须重新构建并绑定新候选，不能复用 `5acf2cf` 证据。
 - `58e7ca4` 的追加运行已生成，但 SBOM 生成器发现 npm 在 worktree 下以目录名替代根组件显示名，未伪造通过。修复只接受 `bom-ref`、版本和 worktree 目录名共同证明的单字段规范化，SBOM 定向验证已通过，并由后续 clean commit 重新绑定候选与追加运行。
 - 最终候选之后不再修改或提交源码；最新 AcceptanceRun、G12 补充证据和发行报告作为生成证据保留，由 `reports/release/release-input.json` 绑定 source commit 与候选字节。若再形成提交，必须重建候选并从头重跑，不能借用前一轮证据。
+
+## G12-T05 当前状态
+
+- 已确定截图中 6 本 PDF 的“读取失败”不是文件损坏、加密或超限：文件均为 16–26 MB，独立解析全部成功；真实失败发生在 renderer 读取后、解析前的 IPC schema 校验。整串 Base64 回溯正则在 22–34 MB 字符串上耗尽 V8 调用栈。
+- `schemaGate` 已改为常量调用栈的逐字符 Base64 校验；没有提高 40 MB 原件/60 MB IPC 上限，也没有放松分组、填充、字符集或额外字段边界。32 MB 回归先精确复现栈溢出，再转绿；非法尾部仍拒绝。
+- 生产 build 后使用真实 preload/IPC/SQLite/worker 链路逐一重跑截图同批文件，6/6 返回 imported，约 1.9–2.8 秒/本。真实教材及正文未进入仓库或公开证据；pdfjs 可选 canvas/CMap/字体告警如实保留。
+- 提交前全量为 692 passed / 1 skipped（693 total，76 files），typecheck、lint、build 通过。旧 `56c6faa` 候选证据已历史归档；T05 提交后必须重建并重新绑定候选、G12 纵向、AcceptanceRun 和发行链，旧候选不得借证。
+- 该修复只关闭教材量级 PDF 导入故障，不宣称真实 DeepSeek、WPS、干净标准用户 Windows、签名/时间戳、分发或真人教师专业复核完成；这些继续 `BLOCKED_EXTERNAL/NOT_RUN`。
 
 1. 提交 E10，保留第四轮追加验收与 clean-source 发行证据；不要覆盖前两轮 FAIL 或其他历史记录。
 2. 真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。

@@ -502,6 +502,31 @@ export function getPayloadSchema(op: OperationName): PayloadSchema {
   return PAYLOAD_SCHEMAS[op] ?? null;
 }
 
+function isValidBase64(value: string): boolean {
+  if (value.length % 4 !== 0) return false;
+
+  let contentLength = value.length;
+  if (value.endsWith('==')) contentLength -= 2;
+  else if (value.endsWith('=')) contentLength -= 1;
+
+  for (let index = 0; index < contentLength; index += 1) {
+    const code = value.charCodeAt(index);
+    const isAlphabet =
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      (code >= 48 && code <= 57) ||
+      code === 43 ||
+      code === 47;
+    if (!isAlphabet) return false;
+  }
+
+  for (let index = contentLength; index < value.length; index += 1) {
+    if (value.charCodeAt(index) !== 61) return false;
+  }
+
+  return true;
+}
+
 function validateField(name: string, schema: FieldSchema, value: unknown, errors: string[]): void {
   if (schema.type === 'string') {
     if (typeof value !== 'string') {
@@ -511,8 +536,7 @@ function validateField(name: string, schema: FieldSchema, value: unknown, errors
     if (schema.minLength !== undefined && value.length < schema.minLength) errors.push(`字段 ${name} 过短`);
     if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push(`字段 ${name} 过长`);
     if (schema.enum !== undefined && !schema.enum.includes(value)) errors.push(`字段 ${name} 不在允许范围`);
-    if (schema.encoding === 'base64' &&
-        (value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(value))) {
+    if (schema.encoding === 'base64' && !isValidBase64(value)) {
       errors.push(`字段 ${name} 编码无效`);
     }
   } else if (schema.type === 'integer') {

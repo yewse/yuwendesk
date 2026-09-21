@@ -267,6 +267,9 @@
 - **T04 追加运行启动修复**：`5acf2cf` 候选纵向流程已实际通过，但首次 `acceptance:run` 在生成运行记录前因 worktree 无本地 `node_modules/vitest` 而停止，未写入或提升任何案例。runner 现通过项目模块解析层级定位 Vitest，新增回归先 RED 后 GREEN；该源码修复需再次提交、重建候选并重跑，`5acf2cf` 证据不得跨 commit 借用。
 - **T04 worktree 供应链修复**：`58e7ca4` 已生成追加运行，但供应链生成时 npm 把 worktree 目录名误填为 CycloneDX 根组件显示名，严格校验按设计失败。现只在版本、`bom-ref` 和实际 worktree 目录名同时匹配锁文件身份时规范化根显示名，其他差异继续 fail closed；回归先 RED 后 GREEN，SBOM 663/663 组件和 664 依赖验证通过。该修复由后续 clean commit 重新绑定候选与追加运行。
 - **T04 最终绑定规则**：最终候选必须从 clean HEAD 生成，G12 纵向和追加 AcceptanceRun 随后绑定同一 source commit 与候选字节；最终生成证据在候选之后不再形成源码提交，否则必须重新走完整构建和验收。当前交付结果以 `reports/release/release-input.json` 指向的最新追加运行为准，旧候选与旧运行仅作历史诊断。
+- [x] **G12-T05 教材量级 PDF 导入修复（本地工程范围）**：截图同批 6 本 16–26 MB PDF 均能由解析器独立抽取，但经真实 renderer/preload/IPC 导入时，大体积 Base64 在 `schemaGate` 的整串回溯正则中触发 `RangeError: Maximum call stack size exceeded`，因此在解析前被界面统一显示为“读取失败”。校验已改为常量调用栈、无大额副本的逐字符扫描；40 MB 原文件上限、60 MB IPC 字符串上限、四字符分组、尾部填充和非法字符拒绝均未放宽。
+- **T05 测试与真实诊断**：32 MB Base64 回归先 RED（确切复现栈溢出）后 GREEN，非法尾部仍拒绝；Schema 与 G09 内容/隐私攻击定向 **25/25**。随后重新构建生产 main/preload/renderer，并把截图同批 6 本真实 PDF 逐一本地送入生产 IPC/SQLite/worker 链路，6/6 返回 `status=imported`，Base64 长度 22,540,108–34,222,468，单本约 1.9–2.8 秒。真实教材只用于本机诊断，未写入仓库、验收报告或发行包；pdfjs 的可选 canvas/CMap/字体兼容警告仍如实保留。
+- **T05 提交前验证与证据边界**：全量 Vitest **692 passed / 1 skipped（693 total，76 files）**，typecheck、lint、desktop build 均退出 0。该实测证明本次六文件导入故障已修复，但不自动提升冻结验收案例；旧 `56c6faa` 候选及其运行已经作为历史证据归档。T05 源码提交后仍须从 clean HEAD 重建候选、重跑 G12 纵向/追加 AcceptanceRun 和发行链，不能复用旧候选。真实 DeepSeek、WPS、干净标准用户 Windows、签名/时间戳、分发和真人教师专业复核继续按实际证据保持 `BLOCKED_EXTERNAL/NOT_RUN`。
 
 ## G11-E01 追加外部验收准备 — 本地实现完成，实际运行待候选
 
