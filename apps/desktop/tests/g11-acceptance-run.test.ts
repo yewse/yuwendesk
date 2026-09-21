@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,7 @@ import {
   normalizeVitestReport,
   npmCliPathForNodeExecutable,
   recoverJsonSetAtomic,
+  resolveVitestEntrypoint,
   validateAcceptanceMap,
   validateAcceptanceRun,
   validateExternalEvidenceInput,
@@ -141,6 +142,12 @@ describe('G11-T01 acceptance definition and map boundary', () => {
     expect(outcome.error).toBeUndefined();
     expect(outcome.status).toBe(0);
     expect(outcome.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('resolves Vitest through the project module hierarchy when the worktree has no local node_modules', () => {
+    const entrypoint = resolveVitestEntrypoint(root);
+    expect(entrypoint.replaceAll('\\', '/')).toMatch(/\/node_modules\/vitest\/vitest\.mjs$/);
+    expect(existsSync(entrypoint)).toBe(true);
   });
 
   it('loads 130 frozen plus 40 addendum cases while definitions stay NOT_RUN', () => {

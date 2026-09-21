@@ -14,6 +14,7 @@ import {
   normalizeVitestReport,
   npmCliPathForNodeExecutable,
   recoverJsonSetAtomic,
+  resolveVitestEntrypoint,
   validateCandidateArtifact,
   validateAcceptanceMap,
   validateAcceptanceRun,
@@ -149,7 +150,7 @@ if (g12Report !== null) {
   if (!g12Validation.ok) throw new Error(`G12_EVIDENCE_INVALID:${JSON.stringify(g12Validation.errors)}`);
 }
 
-const vitestPath = resolve(root, 'node_modules', 'vitest', 'vitest.mjs');
+const vitestPath = resolveVitestEntrypoint(root);
 const vitestRelative = relative(desktopRoot, vitestPath).replaceAll('\\', '/');
 const rawRelative = relative(desktopRoot, rawPath).replaceAll('\\', '/');
 const vitestArgs = [vitestRelative, 'run', '--reporter=json', '--outputFile', rawRelative];

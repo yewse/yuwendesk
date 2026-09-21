@@ -264,6 +264,7 @@
 - **T04 提交前验证**：新合同先 RED 后 GREEN；G12/G11 发行定向 **84/84**，全量 Vitest **689 passed / 1 skipped（690 total，76 files）**；typecheck、lint、desktop build 均退出 0。旧 G11 公开 Markdown 的 Windows CRLF 假失败已按换行规范化关闭，逐文件 SHA-256 没有放宽。提交前 `verify:contracts` 仍如实为 1 项失败，仅因旧 G11 发行证据与 G12 当前源码/候选/输入哈希漂移；须在本包提交后的 clean commit 上构建候选并追加运行后重建，不得覆盖历史运行。
 - **T04 运行边界**：`e2e-g12.cjs` 的实际 Electron/SQLite 纵向执行、clean candidate、追加 AcceptanceRun 和发行事务必须在 T04 源码提交后生成；其真实 commit/hash/计数以 `reports/acceptance-runs/` 和 `reports/release/` 的追加产物为准。未实际执行前不把这些步骤称为 PASS。
 - **T04 首次候选失败与修复**：`3019830` 候选实际纵向运行在课堂展示资格门失败，未形成 PASS 证据。根因是五文件发布写入新的材料包审查报告后，备课会话仍保留导出前 `reviewReportId`；展示服务因此正确拒绝。新增回归先 RED 后 GREEN，导出完成状态现同步最新发布审查 ID，资格门本身未放宽。须从修复后的新 clean commit 重建候选并重跑，不能沿用 `3019830` 候选。
+- **T04 追加运行启动修复**：`5acf2cf` 候选纵向流程已实际通过，但首次 `acceptance:run` 在生成运行记录前因 worktree 无本地 `node_modules/vitest` 而停止，未写入或提升任何案例。runner 现通过项目模块解析层级定位 Vitest，新增回归先 RED 后 GREEN；该源码修复需再次提交、重建候选并重跑，`5acf2cf` 证据不得跨 commit 借用。
 
 ## G11-E01 追加外部验收准备 — 本地实现完成，实际运行待候选
 

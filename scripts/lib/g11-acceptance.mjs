@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import {
   existsSync,
   linkSync,
@@ -52,6 +53,14 @@ export const BLOCKER_CODES = Object.freeze([
 
 export function npmCliPathForNodeExecutable(nodeExecutable) {
   return resolve(dirname(nodeExecutable), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+}
+
+export function resolveVitestEntrypoint(projectRoot) {
+  const require = createRequire(resolve(projectRoot, 'package.json'));
+  const packagePath = require.resolve('vitest/package.json');
+  const entrypoint = resolve(dirname(packagePath), 'vitest.mjs');
+  if (!existsSync(entrypoint)) throw new Error('VITEST_ENTRYPOINT_MISSING');
+  return realpathSync(entrypoint);
 }
 
 export function normalizeVitestReport({
