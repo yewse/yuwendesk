@@ -1,6 +1,6 @@
 import type { SourceHitDTO, SourceReadDTO } from '../../shared/ipc';
 
-const MODEL_EXCERPT_CHARS = 3800;
+const MODEL_EXCERPT_CHARS = 2350;
 const LEADING_CONTEXT_CHARS = 200;
 
 export interface LessonExcerptGateway {
@@ -20,6 +20,10 @@ function hitScore(hit: SourceHitDTO, query: string): number {
   const compact = hit.context.replace(/\s+/gu, ' ');
   const index = compact.indexOf(query);
   let score = index >= 0 && index <= 12 ? 80 : 20;
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const lessonHeading = new RegExp(`(?:^|\\s)\\d{1,2}\\s*${escapedQuery}(?=[a-zA-Z\\s/／·（(]|$)`, 'u');
+  if (lessonHeading.test(compact)) score += 180;
+  if (/预\s*习/u.test(hit.context)) score += 40;
   if (compact.includes('目录')) score -= 120;
   score -= (compact.match(/[0-9０-９]/gu) ?? []).length * 4;
   score -= (compact.match(/[/／]/gu) ?? []).length * 8;

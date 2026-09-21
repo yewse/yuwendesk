@@ -96,9 +96,15 @@ describe('G12-T07 AI-led teacher workflow', () => {
         },
         {
           documentId: 'document-1', title: '七年级上册.pdf', version: 1, versionId: 'version-1',
-          classification: 'licensed_reference', anchor: { char_start: 3035, char_end: 3036, line: 0 },
-          context: '第一单元 春 朱自清 盼望着，东风来了', locator: { kind: 'pdf_page', page: 8 }, reliable: true,
+          classification: 'licensed_reference', anchor: { char_start: 2500, char_end: 2501, line: 0 },
+          context: '春风夏雨，秋霜冬雪。本单元课文描绘四季美景', locator: { kind: 'pdf_page', page: 8 }, reliable: true,
           locatorLabel: '第 8 页', matchKind: 'body'
+        },
+        {
+          documentId: 'document-1', title: '七年级上册.pdf', version: 1, versionId: 'version-1',
+          classification: 'licensed_reference', anchor: { char_start: 3035, char_end: 3036, line: 0 },
+          context: '1 春 朱自清 预习 盼望着，东风来了', locator: { kind: 'pdf_page', page: 9 }, reliable: true,
+          locatorLabel: '第 9 页', matchKind: 'body'
         }
       ],
       read: async (_versionId, start, end) => {
@@ -116,7 +122,7 @@ describe('G12-T07 AI-led teacher workflow', () => {
     expect(excerpt.text).toContain('盼望着，东风来了');
     expect(excerpt.text).not.toContain('目录 1 春');
     expect(excerpt.text.length).toBeLessThanOrEqual(4000);
-    expect(excerpt.locatorLabel).toBe('第 8 页');
+    expect(excerpt.locatorLabel).toBe('第 9 页');
   });
 
   it('explains the product from the real App entry without engineering support cards', () => {
