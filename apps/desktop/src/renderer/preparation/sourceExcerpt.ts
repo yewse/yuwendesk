@@ -18,13 +18,21 @@ export interface LessonExcerpt {
 function hitScore(hit: SourceHitDTO, query: string): number {
   if (hit.matchKind !== 'body' || !hit.anchor || !hit.reliable) return Number.NEGATIVE_INFINITY;
   const compact = hit.context.replace(/\s+/gu, ' ');
+  const dense = hit.context.replace(/\s+/gu, '');
   const index = compact.indexOf(query);
   let score = index >= 0 && index <= 12 ? 80 : 20;
   const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-  const lessonHeading = new RegExp(`(?:^|\\s)\\d{1,2}\\s*${escapedQuery}(?=[a-zA-Z\\s/／·（(]|$)`, 'u');
-  if (lessonHeading.test(compact)) score += 180;
+  const spacedHeading = new RegExp(
+    `(?:^|[\\s。！？；：〕】])(?:阅读\\s*)?\\d{1,2}\\s*${escapedQuery}(?=[a-zA-Z/／·（(]|\\s*预\\s*习|$)`,
+    'u'
+  );
+  const denseHeading = new RegExp(
+    `(?:^|[。！？；：〕】])(?:阅读)?\\d{1,2}${escapedQuery}(?=[a-zA-Z/／·（(]|预习|$)`,
+    'u'
+  );
+  if (spacedHeading.test(hit.context) || denseHeading.test(dense)) score += 180;
   if (/预\s*习/u.test(hit.context)) score += 40;
-  if (compact.includes('目录')) score -= 120;
+  if (dense.includes('目录')) score -= 120;
   score -= (compact.match(/[0-9０-９]/gu) ?? []).length * 4;
   score -= (compact.match(/[/／]/gu) ?? []).length * 8;
   const page = typeof hit.locator?.page === 'number' ? hit.locator.page : 0;
@@ -45,7 +53,7 @@ function previewAnchor(text: string, query: string): number {
   return positions
     .map((position) => {
       const around = text.slice(Math.max(0, position - 40), Math.min(text.length, position + query.length + 80));
-      const penalty = around.includes('目录') ? 100 : 0;
+      const penalty = around.replace(/\s+/gu, '').includes('目录') ? 100 : 0;
       const titleAtLineStart = position === 0 || /[\n。！？]/u.test(text[position - 1] ?? '') ? 30 : 0;
       return { position, score: titleAtLineStart - penalty - (around.match(/[0-9０-９]/gu) ?? []).length * 2 };
     })

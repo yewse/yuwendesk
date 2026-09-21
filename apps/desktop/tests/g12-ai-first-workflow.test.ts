@@ -91,8 +91,8 @@ describe('G12-T07 AI-led teacher workflow', () => {
         {
           documentId: 'document-1', title: '七年级上册.pdf', version: 1, versionId: 'version-1',
           classification: 'licensed_reference', anchor: { char_start: 1005, char_end: 1006, line: 0 },
-          context: '目录 1 春 / 朱自清 2 济南的冬天', locator: { kind: 'pdf_page', page: 3 }, reliable: true,
-          locatorLabel: '第 3 页', matchKind: 'body'
+          context: 'I目 录第一单元目 录1阅读 1 春 / 朱自清 2 济南的冬天', locator: { kind: 'pdf_page', page: 4 }, reliable: true,
+          locatorLabel: '第 4 页', matchKind: 'body'
         },
         {
           documentId: 'document-1', title: '七年级上册.pdf', version: 1, versionId: 'version-1',
@@ -103,7 +103,7 @@ describe('G12-T07 AI-led teacher workflow', () => {
         {
           documentId: 'document-1', title: '七年级上册.pdf', version: 1, versionId: 'version-1',
           classification: 'licensed_reference', anchor: { char_start: 3035, char_end: 3036, line: 0 },
-          context: '1 春 朱自清 预习 盼望着，东风来了', locator: { kind: 'pdf_page', page: 9 }, reliable: true,
+          context: '、润泽。c〔赶趟儿〕这里形容争先恐后的样子。1 春a朱自清预 习 盼望着，东风来了', locator: { kind: 'pdf_page', page: 9 }, reliable: true,
           locatorLabel: '第 9 页', matchKind: 'body'
         }
       ],
@@ -122,6 +122,7 @@ describe('G12-T07 AI-led teacher workflow', () => {
     expect(excerpt.text).toContain('盼望着，东风来了');
     expect(excerpt.text).not.toContain('目录 1 春');
     expect(excerpt.text.length).toBeLessThanOrEqual(4000);
+    expect(excerpt.charStart).toBeGreaterThan(2500);
     expect(excerpt.locatorLabel).toBe('第 9 页');
   });
 
