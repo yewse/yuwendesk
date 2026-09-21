@@ -171,3 +171,14 @@ npm run build:candidate
 
 - 不删验收项、不硬编码成功、不伪造 Windows/签名/真实 API 证据。未运行标 NOT_RUN，缺外部输入标 BLOCKED_EXTERNAL 并继续独立安全任务。
 - 一个工作包一次小步提交，更新 PROGRESS 与本文件。
+
+## G12-T07 最终交接
+
+- 候选源码是 `d2fe0d8b430325315eecd2fa51feb9cccf94d9ec`，固定 EXE SHA-256 为 `39474f3645aec30a72ba91805039757e9ad9b1fc3881860932ca4031b37639d3`、大小 131,051,156 bytes。后续证据归档提交不是候选源码；不要把归档提交误写为候选来源，也不要在未重建时借用此候选。
+- 教师主流程已改为三步 AI 主导；真实教材《春》定位到 PDF 第 9 页。完整教材片段不进入学生讲义/PPT。五文件业务闭环、一处修改、课堂展示和 WPS 打开/导出/PPT 编辑保存重开均已实际执行。
+- 权威追加运行是 `reports/acceptance-runs/run-20260921-d2fe0d8-04.json`：`repositoryDirty=false`，12 PASS / 0 FAIL / 32 BLOCKED / 126 NOT_RUN。01–03 为建立外部证据与清理来源状态时的历史运行，均保留，不覆盖 04。
+- WPS 只实际证明 CLS-002/006/012/013/014/020。未证明 WPS PDF 打开、幻灯片放映、打印、长文本/跨页表格、Microsoft Office 或干净 VM，因此这些案例保持 BLOCKED/NOT_RUN。
+- 真实 API 没有调用：网络恢复不等于安全凭据可用。生产 `yuwendesk.db` 已观察为 malformed，credential/model_config 页无记录，环境无安全密钥变量；不要从聊天记录复制密钥。若以后通过应用设置或秘密管理安全配置，再从当前新 commit/新候选创建追加验收。
+- 教学结论固定为 `NEEDS_REVISION`：模型辅助自审 34/40，但课程标准证据和单元定位低于 3；未经过真人特级教师复核，不可写成认证或教学效果证明。详见 `reports/G12_T07_TEACHER_RUN.md`。
+- 发行链：SBOM/校验清单 PASS；签名 UNSIGNED；锁定环境不匹配；`release:verify` 退出 2，`BLOCKED / RELEASE_WINDOWS_EVIDENCE_REQUIRED`。P0/P1 缺陷审计因为没有在候选构建前绑定，保持 NOT_RUN；课件内部标识和视觉朴素作为 P2 观察写入报告，不伪造正式审计完成。
+- 最终用户交付在任务输出目录 `YuwenDesk-0.1.0-g12-t07-d2fe0d8`：安装器、五文件、截图、业务记录、计划 JSON、教师视角报告、候选源码归档和校验清单。旧临时交付目录不要作为最终链接。

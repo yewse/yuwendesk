@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "d2fe0d8b430325315eecd2fa51feb9cccf94d9ec",
+  "startedAt": "2026-09-21T07:47:00.000Z",
+  "completedAt": "2026-09-21T08:02:00.000Z",
+  "candidate": {
+    "path": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
+    "sha256": "39474f3645aec30a72ba91805039757e9ad9b1fc3881860932ca4031b37639d3",
+    "sizeBytes": 131051156
+  },
+  "externalInputs": [
+    {
+      "id": "EXT11",
+      "status": "PROVIDED"
+    }
+  ],
+  "cases": [
+    {
+      "caseId": "CLS-002",
+      "status": "PASS",
+      "evidenceLevel": "office_wps",
+      "command": "WPS Commercial COM: open/export generated DOCX and PPTX; inspect every exported page/slide",
+      "exitCode": 0,
+      "executedAt": "2026-09-21T07:54:00.000Z",
+      "environment": "Windows 11 Pro 10.0.26200 x64 / WPS Office Commercial 12.1.0.28022",
+      "artifactHashes": [
+        {
+          "path": "apps/desktop/release/acceptance/g12-wps-d2fe0d8/classroom.pptx",
+          "sha256": "413ef42ffa88b026efb6ef852bea0e56346a1cb22302c760477fae8707f843ad",
+          "sizeBytes": 114353
+        },
+        {
+          "path": "apps/desktop/release/acceptance/g12-wps-d2fe0d8/student.docx",
+          "sha256": "bc5e3e0c63857ccecd0c95070e8edd9d10c7ddef7dbfa9b6ceac2e4bdd7569e2",
+          "sizeBytes": 9887
+        },
+        {
+          "path": "apps/desktop/release/acceptance/g12-wps-d2fe0d8/teacher.docx",
+          "sha256": "6844ff18288077eb94147a88e5cb898495972351848c98e4f8d624b9bd9b28f3",
+          "sizeBytes": 12643
+        }
+      ],
+      "observedResult": "WPS opened native editable files and exported readable 10-slide PPTX, 2-page student DOCX, and 2-page teacher DOCX; these were not outline-only or screenshot-only substitutes."
+    },
+    {
+      "caseId": "CLS-006",
+      "status": "PASS",
+      "evidenceLevel": "office_wps",
+      "command": "WPS Presentation COM: open generated PPTX, edit title text, save, close, reopen, and verify marker and slide count",
+      "exitCode": 0,
+      "executedAt": "2026-09-21T08:00:00.000Z",
+      "environment": "Windows 11 Pro 10.0.26200 x64 / WPS Office Commercial 12.1.0.28022",
+      "artifactHashes": [
+        {
+          "path": "apps/desktop/release/acceptance/g12-wps-d2fe0d8/classroom.pptx",
+          "sha256": "413ef42ffa88b026efb6ef852bea0e56346a1cb22302c760477fae8707f843ad",
+          "sizeBytes": 114353
+        },
+        {
+          "path": "apps/desktop/release/acceptance/g12-wps-d2fe0d8/classroom-wps-roundtrip.pptx",
+          "sha256": "cfc5f12a2fb1297fb72c3a591c9947d0c1a41ac489fd4f8cdf0ac1c03ee3e8cc",
+          "sizeBytes": 42626
+        }
+      ],
+      "observedResult": "The first-slide title remained editable, the WPS compatibility marker persisted after save and reopen, and the presentation retained all 10 slides."
+    },
+    {
+      "caseId": "CLS-012",
+      "status": "PASS",
+      "evidenceLevel": "office_wps",
+      "command": "WPS Writer COM: open student DOCX read-only, export to PDF, render both pages, and inspect task response spaces",
+      "exitCode": 0,
+      "executedAt": "2026-09-21T07:51:00.000Z",
+      "environment": "Windows 11 Pro 10.0.26200 x64 / WPS Office Commercial 12.1.0.28022",
+      "artifactHashes": [
+        {
+          "path": "apps/desktop/release/acceptance/g12-wps-d2fe0d8/student.docx",
+          "sha256": "bc5e3e0c63857ccecd0c95070e8edd9d10c7ddef7dbfa9b6ceac2e4bdd7569e2",
+          "sizeBytes": 9887
+        }
+      ],
+      "observedResult": "The two-page student handout rendered without clipping and provided task-specific response areas, including an expanded writing area for the transfer task."
+    },
+    {
+      "caseId": "CLS-013",
+      "status": "PASS",
+      "evidenceLevel": "office_wps",
+      "command": "WPS Writer and Presentation COM: export student DOCX and PPTX separately, render, and compare structures",
+      "exitCode": 0,
+      "executedAt": "2026-09-21T07:56:00.000Z",
+      "environment": "Windows 11 Pro 10.0.26200 x64 / WPS Office Commercial 12.1.0.28022",
+      "artifactHashes": [
+        {
+          "path": "apps/desktop/release/acceptance/g12-wps-d2fe0d8/student.docx",
+          "sha256": "bc5e3e0c63857ccecd0c95070e8edd9d10c7ddef7dbfa9b6ceac2e4bdd7569e2",
+          "sizeBytes": 9887
+        },
+        {
+          "path": "apps/desktop/release/acceptance/g12-wps-d2fe0d8/classroom.pptx",
+          "sha256": "413ef42ffa88b026efb6ef852bea0e56346a1cb22302c760477fae8707f843ad",
+          "sizeBytes": 114353
+        }
+      ],
+      "observedResult": "The student handout was independently laid out by learning task with readable prompts and writing space; it was not a sheet of slide thumbnails."
+    },
+    {
+      "caseId": "CLS-014",
+      "status": "PASS",
+      "evidenceLevel": "office_wps",
+      "command": "WPS Writer COM: open teacher DOCX, export to PDF, render both pages, and inspect answer boundaries, misconceptions, and follow-up prompts",
+      "exitCode": 0,
+      "executedAt": "2026-09-21T07:53:00.000Z",
+      "environment": "Windows 11 Pro 10.0.26200 x64 / WPS Office Commercial 12.1.0.28022",
+      "artifactHashes": [
+        {
+          "path": "apps/desktop/release/acceptance/g12-wps-d2fe0d8/teacher.docx",
+          "sha256": "6844ff18288077eb94147a88e5cb898495972351848c98e4f8d624b9bd9b28f3",
+          "sizeBytes": 12643
+        }
+      ],
+      "observedResult": "The two-page teacher handout rendered without clipping and included evidence-based acceptable variants, insufficient examples, explanation boundaries, and teacher follow-up prompts."
+    },
+    {
+      "caseId": "CLS-020",
+      "status": "PASS",
+      "evidenceLevel": "office_wps",
+      "command": "WPS Writer COM: open teacher DOCX, export to PDF, render, and inspect the missing-source downgrade and source-bound task content",
+      "exitCode": 0,
+      "executedAt": "2026-09-21T07:58:00.000Z",
+      "environment": "Windows 11 Pro 10.0.26200 x64 / WPS Office Commercial 12.1.0.28022",
+      "artifactHashes": [
+        {
+          "path": "apps/desktop/release/acceptance/g12-wps-d2fe0d8/teacher.docx",
+          "sha256": "6844ff18288077eb94147a88e5cb898495972351848c98e4f8d624b9bd9b28f3",
+          "sizeBytes": 12643
+        }
+      ],
+      "observedResult": "With no imported curriculum-standard or local-exam source, the rendered teacher file retained explicit source-verification limits and did not invent official clause numbers, exam weights, quotations, or textbook page claims."
+    }
+  ]
+}

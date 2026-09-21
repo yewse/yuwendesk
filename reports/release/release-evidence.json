@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-21T04:47:01.984Z",
-  "sourceCommit": "36c53d55ae4878cb775e97b9f07f00a8b71d0c93",
+  "generatedAt": "2026-09-21T09:43:22.868Z",
+  "sourceCommit": "d2fe0d8b430325315eecd2fa51feb9cccf94d9ec",
   "acceptanceRun": {
-    "runId": "run-20260921-36c53d5-01",
-    "path": "reports/acceptance-runs/run-20260921-36c53d5-01.json",
-    "sha256": "4892569cf9a9a6301819bb8406afa3a2f36d84cb7c77afade075987b50eaeac2",
-    "sizeBytes": 78551,
+    "runId": "run-20260921-d2fe0d8-04",
+    "path": "reports/acceptance-runs/run-20260921-d2fe0d8-04.json",
+    "sha256": "acb1c0b11b64befc00e534d34c0c25d10fabb5ff8c0cc7ab8346847f064debd4",
+    "sizeBytes": 84949,
     "repositoryDirty": false
   },
   "candidate": {
     "inventoryPath": "reports/release/candidate-artifact.json",
-    "inventorySha256": "53bd9fa99ae2d4667d047d4fcb56425cf0138401795d58279d7fb00098acb9aa",
+    "inventorySha256": "cc5d39708259e93ebba97d568fcc4984027566ea42e207eadc8c343770a783fd",
     "inventorySizeBytes": 563,
     "expectedPath": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
     "artifactPresent": true,
     "artifactClass": "UNSIGNED_TEST_BUILD",
-    "sha256": "82f3567ace468043db1ec61baee4e6b46af18524452ec34aaddfe1fd8b9d947c",
-    "sizeBytes": 131050484
+    "sha256": "39474f3645aec30a72ba91805039757e9ad9b1fc3881860932ca4031b37639d3",
+    "sizeBytes": 131051156
   },
   "statuses": {
     "softwareStatus": "BLOCKED",
@@ -38,9 +38,9 @@
     "defectAuditStatus": "NOT_RUN"
   },
   "caseSummary": {
-    "PASS": 6,
+    "PASS": 12,
     "FAIL": 0,
-    "BLOCKED": 38,
+    "BLOCKED": 32,
     "NOT_RUN": 126
   },
   "cases": [
@@ -550,11 +550,9 @@
     {
       "caseId": "CLS-002",
       "severity": "P1",
-      "status": "BLOCKED",
-      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
-      "externalInputIds": [
-        "EXT11"
-      ]
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
     },
     {
       "caseId": "CLS-003",
@@ -580,11 +578,9 @@
     {
       "caseId": "CLS-006",
       "severity": "P1",
-      "status": "BLOCKED",
-      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
-      "externalInputIds": [
-        "EXT11"
-      ]
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
     },
     {
       "caseId": "CLS-007",
@@ -632,29 +628,23 @@
     {
       "caseId": "CLS-012",
       "severity": "P1",
-      "status": "BLOCKED",
-      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
-      "externalInputIds": [
-        "EXT11"
-      ]
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
     },
     {
       "caseId": "CLS-013",
       "severity": "P1",
-      "status": "BLOCKED",
-      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
-      "externalInputIds": [
-        "EXT11"
-      ]
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
     },
     {
       "caseId": "CLS-014",
       "severity": "P1",
-      "status": "BLOCKED",
-      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
-      "externalInputIds": [
-        "EXT11"
-      ]
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
     },
     {
       "caseId": "CLS-015",
@@ -700,11 +690,9 @@
     {
       "caseId": "CLS-020",
       "severity": "P1",
-      "status": "BLOCKED",
-      "blockerCode": "BLOCKED_EXTERNAL_OFFICE_WPS_COMPATIBILITY",
-      "externalInputIds": [
-        "EXT11"
-      ]
+      "status": "PASS",
+      "blockerCode": null,
+      "externalInputIds": []
     },
     {
       "caseId": "CLS-021",
@@ -1975,7 +1963,7 @@
   "deliverables": [
     {
       "id": "acceptance_run",
-      "path": "reports/acceptance-runs/run-20260921-36c53d5-01.json",
+      "path": "reports/acceptance-runs/run-20260921-d2fe0d8-04.json",
       "status": "PRESENT"
     },
     {
@@ -2163,8 +2151,8 @@
     },
     {
       "path": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
-      "sha256": "82f3567ace468043db1ec61baee4e6b46af18524452ec34aaddfe1fd8b9d947c",
-      "sizeBytes": 131050484
+      "sha256": "39474f3645aec30a72ba91805039757e9ad9b1fc3881860932ca4031b37639d3",
+      "sizeBytes": 131051156
     },
     {
       "path": "planning/changes/CR001/traceability.json",
@@ -2187,19 +2175,19 @@
       "sizeBytes": 27957
     },
     {
-      "path": "reports/acceptance-runs/run-20260921-36c53d5-01.json",
-      "sha256": "4892569cf9a9a6301819bb8406afa3a2f36d84cb7c77afade075987b50eaeac2",
-      "sizeBytes": 78551
+      "path": "reports/acceptance-runs/run-20260921-d2fe0d8-04.json",
+      "sha256": "acb1c0b11b64befc00e534d34c0c25d10fabb5ff8c0cc7ab8346847f064debd4",
+      "sizeBytes": 84949
     },
     {
       "path": "reports/release/candidate-artifact.json",
-      "sha256": "53bd9fa99ae2d4667d047d4fcb56425cf0138401795d58279d7fb00098acb9aa",
+      "sha256": "cc5d39708259e93ebba97d568fcc4984027566ea42e207eadc8c343770a783fd",
       "sizeBytes": 563
     },
     {
       "path": "reports/release/defect-audit.json",
-      "sha256": "fabb14a3d0be9afd3a8ee4f0550e5f15889cdb8cce2f9d8d788d35ecc847ec71",
-      "sizeBytes": 169
+      "sha256": "1627038d980b55a36bd3185543ef17e03f77101d094b323544801deee64f6410",
+      "sizeBytes": 161
     }
   ],
   "knownGaps": [
