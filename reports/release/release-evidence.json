@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T19:20:33.801Z",
-  "sourceCommit": "189fd2aef96919e500a22e27bcfb5dfd637b500f",
+  "generatedAt": "2026-09-21T03:00:27.814Z",
+  "sourceCommit": "58e7ca4a123b963fa5dde423a1c3c38da9afdfbd",
   "acceptanceRun": {
-    "runId": "run-20260920-189fd2a-01",
-    "path": "reports/acceptance-runs/run-20260920-189fd2a-01.json",
-    "sha256": "a34147e6e16c23300dd52ec5480a5d178571d98d345806c0669a240a818ffbbe",
-    "sizeBytes": 78283,
+    "runId": "run-20260921-58e7ca4-01",
+    "path": "reports/acceptance-runs/run-20260921-58e7ca4-01.json",
+    "sha256": "080f31dc3b77310b59f7e6814e3d8a7e5fb6dab45f3e729d6fc73b29c5e517fd",
+    "sizeBytes": 78545,
     "repositoryDirty": false
   },
   "candidate": {
     "inventoryPath": "reports/release/candidate-artifact.json",
-    "inventorySha256": "98913414699fc8837a0d540c74b67d330fb36ae62a9bef1089f28b6d9d7b2396",
+    "inventorySha256": "2e9dfe590c8dd68e4bc739deddf4bb33daadb636e551827da8451115fcd179b1",
     "inventorySizeBytes": 563,
     "expectedPath": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
     "artifactPresent": true,
     "artifactClass": "UNSIGNED_TEST_BUILD",
-    "sha256": "1859f83748555b9222b8233d7f5171977f263e6b125b7a3af83735e200c29d68",
-    "sizeBytes": 131024559
+    "sha256": "073a892d1e978fd0fdc2c6e78523aec74b6aeaa13574b9fbcafa07e52077c5bb",
+    "sizeBytes": 131049407
   },
   "statuses": {
     "softwareStatus": "BLOCKED",
@@ -1975,7 +1975,7 @@
   "deliverables": [
     {
       "id": "acceptance_run",
-      "path": "reports/acceptance-runs/run-20260920-189fd2a-01.json",
+      "path": "reports/acceptance-runs/run-20260921-58e7ca4-01.json",
       "status": "PRESENT"
     },
     {
@@ -2163,8 +2163,8 @@
     },
     {
       "path": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
-      "sha256": "1859f83748555b9222b8233d7f5171977f263e6b125b7a3af83735e200c29d68",
-      "sizeBytes": 131024559
+      "sha256": "073a892d1e978fd0fdc2c6e78523aec74b6aeaa13574b9fbcafa07e52077c5bb",
+      "sizeBytes": 131049407
     },
     {
       "path": "planning/changes/CR001/traceability.json",
@@ -2173,13 +2173,13 @@
     },
     {
       "path": "planning/EXTERNAL_INPUTS.json",
-      "sha256": "cf3c30e232aa3739332947ac89780b5b77609add27d2f1b7ca864c077b51f582",
-      "sizeBytes": 3719
+      "sha256": "47fcf2c921cd1a09c8d603017eb760656ee70eb8e41ff27faeffa27ebea93913",
+      "sizeBytes": 3756
     },
     {
       "path": "planning/g11-acceptance-map.json",
-      "sha256": "605b46588abd82c5e649144bea96bcf24d33f10dc6ada88c1721db7323121a84",
-      "sizeBytes": 33044
+      "sha256": "b236040ee37ae8b50338b67dc2d20d01fa55a532e8900b375c506b89b2d6285a",
+      "sizeBytes": 34198
     },
     {
       "path": "planning/requirements-traceability.json",
@@ -2187,19 +2187,19 @@
       "sizeBytes": 27957
     },
     {
-      "path": "reports/acceptance-runs/run-20260920-189fd2a-01.json",
-      "sha256": "a34147e6e16c23300dd52ec5480a5d178571d98d345806c0669a240a818ffbbe",
-      "sizeBytes": 78283
+      "path": "reports/acceptance-runs/run-20260921-58e7ca4-01.json",
+      "sha256": "080f31dc3b77310b59f7e6814e3d8a7e5fb6dab45f3e729d6fc73b29c5e517fd",
+      "sizeBytes": 78545
     },
     {
       "path": "reports/release/candidate-artifact.json",
-      "sha256": "98913414699fc8837a0d540c74b67d330fb36ae62a9bef1089f28b6d9d7b2396",
+      "sha256": "2e9dfe590c8dd68e4bc739deddf4bb33daadb636e551827da8451115fcd179b1",
       "sizeBytes": 563
     },
     {
       "path": "reports/release/defect-audit.json",
-      "sha256": "1627038d980b55a36bd3185543ef17e03f77101d094b323544801deee64f6410",
-      "sizeBytes": 161
+      "sha256": "fabb14a3d0be9afd3a8ee4f0550e5f15889cdb8cce2f9d8d788d35ecc847ec71",
+      "sizeBytes": 169
     }
   ],
   "knownGaps": [
