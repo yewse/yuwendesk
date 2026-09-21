@@ -617,6 +617,72 @@
       "semantic_guard": "expected_revision；不等同删除或效果确认",
       "sender_validation_required": true,
       "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "preparation.context.save",
+      "kind": "write",
+      "scope": "workspace",
+      "requires_expected_revision": true,
+      "requires_idempotency_key": true,
+      "output_contract": "教学上下文及新修订号",
+      "semantic_guard": "闭集年级、课时范围、无学生身份字段",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "preparation.context.get",
+      "kind": "read",
+      "scope": "workspace",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": false,
+      "output_contract": "指定教学上下文",
+      "semantic_guard": "只返回本地闭集字段",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "preparation.session.create",
+      "kind": "write",
+      "scope": "workspace",
+      "requires_expected_revision": true,
+      "requires_idempotency_key": true,
+      "output_contract": "新备课会话",
+      "semantic_guard": "模式闭集；不接受任意提示词或路径",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "preparation.session.get",
+      "kind": "read",
+      "scope": "workspace",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": false,
+      "output_contract": "会话状态与已选来源引用",
+      "semantic_guard": "不返回密钥或完整模型请求",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "preparation.session.list",
+      "kind": "read",
+      "scope": "workspace",
+      "requires_expected_revision": false,
+      "requires_idempotency_key": false,
+      "output_contract": "备课会话摘要列表",
+      "semantic_guard": "瞬时状态按启动恢复规则调和",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "preparation.sources.set",
+      "kind": "write",
+      "scope": "workspace",
+      "requires_expected_revision": true,
+      "requires_idempotency_key": true,
+      "output_contract": "绑定来源后的会话",
+      "semantic_guard": "当前版本、精确范围、SHA-256 和外发许可逐项校验",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
     }
   ],
   "error_codes": [

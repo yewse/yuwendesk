@@ -97,6 +97,26 @@ import {
   type EncryptedSensitiveSourcePayload,
   type SensitiveSourcePayloadV1
 } from '../protection/sourcePrivacy';
+import { canTransition, reconcileInterruptedStatus } from '../preparation/stateMachine';
+import {
+  PREPARATION_CONTENT_ORIGINS,
+  PREPARATION_ERROR_CODES,
+  PREPARATION_MODES,
+  PREPARATION_SOURCE_PURPOSES,
+  PREPARATION_STATUSES,
+  TEACHING_GRADES,
+  PreparationKeyReuseError,
+  PreparationTransitionError,
+  PreparationVersionConflictError,
+  type PreparationMode,
+  type PreparationSession,
+  type PreparationSessionPatch,
+  type PreparationSourceInput,
+  type PreparationSourceSelection,
+  type PreparationStatus,
+  type TeachingContext,
+  type TeachingContextInput
+} from '../preparation/types';
 
 // 仅供测试的事务中途故障注入点（验证 outbox/幂等写入失败时整体回滚）。
 export interface CommitFaultHooks {
@@ -246,6 +266,40 @@ function jsonContainsAnyExactString(json: string, candidates: Set<string>): bool
     return false;
   };
   return visit(parsed);
+}
+
+function inClosedSet<T extends string>(value: string, values: readonly T[]): value is T {
+  return (values as readonly string[]).includes(value);
+}
+
+function assertPreparationId(value: string, field: string): void {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/u.test(value)) throw new Error(`invalid_${field}`);
+}
+
+function assertTeachingContextInput(input: TeachingContextInput): void {
+  const bounded = (value: unknown, min: number, max: number, field: string): void => {
+    if (typeof value !== 'string' || value.length < min || value.length > max) throw new Error(`invalid_${field}`);
+  };
+  if (input.contextId !== undefined) assertPreparationId(input.contextId, 'context_id');
+  bounded(input.classDisplayName, 1, 80, 'class_display_name');
+  if (!inClosedSet(input.grade, TEACHING_GRADES)) throw new Error('invalid_grade');
+  bounded(input.textbookTitle, 1, 120, 'textbook_title');
+  bounded(input.textbookEdition, 0, 80, 'textbook_edition');
+  bounded(input.unitTitle, 0, 120, 'unit_title');
+  bounded(input.lessonTitle, 1, 160, 'lesson_title');
+  if (!Number.isSafeInteger(input.durationSec) || input.durationSec < 300 || input.durationSec > 14_400) {
+    throw new Error('invalid_duration_sec');
+  }
+  bounded(input.notes, 0, 2_000, 'notes');
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 // G02-T02：真实文件型 SQLite 存储（单写入者 + 版本迁移 + WAL/外键 + 原子条件保存 + 失败回滚）。
@@ -700,6 +754,58 @@ const MIGRATIONS: Migration[] = [
         );
       `);
     }
+  },
+  {
+    version: 13,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE teaching_context (
+          context_id            TEXT PRIMARY KEY,
+          class_display_name    TEXT NOT NULL CHECK(length(class_display_name) BETWEEN 1 AND 80),
+          grade                 TEXT NOT NULL CHECK(grade IN ('grade7','grade8','grade9','other')),
+          textbook_title        TEXT NOT NULL CHECK(length(textbook_title) BETWEEN 1 AND 120),
+          textbook_edition      TEXT NOT NULL CHECK(length(textbook_edition) <= 80),
+          unit_title            TEXT NOT NULL CHECK(length(unit_title) <= 120),
+          lesson_title          TEXT NOT NULL CHECK(length(lesson_title) BETWEEN 1 AND 160),
+          duration_sec          INTEGER NOT NULL CHECK(duration_sec BETWEEN 300 AND 14400),
+          notes                 TEXT NOT NULL CHECK(length(notes) <= 2000),
+          revision              INTEGER NOT NULL CHECK(revision >= 1),
+          created_at            TEXT NOT NULL,
+          updated_at            TEXT NOT NULL
+        );
+        CREATE TABLE preparation_session (
+          session_id       TEXT PRIMARY KEY,
+          context_id       TEXT NOT NULL REFERENCES teaching_context(context_id),
+          status           TEXT NOT NULL CHECK(status IN ('CONTEXT_DRAFT','SOURCES_SELECTED','BUILDING','PLAN_REVIEW','READY_TO_EXPORT','EXPORTING','EXPORTED')),
+          mode             TEXT NOT NULL CHECK(mode IN ('local_authored','model_assisted')),
+          focus            TEXT NOT NULL DEFAULT '' CHECK(length(focus) <= 2000),
+          core_task        TEXT NOT NULL DEFAULT '' CHECK(length(core_task) <= 4000),
+          answer_scope     TEXT NOT NULL DEFAULT '' CHECK(length(answer_scope) <= 4000),
+          plan_id          TEXT,
+          revision_id      TEXT,
+          review_report_id TEXT,
+          bundle_id        TEXT,
+          model_job_id     TEXT,
+          content_origin   TEXT NOT NULL CHECK(content_origin IN ('teacher_authored','model_assisted_real','model_assisted_simulated')),
+          last_error_code  TEXT CHECK(last_error_code IS NULL OR last_error_code IN ('PREPARATION_INTERRUPTED','PREPARATION_STALE','PREPARATION_SOURCE_REQUIRED','PREPARATION_SOURCE_CHANGED','PREPARATION_MODEL_UNAVAILABLE','PREPARATION_MODEL_INVALID','PREPARATION_REVIEW_REQUIRED','PREPARATION_EXPORT_FAILED')),
+          revision         INTEGER NOT NULL CHECK(revision >= 1),
+          created_at       TEXT NOT NULL,
+          updated_at       TEXT NOT NULL
+        );
+        CREATE INDEX idx_preparation_context ON preparation_session(context_id, updated_at);
+        CREATE TABLE preparation_source (
+          session_id         TEXT NOT NULL REFERENCES preparation_session(session_id) ON DELETE CASCADE,
+          ordinal            INTEGER NOT NULL CHECK(ordinal >= 0),
+          source_version_id  TEXT NOT NULL REFERENCES source_version(id),
+          char_start         INTEGER NOT NULL CHECK(char_start >= 0),
+          char_end           INTEGER NOT NULL CHECK(char_end > char_start),
+          purpose            TEXT NOT NULL CHECK(purpose IN ('textbook','curriculum','teacher_reference')),
+          approved_for_model INTEGER NOT NULL CHECK(approved_for_model IN (0,1)),
+          text_sha256        TEXT NOT NULL CHECK(length(text_sha256) = 64),
+          PRIMARY KEY(session_id, ordinal)
+        );
+      `);
+    }
   }
 ];
 
@@ -833,6 +939,7 @@ export class SqliteStore {
       this.db
         .prepare("UPDATE model_job SET status='uncertain', updated_at=? WHERE status='running'")
         .run(new Date().toISOString());
+      this.reconcileInterruptedPreparationSessions();
     } catch (e) {
       this.enterProtected(`open_failed:${(e as Error).message}`);
     }
@@ -840,6 +947,21 @@ export class SqliteStore {
 
   private runMigrations(current: number): void {
     migrateSqliteDatabaseToTarget(this.requireDb(), current);
+  }
+
+  private reconcileInterruptedPreparationSessions(): void {
+    const db = this.requireDb();
+    const now = new Date().toISOString();
+    db.transaction(() => {
+      for (const status of ['BUILDING', 'EXPORTING'] as const) {
+        const reconciled = reconcileInterruptedStatus(status);
+        db.prepare(
+          `UPDATE preparation_session
+           SET status=?,last_error_code=?,revision=revision+1,updated_at=?
+           WHERE status=?`
+        ).run(reconciled.status, reconciled.errorCode, now, status);
+      }
+    }).immediate();
   }
 
   // 校验必需单例记录存在（未知/被篡改结构下拒写）。
@@ -3261,6 +3383,320 @@ export class SqliteStore {
       return result;
     });
     return tx.immediate();
+  }
+
+  // ===== G12 备课会话持久化 =====
+  private preparationFingerprint(operation: string, payload: unknown): string {
+    return createHash('sha256').update(canonicalJson({ operation, payload })).digest('hex');
+  }
+
+  private readPreparationReplay<T>(
+    db: Database.Database,
+    operation: string,
+    key: string,
+    fingerprint: string
+  ): T | null {
+    if (!key.trim() || key.length > 160) throw new Error('invalid_preparation_idempotency');
+    const existing = db.prepare(
+      'SELECT fingerprint,operation,status,result_json resultJson FROM maintenance_idempotency WHERE key=?'
+    ).get(key) as { fingerprint: string; operation: string; status: string; resultJson: string | null } | undefined;
+    if (!existing) return null;
+    if (existing.fingerprint !== fingerprint || existing.operation !== operation) throw new PreparationKeyReuseError();
+    if (existing.status !== 'succeeded' || !existing.resultJson) {
+      throw new StoreProtectedError('preparation_idempotency_incomplete');
+    }
+    try {
+      return JSON.parse(existing.resultJson) as T;
+    } catch {
+      throw new StoreProtectedError('preparation_idempotency_invalid');
+    }
+  }
+
+  private savePreparationReplay(
+    db: Database.Database,
+    operation: string,
+    key: string,
+    fingerprint: string,
+    result: unknown,
+    updatedAt: string
+  ): void {
+    db.prepare(
+      `INSERT INTO maintenance_idempotency(key,fingerprint,operation,status,result_json,updated_at)
+       VALUES(?,?,?,'succeeded',?,?)`
+    ).run(key, fingerprint, operation, JSON.stringify(result), updatedAt);
+  }
+
+  private mapTeachingContext(row: Record<string, unknown>): TeachingContext {
+    return {
+      contextId: String(row.contextId),
+      classDisplayName: String(row.classDisplayName),
+      grade: String(row.grade) as TeachingContext['grade'],
+      textbookTitle: String(row.textbookTitle),
+      textbookEdition: String(row.textbookEdition),
+      unitTitle: String(row.unitTitle),
+      lessonTitle: String(row.lessonTitle),
+      durationSec: Number(row.durationSec),
+      notes: String(row.notes),
+      revision: Number(row.revision),
+      createdAt: String(row.createdAt),
+      updatedAt: String(row.updatedAt)
+    };
+  }
+
+  getTeachingContext(contextId: string): TeachingContext | null {
+    if (!this.db) return null;
+    const row = this.db.prepare(
+      `SELECT context_id contextId,class_display_name classDisplayName,grade,
+              textbook_title textbookTitle,textbook_edition textbookEdition,unit_title unitTitle,
+              lesson_title lessonTitle,duration_sec durationSec,notes,revision,
+              created_at createdAt,updated_at updatedAt
+       FROM teaching_context WHERE context_id=?`
+    ).get(contextId) as Record<string, unknown> | undefined;
+    return row ? this.mapTeachingContext(row) : null;
+  }
+
+  saveTeachingContext(
+    input: TeachingContextInput,
+    expectedRevision: number,
+    idempotencyKey: string
+  ): TeachingContext {
+    this.assertWritable();
+    assertTeachingContextInput(input);
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new Error('invalid_expected_revision');
+    const operation = 'preparation.context.save';
+    const fingerprint = this.preparationFingerprint(operation, { input, expectedRevision });
+    const db = this.requireDb();
+    return db.transaction((): TeachingContext => {
+      const replay = this.readPreparationReplay<TeachingContext>(db, operation, idempotencyKey, fingerprint);
+      if (replay) return replay;
+      const now = new Date().toISOString();
+      const contextId = input.contextId ?? `context_${randomUUID()}`;
+      const current = this.getTeachingContext(contextId);
+      if (!current) {
+        if (expectedRevision !== 0) throw new PreparationVersionConflictError();
+        db.prepare(
+          `INSERT INTO teaching_context(
+             context_id,class_display_name,grade,textbook_title,textbook_edition,unit_title,
+             lesson_title,duration_sec,notes,revision,created_at,updated_at
+           ) VALUES(?,?,?,?,?,?,?,?,?,1,?,?)`
+        ).run(
+          contextId, input.classDisplayName, input.grade, input.textbookTitle, input.textbookEdition,
+          input.unitTitle, input.lessonTitle, input.durationSec, input.notes, now, now
+        );
+      } else {
+        if (current.revision !== expectedRevision) throw new PreparationVersionConflictError();
+        const updated = db.prepare(
+          `UPDATE teaching_context SET class_display_name=?,grade=?,textbook_title=?,textbook_edition=?,
+             unit_title=?,lesson_title=?,duration_sec=?,notes=?,revision=revision+1,updated_at=?
+           WHERE context_id=? AND revision=?`
+        ).run(
+          input.classDisplayName, input.grade, input.textbookTitle, input.textbookEdition,
+          input.unitTitle, input.lessonTitle, input.durationSec, input.notes, now, contextId, expectedRevision
+        );
+        if (updated.changes !== 1) throw new PreparationVersionConflictError();
+      }
+      const result = this.getTeachingContext(contextId);
+      if (!result) throw new StoreProtectedError('preparation_context_write_missing');
+      this.savePreparationReplay(db, operation, idempotencyKey, fingerprint, result, now);
+      return result;
+    }).immediate();
+  }
+
+  private getPreparationSources(sessionId: string): PreparationSourceSelection[] {
+    if (!this.db) return [];
+    const rows = this.db.prepare(
+      `SELECT session_id sessionId,ordinal,source_version_id sourceVersionId,char_start charStart,
+              char_end charEnd,purpose,approved_for_model approvedForModel,text_sha256 textSha256
+       FROM preparation_source WHERE session_id=? ORDER BY ordinal`
+    ).all(sessionId) as Array<Omit<PreparationSourceSelection, 'approvedForModel'> & { approvedForModel: number }>;
+    return rows.map((row) => ({ ...row, approvedForModel: row.approvedForModel === 1 }));
+  }
+
+  private mapPreparationSession(row: Record<string, unknown>): PreparationSession {
+    const sessionId = String(row.sessionId);
+    return {
+      sessionId,
+      contextId: String(row.contextId),
+      status: String(row.status) as PreparationStatus,
+      mode: String(row.mode) as PreparationMode,
+      focus: String(row.focus),
+      coreTask: String(row.coreTask),
+      answerScope: String(row.answerScope),
+      planId: (row.planId as string | null) ?? null,
+      revisionId: (row.revisionId as string | null) ?? null,
+      reviewReportId: (row.reviewReportId as string | null) ?? null,
+      bundleId: (row.bundleId as string | null) ?? null,
+      modelJobId: (row.modelJobId as string | null) ?? null,
+      contentOrigin: String(row.contentOrigin) as PreparationSession['contentOrigin'],
+      lastErrorCode: (row.lastErrorCode as PreparationSession['lastErrorCode']) ?? null,
+      revision: Number(row.revision),
+      createdAt: String(row.createdAt),
+      updatedAt: String(row.updatedAt),
+      sources: this.getPreparationSources(sessionId)
+    };
+  }
+
+  getPreparationSession(sessionId: string): PreparationSession | null {
+    if (!this.db) return null;
+    const row = this.db.prepare(
+      `SELECT session_id sessionId,context_id contextId,status,mode,focus,core_task coreTask,
+              answer_scope answerScope,plan_id planId,revision_id revisionId,
+              review_report_id reviewReportId,bundle_id bundleId,model_job_id modelJobId,
+              content_origin contentOrigin,last_error_code lastErrorCode,revision,
+              created_at createdAt,updated_at updatedAt
+       FROM preparation_session WHERE session_id=?`
+    ).get(sessionId) as Record<string, unknown> | undefined;
+    return row ? this.mapPreparationSession(row) : null;
+  }
+
+  listPreparationSessions(): PreparationSession[] {
+    if (!this.db) return [];
+    const rows = this.db.prepare(
+      `SELECT session_id sessionId,context_id contextId,status,mode,focus,core_task coreTask,
+              answer_scope answerScope,plan_id planId,revision_id revisionId,
+              review_report_id reviewReportId,bundle_id bundleId,model_job_id modelJobId,
+              content_origin contentOrigin,last_error_code lastErrorCode,revision,
+              created_at createdAt,updated_at updatedAt
+       FROM preparation_session ORDER BY updated_at DESC,session_id`
+    ).all() as Record<string, unknown>[];
+    return rows.map((row) => this.mapPreparationSession(row));
+  }
+
+  createPreparationSession(
+    contextId: string,
+    mode: PreparationMode,
+    idempotencyKey: string
+  ): PreparationSession {
+    this.assertWritable();
+    assertPreparationId(contextId, 'context_id');
+    if (!inClosedSet(mode, PREPARATION_MODES)) throw new Error('invalid_preparation_mode');
+    const operation = 'preparation.session.create';
+    const fingerprint = this.preparationFingerprint(operation, { contextId, mode });
+    const db = this.requireDb();
+    return db.transaction((): PreparationSession => {
+      const replay = this.readPreparationReplay<PreparationSession>(db, operation, idempotencyKey, fingerprint);
+      if (replay) return replay;
+      if (!this.getTeachingContext(contextId)) throw new Error('preparation_context_missing');
+      const now = new Date().toISOString();
+      const sessionId = `session_${randomUUID()}`;
+      db.prepare(
+        `INSERT INTO preparation_session(
+           session_id,context_id,status,mode,focus,core_task,answer_scope,content_origin,revision,created_at,updated_at
+         ) VALUES(?,?,'CONTEXT_DRAFT',?,'','','','teacher_authored',1,?,?)`
+      ).run(sessionId, contextId, mode, now, now);
+      const result = this.getPreparationSession(sessionId);
+      if (!result) throw new StoreProtectedError('preparation_session_write_missing');
+      this.savePreparationReplay(db, operation, idempotencyKey, fingerprint, result, now);
+      return result;
+    }).immediate();
+  }
+
+  replacePreparationSources(
+    sessionId: string,
+    sources: PreparationSourceInput[],
+    expectedRevision: number,
+    idempotencyKey: string
+  ): PreparationSession {
+    this.assertWritable();
+    assertPreparationId(sessionId, 'session_id');
+    if (!Array.isArray(sources) || sources.length < 1 || sources.length > 50) throw new Error('invalid_preparation_sources');
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) throw new Error('invalid_expected_revision');
+    const normalized = sources.map((source) => ({ ...source }));
+    const unique = new Set<string>();
+    for (const source of normalized) {
+      assertPreparationId(source.sourceVersionId, 'source_version_id');
+      if (!Number.isSafeInteger(source.charStart) || !Number.isSafeInteger(source.charEnd) || source.charStart < 0 || source.charEnd <= source.charStart) {
+        throw new Error('invalid_preparation_source_range');
+      }
+      if (!inClosedSet(source.purpose, PREPARATION_SOURCE_PURPOSES) || typeof source.approvedForModel !== 'boolean' || !/^[a-f0-9]{64}$/u.test(source.textSha256)) {
+        throw new Error('invalid_preparation_source');
+      }
+      const key = `${source.sourceVersionId}:${source.charStart}:${source.charEnd}`;
+      if (unique.has(key)) throw new Error('duplicate_preparation_source');
+      unique.add(key);
+      const meta = this.getVersionMeta(source.sourceVersionId);
+      const exact = this.readExactRange(source.sourceVersionId, source.charStart, source.charEnd);
+      if (!meta || !meta.isCurrent || !exact || source.charEnd > exact.fullLength) throw new Error('preparation_source_changed');
+      const actualHash = createHash('sha256').update(exact.text).digest('hex');
+      if (actualHash !== source.textSha256) throw new Error('preparation_source_changed');
+    }
+    const operation = 'preparation.sources.set';
+    const fingerprint = this.preparationFingerprint(operation, { sessionId, sources: normalized, expectedRevision });
+    const db = this.requireDb();
+    return db.transaction((): PreparationSession => {
+      const replay = this.readPreparationReplay<PreparationSession>(db, operation, idempotencyKey, fingerprint);
+      if (replay) return replay;
+      const current = this.getPreparationSession(sessionId);
+      if (!current || current.revision !== expectedRevision) throw new PreparationVersionConflictError();
+      db.prepare('DELETE FROM preparation_source WHERE session_id=?').run(sessionId);
+      const insert = db.prepare(
+        `INSERT INTO preparation_source(
+           session_id,ordinal,source_version_id,char_start,char_end,purpose,approved_for_model,text_sha256
+         ) VALUES(?,?,?,?,?,?,?,?)`
+      );
+      normalized.forEach((source, ordinal) => insert.run(
+        sessionId, ordinal, source.sourceVersionId, source.charStart, source.charEnd,
+        source.purpose, source.approvedForModel ? 1 : 0, source.textSha256
+      ));
+      const now = new Date().toISOString();
+      const updated = db.prepare(
+        `UPDATE preparation_session SET status='SOURCES_SELECTED',plan_id=NULL,revision_id=NULL,
+           review_report_id=NULL,bundle_id=NULL,model_job_id=NULL,last_error_code=NULL,
+           revision=revision+1,updated_at=? WHERE session_id=? AND revision=?`
+      ).run(now, sessionId, expectedRevision);
+      if (updated.changes !== 1) throw new PreparationVersionConflictError();
+      const result = this.getPreparationSession(sessionId);
+      if (!result) throw new StoreProtectedError('preparation_session_write_missing');
+      this.savePreparationReplay(db, operation, idempotencyKey, fingerprint, result, now);
+      return result;
+    }).immediate();
+  }
+
+  transitionPreparationSession(
+    sessionId: string,
+    fromRevision: number,
+    nextStatus: PreparationStatus,
+    patch: PreparationSessionPatch,
+    idempotencyKey: string
+  ): PreparationSession {
+    this.assertWritable();
+    assertPreparationId(sessionId, 'session_id');
+    if (!Number.isSafeInteger(fromRevision) || fromRevision < 1 || !inClosedSet(nextStatus, PREPARATION_STATUSES)) {
+      throw new Error('invalid_preparation_transition');
+    }
+    if (patch.focus !== undefined && (typeof patch.focus !== 'string' || patch.focus.length > 2_000)) throw new Error('invalid_focus');
+    if (patch.coreTask !== undefined && (typeof patch.coreTask !== 'string' || patch.coreTask.length > 4_000)) throw new Error('invalid_core_task');
+    if (patch.answerScope !== undefined && (typeof patch.answerScope !== 'string' || patch.answerScope.length > 4_000)) throw new Error('invalid_answer_scope');
+    if (patch.contentOrigin !== undefined && !inClosedSet(patch.contentOrigin, PREPARATION_CONTENT_ORIGINS)) throw new Error('invalid_content_origin');
+    if (patch.lastErrorCode !== undefined && patch.lastErrorCode !== null && !inClosedSet(patch.lastErrorCode, PREPARATION_ERROR_CODES)) {
+      throw new Error('invalid_preparation_error');
+    }
+    const operation = 'preparation.session.transition';
+    const fingerprint = this.preparationFingerprint(operation, { sessionId, fromRevision, nextStatus, patch });
+    const db = this.requireDb();
+    return db.transaction((): PreparationSession => {
+      const replay = this.readPreparationReplay<PreparationSession>(db, operation, idempotencyKey, fingerprint);
+      if (replay) return replay;
+      const current = this.getPreparationSession(sessionId);
+      if (!current || current.revision !== fromRevision) throw new PreparationVersionConflictError();
+      if (!canTransition(current.status, nextStatus)) throw new PreparationTransitionError();
+      const next = { ...current, ...patch };
+      const now = new Date().toISOString();
+      const updated = db.prepare(
+        `UPDATE preparation_session SET status=?,focus=?,core_task=?,answer_scope=?,plan_id=?,revision_id=?,
+           review_report_id=?,bundle_id=?,model_job_id=?,content_origin=?,last_error_code=?,
+           revision=revision+1,updated_at=? WHERE session_id=? AND revision=?`
+      ).run(
+        nextStatus, next.focus, next.coreTask, next.answerScope, next.planId, next.revisionId,
+        next.reviewReportId, next.bundleId, next.modelJobId, next.contentOrigin, next.lastErrorCode,
+        now, sessionId, fromRevision
+      );
+      if (updated.changes !== 1) throw new PreparationVersionConflictError();
+      const result = this.getPreparationSession(sessionId);
+      if (!result) throw new StoreProtectedError('preparation_session_write_missing');
+      this.savePreparationReplay(db, operation, idempotencyKey, fingerprint, result, now);
+      return result;
+    }).immediate();
   }
 
   // ===== G04 模型配置/作业持久化 =====

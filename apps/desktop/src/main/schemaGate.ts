@@ -6,12 +6,12 @@
 import type { OperationName } from '../shared/ipc';
 
 export type FieldSchema =
-  | { type: 'string'; maxLength?: number; minLength?: number; encoding?: 'base64' }
-  | { type: 'integer'; min?: number; nonNegative?: boolean }
+  | { type: 'string'; maxLength?: number; minLength?: number; encoding?: 'base64'; enum?: readonly string[] }
+  | { type: 'integer'; min?: number; max?: number; nonNegative?: boolean }
   | { type: 'boolean' }
   | { type: 'object' }
   // 浅校验数组：仅检查是否数组与条目上限；条目结构由处理函数进一步校验。
-  | { type: 'array'; maxItems?: number }
+  | { type: 'array'; maxItems?: number; minItems?: number; items?: ObjectSchema; uniqueBy?: string }
   | { type: 'number'; min?: number; max?: number };
 
 export interface ObjectSchema {
@@ -143,6 +143,69 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     type: 'object',
     properties: { limit: { type: 'integer', min: 1 } },
     required: [],
+    additionalProperties: false
+  },
+  'preparation.context.save': {
+    type: 'object',
+    properties: {
+      contextId: { type: 'string', minLength: 1, maxLength: 80 },
+      classDisplayName: { type: 'string', minLength: 1, maxLength: 80 },
+      grade: { type: 'string', enum: ['grade7', 'grade8', 'grade9', 'other'] },
+      textbookTitle: { type: 'string', minLength: 1, maxLength: 120 },
+      textbookEdition: { type: 'string', maxLength: 80 },
+      unitTitle: { type: 'string', maxLength: 120 },
+      lessonTitle: { type: 'string', minLength: 1, maxLength: 160 },
+      durationSec: { type: 'integer', min: 300, max: 14400 },
+      notes: { type: 'string', maxLength: 2000 }
+    },
+    required: ['classDisplayName', 'grade', 'textbookTitle', 'textbookEdition', 'unitTitle', 'lessonTitle', 'durationSec', 'notes'],
+    additionalProperties: false
+  },
+  'preparation.context.get': {
+    type: 'object',
+    properties: { contextId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['contextId'],
+    additionalProperties: false
+  },
+  'preparation.session.create': {
+    type: 'object',
+    properties: {
+      contextId: { type: 'string', minLength: 1, maxLength: 80 },
+      mode: { type: 'string', enum: ['local_authored', 'model_assisted'] }
+    },
+    required: ['contextId', 'mode'],
+    additionalProperties: false
+  },
+  'preparation.session.get': {
+    type: 'object',
+    properties: { sessionId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['sessionId'],
+    additionalProperties: false
+  },
+  'preparation.session.list': null,
+  'preparation.sources.set': {
+    type: 'object',
+    properties: {
+      sessionId: { type: 'string', minLength: 1, maxLength: 80 },
+      sources: {
+        type: 'array', minItems: 1, maxItems: 50, uniqueBy: 'ordinal',
+        items: {
+          type: 'object',
+          properties: {
+            ordinal: { type: 'integer', nonNegative: true },
+            sourceVersionId: { type: 'string', minLength: 1, maxLength: 80 },
+            charStart: { type: 'integer', nonNegative: true },
+            charEnd: { type: 'integer', min: 1 },
+            purpose: { type: 'string', enum: ['textbook', 'curriculum', 'teacher_reference'] },
+            approvedForModel: { type: 'boolean' },
+            textSha256: { type: 'string', minLength: 64, maxLength: 64 }
+          },
+          required: ['ordinal', 'sourceVersionId', 'charStart', 'charEnd', 'purpose', 'approvedForModel', 'textSha256'],
+          additionalProperties: false
+        }
+      }
+    },
+    required: ['sessionId', 'sources'],
     additionalProperties: false
   },
   'lesson.buildDemo': null,
@@ -400,6 +463,7 @@ function validateField(name: string, schema: FieldSchema, value: unknown, errors
     }
     if (schema.minLength !== undefined && value.length < schema.minLength) errors.push(`字段 ${name} 过短`);
     if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push(`字段 ${name} 过长`);
+    if (schema.enum !== undefined && !schema.enum.includes(value)) errors.push(`字段 ${name} 不在允许范围`);
     if (schema.encoding === 'base64' &&
         (value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(value))) {
       errors.push(`字段 ${name} 编码无效`);
@@ -411,6 +475,7 @@ function validateField(name: string, schema: FieldSchema, value: unknown, errors
     }
     if (schema.nonNegative && value < 0) errors.push(`字段 ${name} 不可为负`);
     if (schema.min !== undefined && value < schema.min) errors.push(`字段 ${name} 小于下限`);
+    if (schema.max !== undefined && value > schema.max) errors.push(`字段 ${name} 大于上限`);
   } else if (schema.type === 'boolean') {
     if (typeof value !== 'boolean') errors.push(`字段 ${name} 应为布尔值`);
   } else if (schema.type === 'number') {
@@ -426,6 +491,37 @@ function validateField(name: string, schema: FieldSchema, value: unknown, errors
       return;
     }
     if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`字段 ${name} 条目过多`);
+    if (schema.minItems !== undefined && value.length < schema.minItems) errors.push(`字段 ${name} 条目不足`);
+    if (schema.uniqueBy !== undefined) {
+      const seen = new Set<unknown>();
+      for (const item of value) {
+        const key = isPlainRecord(item) ? item[schema.uniqueBy] : undefined;
+        if (seen.has(key)) errors.push(`字段 ${name} 的 ${schema.uniqueBy} 不可重复`);
+        seen.add(key);
+      }
+    }
+    if (schema.items !== undefined) {
+      value.forEach((item, index) => {
+        const itemName = `${name}[${index}]`;
+        if (!isPlainRecord(item)) {
+          errors.push(`字段 ${itemName} 应为普通对象`);
+          return;
+        }
+        for (const key of Object.keys(item)) {
+          if (!Object.prototype.hasOwnProperty.call(schema.items!.properties, key)) errors.push(`不允许的字段 ${itemName}.${key}`);
+        }
+        for (const required of schema.items!.required) {
+          if (!Object.prototype.hasOwnProperty.call(item, required) || item[required] === undefined) {
+            errors.push(`缺少必填字段 ${itemName}.${required}`);
+          }
+        }
+        for (const [key, childSchema] of Object.entries(schema.items!.properties)) {
+          if (Object.prototype.hasOwnProperty.call(item, key) && item[key] !== undefined) {
+            validateField(`${itemName}.${key}`, childSchema, item[key], errors);
+          }
+        }
+      });
+    }
   } else if (schema.type === 'object') {
     if (!isPlainRecord(value)) errors.push(`字段 ${name} 应为普通对象`);
   }
@@ -472,6 +568,13 @@ export function checkPayload(op: OperationName, payload: unknown): SchemaCheckRe
   for (const [key, fieldSchema] of Object.entries(schema.properties)) {
     // 可选字段值为 undefined 时视为未提供，跳过校验（便于渲染层传可选参数）。
     if (hasOwn(obj, key) && obj[key] !== undefined) validateField(key, fieldSchema, obj[key], errors);
+  }
+  if (op === 'preparation.sources.set' && Array.isArray(obj.sources)) {
+    for (const [index, source] of obj.sources.entries()) {
+      if (isPlainRecord(source) && typeof source.charStart === 'number' && typeof source.charEnd === 'number' && source.charEnd <= source.charStart) {
+        errors.push(`字段 sources[${index}].charEnd 必须大于 charStart`);
+      }
+    }
   }
   return { ok: errors.length === 0, errors };
 }

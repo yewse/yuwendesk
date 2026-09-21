@@ -57,6 +57,12 @@ export const IMPLEMENTED_OPERATIONS = [
   'model.run',
   'model.cancel',
   'model.listJobs',
+  'preparation.context.save',
+  'preparation.context.get',
+  'preparation.session.create',
+  'preparation.session.get',
+  'preparation.session.list',
+  'preparation.sources.set',
   'lesson.buildDemo',
   'lesson.list',
   'lesson.get',
@@ -86,6 +92,37 @@ export const IMPLEMENTED_OPERATIONS = [
 ] as const;
 
 export type OperationName = (typeof IMPLEMENTED_OPERATIONS)[number];
+
+export interface PreparationContextPayload {
+  contextId?: string;
+  classDisplayName: string;
+  grade: 'grade7' | 'grade8' | 'grade9' | 'other';
+  textbookTitle: string;
+  textbookEdition: string;
+  unitTitle: string;
+  lessonTitle: string;
+  durationSec: number;
+  notes: string;
+}
+
+export interface PreparationSourcePayload {
+  ordinal: number;
+  sourceVersionId: string;
+  charStart: number;
+  charEnd: number;
+  purpose: 'textbook' | 'curriculum' | 'teacher_reference';
+  approvedForModel: boolean;
+  textSha256: string;
+}
+
+export interface PreparationSessionSummaryDTO {
+  sessionId: string;
+  contextId: string;
+  status: string;
+  mode: 'local_authored' | 'model_assisted';
+  revision: number;
+  updatedAt: string;
+}
 
 // 统一请求外壳。写操作在后续阶段将强制 expected_revision 与 idempotency_key；
 // G01 的 ui.saveDraft 使用本地乐观版本号演示版本并发外壳。

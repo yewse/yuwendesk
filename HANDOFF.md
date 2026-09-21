@@ -108,6 +108,18 @@ npm run build:candidate
 
 ## 下一个有界工作包建议
 
+0. G12-T01 已在 `codex/g12-teacher-workflow` 完成本地持久层和 IPC DTO 合同；下一步直接执行 G12-T02 的本地自拟 builder、严格 `lesson_plan_spec` parser 与编排服务。先写 RED 测试，不重做 G00–G06。
+1. G12-T02 必须保证无 DeepSeek 时本地自拟路径可完整生成；真实模型不可用/输出非法/来源漂移时回到 `SOURCES_SELECTED`，不得保存半成品计划。
+2. G12-T03 才移除 production `lesson.buildDemo` 并接通“上下文→资料→生成→审查→五文件→一处修改→课堂展示”；未审查或陈旧修订不得导出/展示。
+3. G12-T04 生成绑定当时 clean commit 和候选的新增验收运行。当前旧发行证据因 commit/候选/输入哈希漂移被合同脚本拒绝，这是正确阻断，不得覆盖旧 run。
+
+## G12-T01 当前状态
+
+- schema 13、`PreparationStore`、显式状态机、重启回退和来源 SHA-256 绑定已实现；G12/Schema/IPC 定向 42/42、typecheck 通过。
+- 修改前全量基线为 631 passed / 1 failed / 1 skipped；既有失败仅是 G11 生成 Markdown 的 CRLF/LF 不一致，尚未在 T01 顺手改写。
+- `verify:contracts` 当前失败仅因历史 G11 发行证据不再绑定 G12 当前源码/候选；留到 T04 以追加运行重建，不把旧证据改成 PASS。
+- 真实 API/WPS/签名/分发/真人教师复核没有在 T01 执行，状态保持 `BLOCKED_EXTERNAL/NOT_RUN`。
+
 1. 提交 E10，保留第四轮追加验收与 clean-source 发行证据；不要覆盖前两轮 FAIL 或其他历史记录。
 2. 真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。
 3. 补齐干净标准用户 VM、Grok、签名/时间戳、可信分发、锁定环境、缺陷审计和真人教师复核后，再创建新的追加运行；当前不得发布。

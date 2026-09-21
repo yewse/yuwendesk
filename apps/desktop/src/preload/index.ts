@@ -7,6 +7,9 @@ import type {
   IpcRequest,
   IpcResponse,
   OperationName,
+  PreparationContextPayload,
+  PreparationSessionSummaryDTO,
+  PreparationSourcePayload,
   SaveDraftPayload,
   RestorePreviewDTO,
   SourceHitDTO,
@@ -169,6 +172,32 @@ const api = {
     call<{ status: string; jobId?: string; result?: unknown; costCents?: number; fromCache?: boolean }>('model.run', { payload }),
   modelCancel: (jobId: string) => call<{ cancelled: boolean }>('model.cancel', { payload: { jobId } }),
   modelListJobs: (limit?: number) => call<{ jobs: unknown[] }>('model.listJobs', { payload: limit ? { limit } : {} }),
+  preparationContextSave: (payload: PreparationContextPayload, expectedRevision: number, idempotencyKey: string) =>
+    call<unknown>('preparation.context.save', {
+      workspace_id: 'workspace_local', expected_revision: expectedRevision, idempotency_key: idempotencyKey, payload
+    }),
+  preparationContextGet: (contextId: string) =>
+    call<unknown>('preparation.context.get', { workspace_id: 'workspace_local', payload: { contextId } }),
+  preparationSessionCreate: (
+    contextId: string,
+    mode: 'local_authored' | 'model_assisted',
+    idempotencyKey: string
+  ) => call<unknown>('preparation.session.create', {
+    workspace_id: 'workspace_local', expected_revision: 0, idempotency_key: idempotencyKey, payload: { contextId, mode }
+  }),
+  preparationSessionGet: (sessionId: string) =>
+    call<unknown>('preparation.session.get', { workspace_id: 'workspace_local', payload: { sessionId } }),
+  preparationSessionList: () =>
+    call<{ sessions: PreparationSessionSummaryDTO[] }>('preparation.session.list', { workspace_id: 'workspace_local' }),
+  preparationSourcesSet: (
+    sessionId: string,
+    sources: PreparationSourcePayload[],
+    expectedRevision: number,
+    idempotencyKey: string
+  ) => call<unknown>('preparation.sources.set', {
+    workspace_id: 'workspace_local', expected_revision: expectedRevision, idempotency_key: idempotencyKey,
+    payload: { sessionId, sources }
+  }),
   // G05/G06 课时计划与三类五文件（自拟/测试内容明确标注）。
   lessonBuildDemo: () => call<{ planId: string; revisionId: string; title: string; valid: boolean; contentOrigin: string }>('lesson.buildDemo'),
   lessonList: () => call<{ plans: { planId: string; title: string; currentRevisionId: string | null; updatedAt: string }[] }>('lesson.list'),

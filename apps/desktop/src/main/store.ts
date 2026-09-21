@@ -22,6 +22,7 @@ import type {
   RecordTeachingInput,
   TeachingEvent
 } from './feedback/types';
+export type { PreparationStore } from './preparation/types';
 
 // G01 本地持久化：只保存教师自己的备课草稿与窗口状态，不含任何 AI 生成正文或密钥。
 // 使用「临时文件 → 原子改名」保证崩溃时不产生半成品（规范 7.2）。后续 G02 以 SQLite 单写入者替换。

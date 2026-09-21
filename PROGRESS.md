@@ -246,6 +246,13 @@
 - **T04 测试与证据**：G11 定向 **71/71**；全量 Vitest **621 passed / 1 skipped（622 total，67 files）**。typecheck、lint、`verify:contracts`、desktop build、`git diff --check` 全部退出 0；冻结 130+40 验收定义和 lockfile 哈希未变；发行目录隐私扫描无命中。篡改 `FINAL_STATUS.md` 时 `release:verify` 如实退出 1，原子再生成后恢复到预期退出 2。完整记录见 `reports/G11_EVIDENCE.md`。
 - **T01–T04 外部门/限制**：四个本地工程包完成不等于正式发布完成。干净 Windows、授权材料、真实 API/预算、真实学生资料处理与逐次外发授权、Office/WPS、锁定环境候选、签名/时间戳、分发位置、缺陷审计和教师专业复核仍为 `BLOCKED_EXTERNAL` 或 `NOT_RUN`；不得把当前工程 SBOM、621 项单测或退出 2 表述为发布通过。
 
+## G12 教师备课主流程闭环
+
+- [x] **G12-T01 本地实现完成**：SQLite schema 由 12 迁移到 13，新增教学上下文、备课会话和精确来源选择；保存与状态推进使用乐观修订和持久幂等，同键异载荷及过期修订 fail-closed。`BUILDING/EXPORTING` 重启后分别回退到最后安全状态并记录 `PREPARATION_INTERRUPTED`。
+- **T01 来源边界**：来源选择必须绑定当前 source version、精确字符范围和实际文字 SHA-256；会话至少一个来源，IPC 只开放命名 DTO，不接受任意路径、API key 或自由提示词。新增 schema 门会校验闭集年级/模式/用途、长度、范围、唯一 ordinal 与额外字段。
+- **T01 验证**：G12 state/SQLite/schema/IPC 定向 **42/42**，typecheck 退出 0，`git diff --check` 无错误。全量基线在 G12 修改前为 **631 passed / 1 failed / 1 skipped**；唯一失败是既有 G11 最终状态 Markdown 的 CRLF/LF 差异。`verify:contracts` 当前另按设计拒绝旧 G11 发行证据，因为其 commit/候选/输入哈希不再绑定当前 G12 工作树；须在 G12-T04 追加运行，不得覆盖历史证据或伪报通过。
+- **T01 外部门保持不变**：DeepSeek 真实调用、WPS 打开/编辑/放映、干净标准用户 Windows、签名/时间戳、分发地址和真人教师专业复核均未在本包执行，继续 `BLOCKED_EXTERNAL/NOT_RUN`。
+
 ## G11-E01 追加外部验收准备 — 本地实现完成，实际运行待候选
 
 - [x] **外部证据安全入口**：`acceptance:run -- --external-evidence ...` 只读取 `apps/desktop/release/acceptance/` 下的输入；逐项校验当前源码、固定候选实际 SHA-256/size、执行时窗、外部案例映射、证据层级及 `EXTxx=PROVIDED`。外部 `PASS/FAIL` 必须回指本轮规范证据并附候选哈希；未提供或未执行项目继续 `BLOCKED/NOT_RUN`。历史运行保持追加、不可覆盖。

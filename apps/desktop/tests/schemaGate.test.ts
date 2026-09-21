@@ -93,3 +93,39 @@ describe('G09 protection payload schemas', () => {
     }).ok).toBe(false);
   });
 });
+
+describe('G12 preparation payload schemas', () => {
+  it('accepts closed context and source-selection payloads', () => {
+    expect(checkPayload('preparation.context.save', {
+      contextId: 'context_1',
+      classDisplayName: '八年级一班',
+      grade: 'grade8',
+      textbookTitle: '语文八年级上册',
+      textbookEdition: '统编版',
+      unitTitle: '第一单元',
+      lessonTitle: '消息二则',
+      durationSec: 2700,
+      notes: ''
+    })).toEqual({ ok: true, errors: [] });
+    expect(checkPayload('preparation.sources.set', {
+      sessionId: 'session_1',
+      sources: [{ ordinal: 0, sourceVersionId: 'v1', charStart: 0, charEnd: 8, purpose: 'textbook', approvedForModel: false, textSha256: 'a'.repeat(64) }]
+    }).ok).toBe(true);
+  });
+
+  it('rejects unknown context fields and malformed nested source entries', () => {
+    expect(checkPayload('preparation.context.save', {
+      classDisplayName: '八年级一班', grade: 'grade8', textbookTitle: '语文', textbookEdition: '', unitTitle: '',
+      lessonTitle: '消息二则', durationSec: 2700, notes: '', apiKey: 'must-not-cross'
+    }).errors.join()).toContain('不允许的字段 apiKey');
+    expect(checkPayload('preparation.sources.set', {
+      sessionId: 'session_1',
+      sources: [{ ordinal: 0, sourceVersionId: 'v1', charStart: -1, charEnd: 8, purpose: 'textbook', approvedForModel: false, textSha256: 'bad' }]
+    }).ok).toBe(false);
+  });
+
+  it('exposes named read operations without arbitrary payloads', () => {
+    expect(getPayloadSchema('preparation.context.get')).not.toBeNull();
+    expect(getPayloadSchema('preparation.session.list')).toBeNull();
+  });
+});

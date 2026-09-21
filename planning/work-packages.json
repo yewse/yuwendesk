@@ -1429,6 +1429,84 @@
         "保留实际命令、退出码和证据；无环境标BLOCKED",
         "不得删验收项、硬编码成功或提交真实凭据"
       ]
+    },
+    {
+      "id": "G12-T01",
+      "gate": "G12",
+      "title": "持久化教学上下文、备课会话、来源选择与恢复状态机",
+      "depends_on": [
+        "G11-T04"
+      ],
+      "deliverables": [
+        "schema 13 migration",
+        "preparation store and named IPC DTO contracts"
+      ],
+      "acceptance_ids": [],
+      "status": "COMPLETED_LOCAL",
+      "rules": [
+        "所有写操作使用 expected_revision 与 idempotency_key",
+        "来源版本、范围与 SHA-256 必须重新核对",
+        "外部验收状态不得由本地单测提升"
+      ]
+    },
+    {
+      "id": "G12-T02",
+      "gate": "G12",
+      "title": "本地自拟与模型辅助计划编排",
+      "depends_on": [
+        "G12-T01"
+      ],
+      "deliverables": [
+        "local builder",
+        "strict model lesson_plan_spec parser",
+        "preparation orchestration service"
+      ],
+      "acceptance_ids": [],
+      "status": "NOT_STARTED",
+      "rules": [
+        "本地模式不得依赖网络或伪造事实",
+        "模型输出严格闭集并只引用已授权片段",
+        "真实 API 未执行时保持 BLOCKED_EXTERNAL/NOT_RUN"
+      ]
+    },
+    {
+      "id": "G12-T03",
+      "gate": "G12",
+      "title": "教师工作流界面与本地课堂展示",
+      "depends_on": [
+        "G12-T02"
+      ],
+      "deliverables": [
+        "context/source/build/review/export UI",
+        "read-only classroom presentation"
+      ],
+      "acceptance_ids": [],
+      "status": "NOT_STARTED",
+      "rules": [
+        "移除 production lesson.buildDemo",
+        "未审查或过期计划不得导出或展示",
+        "不启动本地 HTTP/WebSocket 服务"
+      ]
+    },
+    {
+      "id": "G12-T04",
+      "gate": "G12",
+      "title": "当前候选追加验收与交付",
+      "depends_on": [
+        "G12-T03"
+      ],
+      "deliverables": [
+        "current-commit acceptance run",
+        "candidate-bound release evidence",
+        "updated teacher guide"
+      ],
+      "acceptance_ids": [],
+      "status": "NOT_STARTED",
+      "rules": [
+        "只用当前 commit 和当前候选的实际证据判定 PASS/FAIL",
+        "历史验收运行只追加不覆盖",
+        "签名、分发、真人教学复核缺失时保持阻断"
+      ]
     }
   ]
 }
