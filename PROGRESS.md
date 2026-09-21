@@ -369,3 +369,5 @@
 - [x] **AI 状态与错误闭合**：设置页显示密钥为“未保存 / 已安全保存（仅末四位）/暂不可读取”，预算 `0` 明示为“不限额”；数据库保护、缺少密钥、预算、网络和服务错误分别给出固定安全提示，不回显 provider note、密钥或环境内容。备课页在存储受保护时直接引导到本地备份恢复，不再只显示含混的“没有形成可用方案”。
 - [x] **回归证据**：新测试先以 6 项预期失败复现，再转绿；安全错误专项 **15/15**，全量 Vitest **712 passed / 1 skipped（713 total，78 files）**，typecheck、lint 均退出 0。既有 pdfjs 可选 canvas/标准字体告警保持原样，不作为本包新增通过条件。
 - **证据边界**：本包没有修改生产 AppData、没有从聊天记录复制 API 密钥、没有调用真实 DeepSeek，也没有把历史候选状态提升。只有从本包 clean commit 生成的新候选、用户在应用内安全输入的新密钥和实际成功/失败调用绑定后，真实 API 案例才可转为 `PASS/FAIL`；在此之前继续 `BLOCKED_EXTERNAL/NOT_RUN`。
+- [x] **候选与追加运行**：clean source commit `27614ecac26a5c80b47eb04a6161564721e0fbca` 生成 131,053,479-byte 未签名候选，SHA-256 `22ef42fbce965f74acff0d8aa111ad4c3e6938e24dd95d7912320c36b0a48d28`；隔离 userData 的打包程序启动冒烟通过。绑定同一 commit/候选的 G12 Electron 纵向通过（5 文件、修改后 5 文件均变化），追加运行 `run-20260921-27614ec-01` 为 **6 PASS / 0 FAIL / 38 BLOCKED / 126 NOT_RUN**。
+- **发行实况**：合同校验、SBOM 663/663、校验清单通过；`signature=UNSIGNED`、`formalEnvironmentMatch=false`，最终仍为 `BLOCKED / RELEASE_WINDOWS_EVIDENCE_REQUIRED`。本段是候选后的证据归档，不改变候选来源 commit，也不把未执行的真实 API/签名/干净 VM/分发/缺陷审计提升为通过。

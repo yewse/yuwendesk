@@ -190,3 +190,5 @@ npm run build:candidate
 - 恢复不会迁移 API 密钥。新版本会清楚显示密钥状态、预算 0 的含义和下一步，并在备课页提示先恢复存储；用户安装新候选后应先在“帮助与设置”恢复该本地备份，再在应用输入框粘贴一枚已轮换的新 DeepSeek 密钥并探测。聊天中曾出现的密钥不得复用或自动写入。
 - 验证：安全错误专项 15/15；全量 712 passed / 1 skipped（713 total，78 files）；typecheck、lint 通过。不得据此声称真实 DeepSeek 已通过；真实 API、签名、干净 VM 和真人教学复核继续按当前实际证据保持 `BLOCKED_EXTERNAL/NOT_RUN`。
 - 下一步：提交 G13-T01 后从 clean HEAD 构建新候选，再把候选 commit/hash 写入新的追加验收；若没有用户在应用内安全输入的新密钥，只能验证恢复/UI/离线流程，真实 AI 案例不得提升。
+- 当前候选已完成：源码 `27614ecac26a5c80b47eb04a6161564721e0fbca`，EXE 131,053,479 bytes，SHA-256 `22ef42fbce965f74acff0d8aa111ad4c3e6938e24dd95d7912320c36b0a48d28`；打包程序隔离启动成功。新增运行 `run-20260921-27614ec-01` 绑定该候选，结果 6/0/38/126；G12 纵向为 passed。后续证据归档提交不是候选源码，除非重建不得把候选改绑到归档提交。
+- 发行链当前为 `BLOCKED / RELEASE_WINDOWS_EVIDENCE_REQUIRED`：SBOM/校验清单/合同通过，签名 `UNSIGNED`，锁定 Node/npm 环境不匹配，真实 DeepSeek、干净 Windows、签名、正式分发和缺陷审计没有被本次修复自动完成。
