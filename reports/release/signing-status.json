@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceCommit": "2ccbe3465c11e96bf79c362e750676ec6cecf358",
+  "sourceCommit": "56c6faaccf858b4f4b7ccfb7f6df602d50c36c5f",
   "expectedPath": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
   "artifactPresent": true,
   "status": "UNSIGNED",
@@ -8,7 +8,7 @@
   "signerSubject": null,
   "timestampPresent": false,
   "timestampSubject": null,
-  "checkedAt": "2026-09-21T03:06:08.289Z",
-  "artifactSha256": "51338e9721b67b48e25f11fe7c50b119138306ed70d0c8f5cb53a71d3efb83cd",
+  "checkedAt": "2026-09-21T03:16:36.237Z",
+  "artifactSha256": "2c2bcb4263cef88322d9691d7755fe34dc9e0e13e416b3d4e36f9ded7f61dbe0",
   "environment": "win32 10.0.26200"
 }
