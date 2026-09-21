@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "2ccbe3465c11e96bf79c362e750676ec6cecf358",
+  "startedAt": "2026-09-21T03:04:57.823Z",
+  "completedAt": "2026-09-21T03:05:00.055Z",
+  "candidate": {
+    "path": "apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe",
+    "sha256": "51338e9721b67b48e25f11fe7c50b119138306ed70d0c8f5cb53a71d3efb83cd",
+    "sizeBytes": 131049412
+  },
+  "environment": {
+    "os": "win32",
+    "release": "10.0.26200",
+    "arch": "x64",
+    "electron": "44.4.3"
+  },
+  "syntheticDataOnly": true,
+  "frozenAcceptanceCasesUpdated": false,
+  "observations": {
+    "artifactCount": 5,
+    "reviewDisposition": "ready_for_teacher",
+    "presentationOpened": true,
+    "taskVisible": true,
+    "answerVisible": true,
+    "changedFileCount": 5,
+    "restartStatus": "EXPORTED",
+    "revisionAdvanced": true,
+    "bundleAdvanced": true,
+    "sqliteIntegrity": "ok"
+  },
+  "passed": true
+}

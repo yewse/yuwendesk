@@ -1,9 +1,9 @@
 # 语文备课工作台最终发行状态
 
-- 生成时间：2026-09-21T03:00:27.814Z
-- 源码提交：`58e7ca4a123b963fa5dde423a1c3c38da9afdfbd`
+- 生成时间：2026-09-21T03:06:08.289Z
+- 源码提交：`2ccbe3465c11e96bf79c362e750676ec6cecf358`
 - 最终判定：`BLOCKED`
-- 判定理由：`RELEASE_SOURCE_DIRTY`
+- 判定理由：`RELEASE_WINDOWS_EVIDENCE_REQUIRED`
 - 软件工程状态：`BLOCKED`
 - 资源覆盖状态：`BLOCKED`
 - 教学专业复核：`NOT_REVIEWED`
@@ -13,7 +13,7 @@
 
 - 固定候选路径：`apps/desktop/release/YuwenDesk-Setup-0.1.0-x64.exe`
 - 候选存在：是
-- 候选 SHA-256：073a892d1e978fd0fdc2c6e78523aec74b6aeaa13574b9fbcafa07e52077c5bb
+- 候选 SHA-256：51338e9721b67b48e25f11fe7c50b119138306ed70d0c8f5cb53a71d3efb83cd
 - SBOM：`PASS`
 - 校验清单：`PASS`；路径 `reports/release/SHA256SUMS.txt`
 - 签名：`UNSIGNED`
@@ -34,7 +34,6 @@
 - `RELEASE_FORMAL_ENVIRONMENT_MISMATCH`｜SBOM 生成工具链与 ENV_LOCK.json 锁定版本不一致｜BLOCKED｜在 ENV_LOCK.json 锁定的 Node/npm 环境重新生成供应链证据；当前 SBOM 仅作工程证据。
 - `RELEASE_REQUIRED_GATE_OPEN`｜尚未执行的正式验收案例｜NOT_RUN｜在对应证据层级创建新的追加验收运行；不得改写历史 NOT_RUN。
 - `RELEASE_SIGNATURE_MISSING`｜reports/release/signing-status.json｜BLOCKED｜由获授权的发布身份签名固定候选并加入可信时间戳，再重新检查。
-- `RELEASE_SOURCE_DIRTY`｜验收运行无法唯一绑定 sourceCommit｜BLOCKED｜在干净工作树对同一候选 commit 创建新的追加验收运行；不得改写本次 dirty 运行。
 
 ## 结论
 

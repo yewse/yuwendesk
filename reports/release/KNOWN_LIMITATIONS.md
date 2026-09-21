@@ -1,6 +1,6 @@
 # 已知限制与未关闭发行门
 
-当前发行判定：`BLOCKED`（`RELEASE_SOURCE_DIRTY`）。
+当前发行判定：`BLOCKED`（`RELEASE_WINDOWS_EVIDENCE_REQUIRED`）。
 
 校验清单：`reports/release/SHA256SUMS.txt`。本文件不嵌入该清单自身的哈希。
 
@@ -93,12 +93,4 @@
 - 状态：BLOCKED
 - 外部输入：无
 - 安全下一步：由获授权的发布身份签名固定候选并加入可信时间戳，再重新检查。
-
-## SOURCE_RUN_DIRTY
-
-- 阻断码：`RELEASE_SOURCE_DIRTY`
-- 范围：验收运行无法唯一绑定 sourceCommit
-- 状态：BLOCKED
-- 外部输入：无
-- 安全下一步：在干净工作树对同一候选 commit 创建新的追加验收运行；不得改写本次 dirty 运行。
 

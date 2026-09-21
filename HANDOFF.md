@@ -143,7 +143,8 @@ npm run build:candidate
 - G12 本地工程完成不等于正式发行：真实 DeepSeek、WPS、干净标准用户 Windows、签名/时间戳、分发、合法现用教材和真人教师复核仍按实际证据保持 `BLOCKED_EXTERNAL/NOT_RUN`。
 - 首个 `3019830` 候选纵向运行真实失败于展示审查指针不一致，未记 PASS。修复已让五文件导出同步发布阶段的新 `reviewReportId`，回归先红后绿；必须提交该修复后重建候选并从头重跑。
 - `5acf2cf` 候选的 G12 Electron 纵向已通过，但追加验收 runner 在落盘前暴露 worktree 依赖定位缺陷；没有生成或提升运行记录。现已改为按项目 Node 模块解析层级寻找 Vitest，回归先红后绿；提交后仍须重新构建并绑定新候选，不能复用 `5acf2cf` 证据。
-- `58e7ca4` 的追加运行已生成，但 SBOM 生成器发现 npm 在 worktree 下以目录名替代根组件显示名，未伪造通过。修复只接受 `bom-ref`、版本和 worktree 目录名共同证明的单字段规范化，SBOM 定向验证已通过；仍需新提交、新候选和新追加运行完成最终绑定。
+- `58e7ca4` 的追加运行已生成，但 SBOM 生成器发现 npm 在 worktree 下以目录名替代根组件显示名，未伪造通过。修复只接受 `bom-ref`、版本和 worktree 目录名共同证明的单字段规范化，SBOM 定向验证已通过，并由后续 clean commit 重新绑定候选与追加运行。
+- 最终候选之后不再修改或提交源码；最新 AcceptanceRun、G12 补充证据和发行报告作为生成证据保留，由 `reports/release/release-input.json` 绑定 source commit 与候选字节。若再形成提交，必须重建候选并从头重跑，不能借用前一轮证据。
 
 1. 提交 E10，保留第四轮追加验收与 clean-source 发行证据；不要覆盖前两轮 FAIL 或其他历史记录。
 2. 真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。
