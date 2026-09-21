@@ -34,6 +34,7 @@ import { DiagnosticsService } from './protection/diagnostics';
 import { UpdateService } from './update/service';
 import { trustedUpdateKeys } from './update/trust';
 import { DatabaseMigrationCoordinator } from './update/migration';
+import { exportPreparedMaterials, PreparationService } from './preparation/service';
 
 const APP_NAME_ZH = '语文备课工作台';
 
@@ -279,6 +280,11 @@ async function bootstrap(): Promise<void> {
   }
 
   const modelService = new ModelService(store);
+  const preparationService = new PreparationService({
+    store,
+    model: modelService,
+    exportPlan: (planId) => exportPreparedMaterials(store, join(userDataDir, 'materials'), planId)
+  });
   const feedbackService = new FeedbackService(store, store, modelService);
   const backupService = new BackupService({ userDataDir, appVersion: app.getVersion(), store });
   const backupCoordinator = new BackupCoordinator(backupService, () => new Date(), store);
@@ -398,6 +404,8 @@ async function bootstrap(): Promise<void> {
     sourceStore: store,
     modelService,
     lessonStore: store,
+    preparationStore: store,
+    preparationService,
     feedbackStore: store,
     feedbackService,
     confirmObservationDelete: async ({ observationId }) => {

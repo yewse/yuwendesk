@@ -683,6 +683,50 @@
       "semantic_guard": "当前版本、精确范围、SHA-256 和外发许可逐项校验",
       "sender_validation_required": true,
       "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "preparation.build",
+      "kind": "write",
+      "scope": "workspace",
+      "requires_expected_revision": true,
+      "requires_idempotency_key": true,
+      "output_contract": "绑定计划修订的备课会话",
+      "semantic_guard": "至少一个当前来源；本地模式零网络；模型模式仅发获准片段",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "preparation.review",
+      "kind": "write",
+      "scope": "workspace",
+      "requires_expected_revision": true,
+      "requires_idempotency_key": true,
+      "output_contract": "当前计划修订的审查报告",
+      "semantic_guard": "软件审查不冒充真人教学专业复核",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "preparation.confirm",
+      "kind": "write",
+      "scope": "workspace",
+      "requires_expected_revision": true,
+      "requires_idempotency_key": true,
+      "output_contract": "可导出的当前备课会话",
+      "semantic_guard": "只接受当前修订且 disposition=ready_for_teacher 的审查",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
+    },
+    {
+      "operation": "preparation.export",
+      "kind": "write",
+      "scope": "workspace",
+      "requires_expected_revision": true,
+      "requires_idempotency_key": true,
+      "output_contract": "已发布 bundle 与五文件登记",
+      "semantic_guard": "暂存、回读哈希、原子发布和数据库登记全部成功后才进入 EXPORTED",
+      "sender_validation_required": true,
+      "arbitrary_path_allowed": false
     }
   ],
   "error_codes": [

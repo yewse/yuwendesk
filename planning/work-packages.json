@@ -1462,7 +1462,7 @@
         "preparation orchestration service"
       ],
       "acceptance_ids": [],
-      "status": "NOT_STARTED",
+      "status": "COMPLETED_LOCAL",
       "rules": [
         "本地模式不得依赖网络或伪造事实",
         "模型输出严格闭集并只引用已授权片段",

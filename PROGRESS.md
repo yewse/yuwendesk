@@ -252,6 +252,10 @@
 - **T01 来源边界**：来源选择必须绑定当前 source version、精确字符范围和实际文字 SHA-256；会话至少一个来源，IPC 只开放命名 DTO，不接受任意路径、API key 或自由提示词。新增 schema 门会校验闭集年级/模式/用途、长度、范围、唯一 ordinal 与额外字段。
 - **T01 验证**：G12 state/SQLite/schema/IPC 定向 **42/42**，typecheck 退出 0，`git diff --check` 无错误。全量基线在 G12 修改前为 **631 passed / 1 failed / 1 skipped**；唯一失败是既有 G11 最终状态 Markdown 的 CRLF/LF 差异。`verify:contracts` 当前另按设计拒绝旧 G11 发行证据，因为其 commit/候选/输入哈希不再绑定当前 G12 工作树；须在 G12-T04 追加运行，不得覆盖历史证据或伪报通过。
 - **T01 外部门保持不变**：DeepSeek 真实调用、WPS 打开/编辑/放映、干净标准用户 Windows、签名/时间戳、分发地址和真人教师专业复核均未在本包执行，继续 `BLOCKED_EXTERNAL/NOT_RUN`。
+- [x] **G12-T02 本地与模型辅助编排完成**：本地自拟 builder 只使用经核验原文、教师填写的重点/核心任务/答案范围和结构性活动，不生成片段外事实；模型新增固定 `lesson_plan_spec.v1`，严格拒绝多余字段、未知锚点、本机路径、可执行内容、空答案范围和越界时间。真实服务、测试替身/离线模拟分别标记 `model_assisted_real` 与 `model_assisted_simulated`，教师自拟标记 `teacher_authored`。
+- **T02 状态与发布边界**：模型不可用/取消/预算/无效输出不自动重试，不保存可用半成品，会话回到 `SOURCES_SELECTED`；上下文修改使旧审查失效。只有当前修订的软件审查为 `ready_for_teacher` 才可确认，五文件暂存、回读哈希、原子发布和数据库登记成功后才进入 `EXPORTED`；失败回到 `READY_TO_EXPORT` 并保留旧包。
+- **T02 验证**：计划内定向（local/model/service/DeepSeek/G07 failure）**52/52**，最终合并 local/model/service/DeepSeek/G07 failure/IPC/schema 为 **89/89**；真实五文件 exporter 集成测试登记 5 个制品，G07 文件系统/SQLite 故障边界与材料回归另跑 **36/36**。typecheck、lint、`git diff --check` 均退出 0。`verify:contracts` 的 1 项失败仅为历史 G11 发行证据与当前 G12 源码/候选/输入哈希漂移，保留到 T04 追加运行修复，不覆盖旧证据。既有 pdfjs 可选 canvas/字体警告仍如实出现，不改写为通过条件。
+- **T02 外部门保持不变**：本包没有执行真实 DeepSeek 请求、WPS/Office 打开与放映、真人教师专业复核、签名或分发；这些验收仍为 `BLOCKED_EXTERNAL/NOT_RUN`。本地软件审查不等同真人教学审查。
 
 ## G11-E01 追加外部验收准备 — 本地实现完成，实际运行待候选
 

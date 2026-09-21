@@ -198,6 +198,28 @@ const api = {
     workspace_id: 'workspace_local', expected_revision: expectedRevision, idempotency_key: idempotencyKey,
     payload: { sessionId, sources }
   }),
+  preparationBuild: (
+    payload: { sessionId: string; focus: string; coreTask: string; answerScope: string },
+    expectedRevision: number,
+    idempotencyKey: string
+  ) => call<unknown>('preparation.build', {
+    workspace_id: 'workspace_local', expected_revision: expectedRevision, idempotency_key: idempotencyKey, payload
+  }),
+  preparationReview: (sessionId: string, expectedRevision: number, idempotencyKey: string) =>
+    call<unknown>('preparation.review', {
+      workspace_id: 'workspace_local', expected_revision: expectedRevision, idempotency_key: idempotencyKey,
+      payload: { sessionId }
+    }),
+  preparationConfirm: (sessionId: string, expectedRevision: number, idempotencyKey: string) =>
+    call<unknown>('preparation.confirm', {
+      workspace_id: 'workspace_local', expected_revision: expectedRevision, idempotency_key: idempotencyKey,
+      payload: { sessionId }
+    }),
+  preparationExport: (sessionId: string, expectedRevision: number, idempotencyKey: string) =>
+    call<unknown>('preparation.export', {
+      workspace_id: 'workspace_local', expected_revision: expectedRevision, idempotency_key: idempotencyKey,
+      payload: { sessionId }
+    }),
   // G05/G06 课时计划与三类五文件（自拟/测试内容明确标注）。
   lessonBuildDemo: () => call<{ planId: string; revisionId: string; title: string; valid: boolean; contentOrigin: string }>('lesson.buildDemo'),
   lessonList: () => call<{ plans: { planId: string; title: string; currentRevisionId: string | null; updatedAt: string }[] }>('lesson.list'),

@@ -3494,6 +3494,12 @@ export class SqliteStore {
           input.unitTitle, input.lessonTitle, input.durationSec, input.notes, now, contextId, expectedRevision
         );
         if (updated.changes !== 1) throw new PreparationVersionConflictError();
+        db.prepare(
+          `UPDATE preparation_session
+           SET status='PLAN_REVIEW',review_report_id=NULL,bundle_id=NULL,
+               last_error_code='PREPARATION_STALE',revision=revision+1,updated_at=?
+           WHERE context_id=? AND plan_id IS NOT NULL`
+        ).run(now, contextId);
       }
       const result = this.getTeachingContext(contextId);
       if (!result) throw new StoreProtectedError('preparation_context_write_missing');

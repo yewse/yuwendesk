@@ -52,8 +52,14 @@ export function resolveCjkFont(): string | null {
 }
 
 export function versionStamp(plan: LessonPlan, contentOrigin: string): string {
-  const sim = contentOrigin !== 'authored' && contentOrigin !== 'real';
-  return `计划 ${plan.plan_id} · 修订 ${plan.revision_id} · 内容来源 ${contentOrigin}${sim ? '（模拟/未经真实模型或教师核验）' : ''}`;
+  const label = contentOrigin === 'authored' || contentOrigin === 'teacher_authored'
+    ? '教师自拟'
+    : contentOrigin === 'real' || contentOrigin === 'model_assisted_real'
+      ? '模型辅助（真实服务）'
+      : contentOrigin === 'model_assisted_simulated'
+        ? '模型辅助（模拟）'
+        : `${contentOrigin}（模拟/未经真实模型或教师核验）`;
+  return `计划 ${plan.plan_id} · 修订 ${plan.revision_id} · 内容来源 ${label}`;
 }
 
 export interface Section {

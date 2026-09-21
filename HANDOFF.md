@@ -120,6 +120,13 @@ npm run build:candidate
 - `verify:contracts` 当前失败仅因历史 G11 发行证据不再绑定 G12 当前源码/候选；留到 T04 以追加运行重建，不把旧证据改成 PASS。
 - 真实 API/WPS/签名/分发/真人教师复核没有在 T01 执行，状态保持 `BLOCKED_EXTERNAL/NOT_RUN`。
 
+## G12-T02 当前状态
+
+- 离线本地自拟、固定 `lesson_plan_spec.v1`、来源重验、计划构建、软件审查、确认和真实五文件原子导出已接入 `PreparationService` 与命名 IPC。生产启动会注入真实 SQLite、ModelService 和材料发布器。
+- 内容来源三分：`teacher_authored`、`model_assisted_real`、`model_assisted_simulated`；模拟结果不会冒充真实 API。模型不可用只返回可见错误并允许本地降级，不自动消耗预算重试。
+- T02 计划内定向 52/52，最终合并 local/model/service/DeepSeek/G07 failure/IPC/schema 为 89/89，G07 failure + materials 另跑 36/36；typecheck、lint、diff 均通过。`verify:contracts` 实际执行后仍有 1 项失败，原因是历史 G11 证据不绑定当前 G12 commit/候选/输入哈希，留待 T04 追加验收重建。
+- 下一步 G12-T03：实现 renderer 分步界面、移除 production `lesson.buildDemo`、加入受限课堂展示和实际 UI 纵向脚本。真实 API/WPS/签名/分发/真人教师复核仍保持阻断。
+
 1. 提交 E10，保留第四轮追加验收与 clean-source 发行证据；不要覆盖前两轮 FAIL 或其他历史记录。
 2. 真实 DeepSeek 仅在出现不会暴露密钥的受保护输入通道后执行；WPS 仅在原生 UI 可控时执行。
 3. 补齐干净标准用户 VM、Grok、签名/时间戳、可信分发、锁定环境、缺陷审计和真人教师复核后，再创建新的追加运行；当前不得发布。

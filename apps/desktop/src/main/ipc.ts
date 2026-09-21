@@ -19,6 +19,12 @@ import type {
   ReviewReportRecord,
   SourceStore
 } from './store';
+import type { PreparationStore, PreparationSourceInput, TeachingContextInput } from './preparation/types';
+import {
+  PreparationKeyReuseError,
+  PreparationVersionConflictError
+} from './preparation/types';
+import { PreparationService, PreparationServiceError } from './preparation/service';
 import { StoreProtectedError } from './store';
 import { checkPayload } from './schemaGate';
 import { buildLessonPlan, demoLessonSpec, validateLessonPlan } from './lesson/build';
@@ -91,6 +97,8 @@ export interface IpcServiceContext {
   lessonStore?: LessonStore;
   // G08 采用/授课/观察反馈流（由 SqliteStore 提供）。
   feedbackStore?: FeedbackStore;
+  preparationStore?: PreparationStore;
+  preparationService?: PreparationService;
   // G08 测量门与模型辅助归因；仅接受稳定 ID 和逐次许可，不接受自由提示词或 Observation JSON。
   feedbackService?: {
     analyze(input: FeedbackAnalyzeInput): Promise<FeedbackAnalysisResult>;
@@ -178,7 +186,9 @@ const BUSINESS_WRITE_OPERATIONS = new Set<OperationName>([
   'ui.saveDraft', 'sources.import', 'sources.importFile', 'sources.retire', 'sources.reclassify', 'sources.delete',
   'model.configure', 'model.run', 'lesson.buildDemo', 'plans.recordTeaching',
   'feedback.analyze', 'corrections.decide', 'corrections.revert',
-  'observations.add', 'observations.delete', 'change.apply', 'materials.generate'
+  'observations.add', 'observations.delete', 'change.apply', 'materials.generate',
+  'preparation.context.save', 'preparation.session.create', 'preparation.sources.set',
+  'preparation.build', 'preparation.review', 'preparation.confirm', 'preparation.export'
 ]);
 
 // 统一请求外壳校验（对应规范 9.1）。结构校验通过不代表语义正确，语义在各处理函数继续检查。
@@ -317,6 +327,26 @@ export class IpcService {
         return this.ctx.modelService
           ? { ok: true, data: { jobs: this.ctx.modelService.listJobs((request.payload as { limit?: number } | undefined)?.limit ?? 50) } }
           : { ok: true, data: { jobs: [] } };
+      case 'preparation.context.save':
+        return this.preparationContextSave(request);
+      case 'preparation.context.get':
+        return this.preparationContextGet(request);
+      case 'preparation.session.create':
+        return this.preparationSessionCreate(request);
+      case 'preparation.session.get':
+        return this.preparationSessionGet(request);
+      case 'preparation.session.list':
+        return this.preparationSessionList();
+      case 'preparation.sources.set':
+        return this.preparationSourcesSet(request);
+      case 'preparation.build':
+        return this.preparationBuild(request);
+      case 'preparation.review':
+        return this.preparationReview(request);
+      case 'preparation.confirm':
+        return this.preparationConfirm(request);
+      case 'preparation.export':
+        return this.preparationExport(request);
       case 'lesson.buildDemo':
         return this.lessonBuildDemo();
       case 'lesson.list':
@@ -373,6 +403,180 @@ export class IpcService {
         return this.diagnosticsExport(request);
       default:
         return errorResponse('INPUT_INVALID', '未知操作。', '请重试当前操作。');
+    }
+  }
+
+  private preparationWriteIdentity(req: IpcRequest): { revision: number; key: string } | IpcResponse<never> {
+    if (!Number.isSafeInteger(req.expected_revision) || (req.expected_revision as number) < 0) {
+      return errorResponse('INPUT_INVALID', '备课操作缺少有效修订号。', '请刷新当前备课会话后重试。');
+    }
+    if (typeof req.idempotency_key !== 'string' || !req.idempotency_key.trim()) {
+      return errorResponse('INPUT_INVALID', '备课操作缺少幂等标识。', '请重新执行当前操作。');
+    }
+    return { revision: req.expected_revision as number, key: req.idempotency_key };
+  }
+
+  private preparationError(error: unknown): IpcResponse<never> {
+    if (error instanceof PreparationVersionConflictError) {
+      return errorResponse('VERSION_CONFLICT', '备课内容已被更新，本次没有覆盖新版本。', '请刷新当前备课会话后重试。');
+    }
+    if (error instanceof PreparationKeyReuseError) {
+      return errorResponse('INPUT_INVALID', '幂等标识已用于不同的备课内容。', '请重新执行当前操作。');
+    }
+    if (error instanceof PreparationServiceError) {
+      if (error.code === 'PREPARATION_SOURCE_REQUIRED') {
+        return errorResponse('SOURCE_MISSING', '至少选择一段可核验资料后才能生成。', '请返回资料步骤选择片段。');
+      }
+      if (error.code === 'PREPARATION_SOURCE_CHANGED' || error.code === 'PREPARATION_STALE') {
+        return errorResponse('SOURCE_CONFLICT', '教学上下文或所选资料已变化，旧审查结果已失效。', '请刷新资料并重新生成。');
+      }
+      if (error.code === 'PREPARATION_MODEL_UNAVAILABLE') {
+        return errorResponse('MODEL_NOT_AVAILABLE', '模型辅助当前不可用，未自动重试或保存半成品。', '可检查配置，或切换到本地自拟模式。');
+      }
+      return errorResponse('EXPORT_INVALID', '备课方案未通过结构、审查或发布校验。', '请按界面提示返回相应步骤修正。');
+    }
+    if (error instanceof StoreProtectedError) {
+      return errorResponse('DATABASE_LOCKED', '本地数据库处于保护状态，备课内容未写入。', '请先恢复或备份数据库。');
+    }
+    return errorResponse('INPUT_INVALID', '备课请求内容无效。', '请核对输入后重试。');
+  }
+
+  private preparationContextSave(req: IpcRequest): IpcResponse {
+    const store = this.ctx.preparationStore;
+    if (!store) return errorResponse('CAPABILITY_UNSUPPORTED', '备课上下文功能不可用。', '请重启或更新应用。');
+    const identity = this.preparationWriteIdentity(req);
+    if ('ok' in identity) return identity;
+    try {
+      return { ok: true, data: { context: store.saveTeachingContext(
+        req.payload as TeachingContextInput,
+        identity.revision,
+        identity.key
+      ) } };
+    } catch (error) {
+      return this.preparationError(error);
+    }
+  }
+
+  private preparationContextGet(req: IpcRequest): IpcResponse {
+    const store = this.ctx.preparationStore;
+    if (!store) return errorResponse('CAPABILITY_UNSUPPORTED', '备课上下文功能不可用。', '请重启或更新应用。');
+    const context = store.getTeachingContext((req.payload as { contextId: string }).contextId);
+    return context ? { ok: true, data: { context } } : errorResponse('SOURCE_MISSING', '教学上下文不存在。', '请新建备课。');
+  }
+
+  private preparationSessionCreate(req: IpcRequest): IpcResponse {
+    const store = this.ctx.preparationStore;
+    if (!store) return errorResponse('CAPABILITY_UNSUPPORTED', '备课会话功能不可用。', '请重启或更新应用。');
+    const identity = this.preparationWriteIdentity(req);
+    if ('ok' in identity) return identity;
+    if (identity.revision !== 0) return errorResponse('INPUT_INVALID', '新建备课会话的初始修订必须为 0。', '请刷新后重试。');
+    const payload = req.payload as { contextId: string; mode: 'local_authored' | 'model_assisted' };
+    try {
+      return { ok: true, data: { session: store.createPreparationSession(payload.contextId, payload.mode, identity.key) } };
+    } catch (error) {
+      return this.preparationError(error);
+    }
+  }
+
+  private preparationSessionGet(req: IpcRequest): IpcResponse {
+    const store = this.ctx.preparationStore;
+    if (!store) return errorResponse('CAPABILITY_UNSUPPORTED', '备课会话功能不可用。', '请重启或更新应用。');
+    const session = store.getPreparationSession((req.payload as { sessionId: string }).sessionId);
+    return session ? { ok: true, data: { session } } : errorResponse('SOURCE_MISSING', '备课会话不存在。', '请返回我的课程。');
+  }
+
+  private preparationSessionList(): IpcResponse {
+    return { ok: true, data: { sessions: this.ctx.preparationStore?.listPreparationSessions() ?? [] } };
+  }
+
+  private preparationSourcesSet(req: IpcRequest): IpcResponse {
+    const store = this.ctx.preparationStore;
+    if (!store) return errorResponse('CAPABILITY_UNSUPPORTED', '备课资料选择功能不可用。', '请重启或更新应用。');
+    const identity = this.preparationWriteIdentity(req);
+    if ('ok' in identity) return identity;
+    const payload = req.payload as { sessionId: string; sources: Array<PreparationSourceInput & { ordinal: number }> };
+    const ordered = [...payload.sources].sort((a, b) => a.ordinal - b.ordinal);
+    if (ordered.some((source, index) => source.ordinal !== index)) {
+      return errorResponse('INPUT_INVALID', '资料顺序无效。', '请重新选择资料片段。');
+    }
+    try {
+      const sources: PreparationSourceInput[] = ordered.map((source) => ({
+        sourceVersionId: source.sourceVersionId,
+        charStart: source.charStart,
+        charEnd: source.charEnd,
+        purpose: source.purpose,
+        approvedForModel: source.approvedForModel,
+        textSha256: source.textSha256
+      }));
+      return { ok: true, data: { session: store.replacePreparationSources(
+        payload.sessionId,
+        sources,
+        identity.revision,
+        identity.key
+      ) } };
+    } catch (error) {
+      return this.preparationError(error);
+    }
+  }
+
+  private async preparationBuild(req: IpcRequest): Promise<IpcResponse> {
+    if (!this.ctx.preparationService) return errorResponse('CAPABILITY_UNSUPPORTED', '方案生成功能不可用。', '请重启或更新应用。');
+    const identity = this.preparationWriteIdentity(req);
+    if ('ok' in identity) return identity;
+    const payload = req.payload as { sessionId: string; focus: string; coreTask: string; answerScope: string };
+    try {
+      return { ok: true, data: { session: await this.ctx.preparationService.build({
+        ...payload,
+        expectedRevision: identity.revision,
+        idempotencyKey: identity.key
+      }) } };
+    } catch (error) {
+      return this.preparationError(error);
+    }
+  }
+
+  private preparationReview(req: IpcRequest): IpcResponse {
+    if (!this.ctx.preparationService) return errorResponse('CAPABILITY_UNSUPPORTED', '方案审查功能不可用。', '请重启或更新应用。');
+    const identity = this.preparationWriteIdentity(req);
+    if ('ok' in identity) return identity;
+    try {
+      return { ok: true, data: this.ctx.preparationService.review(
+        (req.payload as { sessionId: string }).sessionId,
+        identity.revision,
+        identity.key
+      ) };
+    } catch (error) {
+      return this.preparationError(error);
+    }
+  }
+
+  private preparationConfirm(req: IpcRequest): IpcResponse {
+    if (!this.ctx.preparationService) return errorResponse('CAPABILITY_UNSUPPORTED', '方案确认功能不可用。', '请重启或更新应用。');
+    const identity = this.preparationWriteIdentity(req);
+    if ('ok' in identity) return identity;
+    try {
+      return { ok: true, data: { session: this.ctx.preparationService.confirm(
+        (req.payload as { sessionId: string }).sessionId,
+        identity.revision,
+        identity.key
+      ) } };
+    } catch (error) {
+      return this.preparationError(error);
+    }
+  }
+
+  private async preparationExport(req: IpcRequest): Promise<IpcResponse> {
+    if (!this.ctx.preparationService) return errorResponse('CAPABILITY_UNSUPPORTED', '材料导出功能不可用。', '请重启或更新应用。');
+    const identity = this.preparationWriteIdentity(req);
+    if ('ok' in identity) return identity;
+    try {
+      return { ok: true, data: { session: await this.ctx.preparationService.export(
+        (req.payload as { sessionId: string }).sessionId,
+        identity.revision,
+        identity.key
+      ) } };
+    } catch (error) {
+      return this.preparationError(error);
     }
   }
 

@@ -2,9 +2,10 @@
 // 教师不负责编写或调试提示词；此处为产品内置、可版本化的组合。
 import type { Citation } from './types';
 import { validateTeachingAttributionModelOutput } from '../feedback/attribution';
+import { parseModelLessonPlanSpec } from '../preparation/modelSpec';
 
 // 提示词版本：随原则/模板/示例/合同变化递增，用于结果持久化与基线对照。
-export const PROMPT_VERSION = 'yuwen-prompt-1.1.0';
+export const PROMPT_VERSION = 'yuwen-prompt-1.2.0';
 
 // 稳定原则：允许主动分析、联结与教学创造；精确事实/引文/版本以提供材料或明确标注不确定为准，不编造出处。
 const PRINCIPLES = [
@@ -43,6 +44,14 @@ const TASKS: Record<string, TaskTemplate> = {
     contractShape: '{"objectives":string[],"steps":[{"stage":string,"minutes":number,"activity":string,"citations":number[]}],"notes":string[]}',
     goodExample: '正例：环节含朗读/研读/活动，时间合理，引用到具体片段。',
     badExample: '反例：照搬检索片段拼接，无教学结构与时间安排。'
+  },
+  lesson_plan_spec: {
+    id: 'lesson_plan_spec',
+    instruction: '根据固定教学上下文和获准材料片段生成一课时结构。anchor_ids 只能使用 source-1、source-2 等本次片段编号；答案范围必须写入 acceptable_variants；不确定事实写入 unknowns。',
+    outputContract: 'lesson_plan_spec.v1',
+    contractShape: '{"title":string,"objectives":[{"description":string,"cognitive_demand":"recall|understand|summarize|explain|compare|evaluate|create|communicate|aesthetic_response"}],"tasks":[{"prompt":string,"cognitive_demand":string,"support_level":"full_model|partial_prompt|independent","teacher_notes":string,"acceptable_variants":string[],"insufficient_examples":string[],"anchor_ids":["source-1"]}],"activities":[{"title":string,"start_sec":integer,"end_sec":integer,"actor":"teacher|student|both","student_action":string,"teacher_action":string,"priority":"essential|compressible|optional","task_indexes":[0]}],"teacher_summary":string,"unknowns":string[]}',
+    goodExample: '正例：每个任务只引用本次 source-N，时间不越过课时，答案范围明确，不确定项写入 unknowns。',
+    badExample: '反例：输出文件路径、脚本、工具调用、未提供的原文或本次材料以外的 anchor_id。'
   },
   teaching_attribution: {
     id: 'teaching_attribution',
@@ -97,6 +106,27 @@ export function validateContract(outputContract: string, text: string, citationC
       if (!citationsInRange(st.citations, citationCount)) return { ok: false, reason: 'citation_out_of_range' };
     }
     return { ok: true, parsed };
+  }
+  if (outputContract === 'lesson_plan_spec.v1') {
+    try {
+      parseModelLessonPlanSpec(
+        parsed,
+        Array.from({ length: citationCount }, (_item, index) => ({
+          id: `source-${index + 1}`,
+          anchor: {
+            source_version_id: `contract-version-${index + 1}`,
+            locator: { citation: index + 1 },
+            quote: `contract-citation-${index + 1}`,
+            source_class: 'teacher_private' as const,
+            verification: 'exact_checked' as const
+          }
+        })),
+        { taskContextId: 'contract-context', declaredDurationSec: 14_400 }
+      );
+      return { ok: true, parsed };
+    } catch (error) {
+      return { ok: false, reason: error instanceof Error ? error.message : 'PREPARATION_MODEL_INVALID' };
+    }
   }
   if (outputContract === 'teaching_attribution.v1') {
     const errors = validateTeachingAttributionModelOutput(parsed, allowedObservationIds);

@@ -208,6 +208,35 @@ const PAYLOAD_SCHEMAS: Record<OperationName, PayloadSchema> = {
     required: ['sessionId', 'sources'],
     additionalProperties: false
   },
+  'preparation.build': {
+    type: 'object',
+    properties: {
+      sessionId: { type: 'string', minLength: 1, maxLength: 80 },
+      focus: { type: 'string', minLength: 1, maxLength: 2000 },
+      coreTask: { type: 'string', minLength: 1, maxLength: 4000 },
+      answerScope: { type: 'string', minLength: 1, maxLength: 4000 }
+    },
+    required: ['sessionId', 'focus', 'coreTask', 'answerScope'],
+    additionalProperties: false
+  },
+  'preparation.review': {
+    type: 'object',
+    properties: { sessionId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['sessionId'],
+    additionalProperties: false
+  },
+  'preparation.confirm': {
+    type: 'object',
+    properties: { sessionId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['sessionId'],
+    additionalProperties: false
+  },
+  'preparation.export': {
+    type: 'object',
+    properties: { sessionId: { type: 'string', minLength: 1, maxLength: 80 } },
+    required: ['sessionId'],
+    additionalProperties: false
+  },
   'lesson.buildDemo': null,
   'lesson.list': null,
   'lesson.get': {
